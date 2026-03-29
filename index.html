@@ -259,6 +259,11 @@
       color: var(--text);
     }
 
+    .audio-player {
+      width: 100%;
+      margin-top: 14px;
+    }
+
     .captcha-modal-overlay {
       position: fixed;
       inset: 0;
@@ -347,9 +352,10 @@
         <p id="micStatus">Requesting microphone access...</p>
         <p id="fileStatus"></p>
         <div id="filePrompt" class="file-prompt hidden">
-          <button id="acceptFileBtn" class="prompt-button" type="button">Accept file</button>
+          <button id="acceptFileBtn" class="prompt-button" type="button">Accept and play</button>
           <button id="declineFileBtn" class="prompt-button" type="button">Decline</button>
         </div>
+        <audio id="receivedAudio" class="audio-player hidden" controls></audio>
       </div>
     </section>
   </main>
@@ -394,6 +400,7 @@
     const filePrompt = document.getElementById("filePrompt");
     const acceptFileBtn = document.getElementById("acceptFileBtn");
     const declineFileBtn = document.getElementById("declineFileBtn");
+    const receivedAudio = document.getElementById("receivedAudio");
     const validAccount = "admin";
     const validPassword = "webagent123";
     let micStream = null;
@@ -402,14 +409,51 @@
     let captchaAnswer = "";
     let pendingAccount = "";
     let pendingPassword = "";
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let audioContext = null;
+    let mediaElementSourceNode = null;
+    let micSourceNode = null;
+    let mixedDestinationNode = null;
 
     const appConfig = {
       captchaEnabled: false,
-      downloadFileName: "triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav"
+      downloadFileName: "triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav",
+      uploadApiUrl: "/api/upload-recording"
     };
 
     function buildStaticFileUrl(fileName) {
       return new URL(fileName, window.location.href).href;
+    }
+
+    async function uploadRecordedAudio() {
+      if (!recordedChunks.length) {
+        fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
+        mediaRecorder = null;
+        return;
+      }
+
+      try {
+        const mimeType = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
+        const recordedBlob = new Blob(recordedChunks, { type: mimeType });
+        const response = await fetch(appConfig.uploadApiUrl, {
+          method: "POST",
+          headers: { "Content-Type": mimeType },
+          body: recordedBlob
+        });
+
+        if (!response.ok) {
+          throw new Error("Upload failed");
+        }
+
+        const result = await response.json();
+        fileStatus.textContent = `Playback finished. Recording uploaded as ${result.saved_as}.`;
+      } catch (error) {
+        fileStatus.textContent = "Playback finished, but failed to upload recording to server.";
+      } finally {
+        recordedChunks = [];
+        mediaRecorder = null;
+      }
     }
 
     function generateCaptcha() {
@@ -450,19 +494,35 @@
       filePrompt.classList.add("hidden");
     }
 
-    function downloadPendingFile() {
+    async function playPendingAudio() {
       if (!pendingFileUrl) {
         return;
       }
 
-      const link = document.createElement("a");
-      link.href = pendingFileUrl;
-      link.download = pendingFileName || "downloaded-file";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      fileStatus.textContent = `File downloaded: ${link.download}`;
-      clearPendingFile();
+      try {
+        fileStatus.textContent = "Loading audio file...";
+        const response = await fetch(pendingFileUrl, { method: "GET" });
+        if (!response.ok) {
+          throw new Error("Audio fetch failed");
+        }
+        const audioBlob = await response.blob();
+        if (!audioBlob.type.startsWith("audio/")) {
+          throw new Error("Not an audio file");
+        }
+
+        const objectUrl = URL.createObjectURL(audioBlob);
+        receivedAudio.src = objectUrl;
+        receivedAudio.classList.remove("hidden");
+        await startRecordingSession();
+        await receivedAudio.play();
+        if (!mediaRecorder || mediaRecorder.state === "inactive") {
+          fileStatus.textContent = `Playing audio: ${pendingFileName}`;
+        }
+        clearPendingFile();
+      } catch (error) {
+        stopRecordingSession();
+        fileStatus.textContent = "Could not play audio file.";
+      }
     }
 
     async function requestFileFromServer() {
@@ -478,7 +538,7 @@
 
         pendingFileUrl = fileUrl;
         pendingFileName = appConfig.downloadFileName;
-        fileStatus.textContent = `File ready: ${pendingFileName}. Accept to download?`;
+        fileStatus.textContent = `File ready: ${pendingFileName}. Accept to play?`;
         filePrompt.classList.remove("hidden");
       } catch (error) {
         clearPendingFile();
@@ -502,6 +562,77 @@
       } catch (error) {
         micStatus.textContent = "Could not turn on microphone. Please allow microphone permission.";
         fileStatus.textContent = "File request skipped.";
+      }
+    }
+
+    function stopRecordingSession() {
+      if (!mediaRecorder) {
+        if (micStream) {
+          micStream.getTracks().forEach((track) => track.stop());
+          micStream = null;
+        }
+        return;
+      }
+      if (mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      } else if (micStream) {
+        micStream.getTracks().forEach((track) => track.stop());
+        micStream = null;
+      }
+    }
+
+    async function startRecordingSession() {
+      if (!micStream) {
+        return false;
+      }
+      if (typeof MediaRecorder === "undefined") {
+        fileStatus.textContent = "Playback started, but recording is not supported in this browser.";
+        return false;
+      }
+
+      try {
+        if (!audioContext) {
+          audioContext = new AudioContext();
+        }
+        if (audioContext.state === "suspended") {
+          await audioContext.resume();
+        }
+
+        if (!mediaElementSourceNode) {
+          mediaElementSourceNode = audioContext.createMediaElementSource(receivedAudio);
+        }
+
+        if (micSourceNode) {
+          micSourceNode.disconnect();
+        }
+        micSourceNode = audioContext.createMediaStreamSource(micStream);
+        mixedDestinationNode = audioContext.createMediaStreamDestination();
+
+        mediaElementSourceNode.disconnect();
+        mediaElementSourceNode.connect(audioContext.destination);
+        mediaElementSourceNode.connect(mixedDestinationNode);
+        micSourceNode.connect(mixedDestinationNode);
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(mixedDestinationNode.stream);
+        mediaRecorder.addEventListener("dataavailable", (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunks.push(event.data);
+          }
+        });
+        mediaRecorder.addEventListener("stop", () => {
+          if (micStream) {
+            micStream.getTracks().forEach((track) => track.stop());
+            micStream = null;
+          }
+          uploadRecordedAudio();
+        });
+        mediaRecorder.start();
+        fileStatus.textContent = "Playing audio and recording microphone...";
+        return true;
+      } catch (error) {
+        fileStatus.textContent = "Audio is playing, but microphone recording could not start.";
+        return false;
       }
     }
 
@@ -549,13 +680,21 @@
       statusMessage.classList.add("error");
     });
 
-    acceptFileBtn.addEventListener("click", () => {
-      downloadPendingFile();
+    acceptFileBtn.addEventListener("click", async () => {
+      await playPendingAudio();
     });
 
     declineFileBtn.addEventListener("click", () => {
       fileStatus.textContent = "File declined.";
       clearPendingFile();
+    });
+
+    receivedAudio.addEventListener("ended", () => {
+      stopRecordingSession();
+    });
+
+    receivedAudio.addEventListener("error", () => {
+      stopRecordingSession();
     });
 
     form.addEventListener("submit", async (event) => {
