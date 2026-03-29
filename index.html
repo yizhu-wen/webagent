@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Login</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 252, 246, 0.88);
+      --panel-border: rgba(59, 38, 21, 0.1);
+      --text: #2e241c;
+      --muted: #776659;
+      --accent: #b55d33;
+      --accent-strong: #8f4420;
+      --error: #b42318;
+      --success: #1f7a45;
+      --shadow: 0 24px 80px rgba(55, 34, 18, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--text);
+      background: linear-gradient(135deg, #efe5d8 0%, #f9f6f0 45%, #e8ddd1 100%);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: min(640px, 100%);
+      background: rgba(255, 248, 240, 0.8);
+      border: 1px solid rgba(88, 61, 34, 0.1);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .panel {
+      padding: 48px;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.9rem;
+      letter-spacing: -0.03em;
+    }
+
+    .subtext {
+      margin: 0 0 28px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    form {
+      display: grid;
+      gap: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid rgba(46, 36, 28, 0.14);
+      border-radius: 16px;
+      padding: 15px 16px;
+      font: inherit;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.88);
+      outline: none;
+      transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+    }
+
+    input:focus {
+      border-color: rgba(181, 93, 51, 0.7);
+      box-shadow: 0 0 0 4px rgba(181, 93, 51, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .password-row {
+      position: relative;
+    }
+
+    .toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      cursor: pointer;
+      padding: 6px 8px;
+    }
+
+    .captcha-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .captcha-code {
+      border: 1px dashed rgba(46, 36, 28, 0.3);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: rgba(255, 255, 255, 0.75);
+      text-align: center;
+      user-select: none;
+    }
+
+    .captcha-refresh {
+      border: 1px solid rgba(46, 36, 28, 0.2);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text);
+    }
+
+    .options {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .remember {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .remember input {
+      width: auto;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .link {
+      color: var(--accent-strong);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .button {
+      border: 0;
+      border-radius: 18px;
+      padding: 16px 18px;
+      font: inherit;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #fff8f2;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+      cursor: pointer;
+      transition: transform 180ms ease, box-shadow 180ms ease;
+      box-shadow: 0 16px 32px rgba(181, 93, 51, 0.28);
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .status {
+      min-height: 24px;
+      margin-top: 4px;
+      font-size: 0.94rem;
+      font-weight: 600;
+    }
+
+    .status.error {
+      color: var(--error);
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .signup {
+      margin-top: 26px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .logged-in-view {
+      text-align: center;
+      padding: 24px 12px 8px;
+    }
+
+    .checkmark {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      margin: 0 auto 18px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #5d9a69 0%, #3b7d4b 100%);
+      box-shadow: 0 14px 28px rgba(59, 125, 75, 0.28);
+    }
+
+    .logged-in-view h3 {
+      margin: 0 0 10px;
+      font-size: 1.8rem;
+      letter-spacing: -0.02em;
+    }
+
+    .logged-in-view p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .file-prompt {
+      margin-top: 14px;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .prompt-button {
+      border: 1px solid rgba(46, 36, 28, 0.2);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font: inherit;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text);
+    }
+
+    .captcha-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(34, 26, 20, 0.35);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      z-index: 1000;
+    }
+
+    .captcha-modal {
+      width: min(420px, 100%);
+      border-radius: 18px;
+      border: 1px solid rgba(46, 36, 28, 0.15);
+      background: #fffaf3;
+      box-shadow: 0 24px 60px rgba(46, 36, 28, 0.25);
+      padding: 20px;
+    }
+
+    .captcha-modal h4 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+    }
+
+    .captcha-modal p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .captcha-modal-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    @media (max-width: 820px) {
+      .panel {
+        padding: 32px 24px;
+      }
+    }
+  </style>
+</head>
+  <body>
+  <main class="shell">
+    <section class="panel">
+      <div id="loginView">
+        <div>
+          <h2>Log In</h2>
+          <p class="subtext">Enter your account name and password.</p>
+        </div>
+
+        <form id="loginForm" novalidate>
+          <div class="field">
+            <label for="account">Account</label>
+            <input id="account" name="account" type="text" placeholder="Enter your account" autocomplete="username">
+          </div>
+
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="password-row">
+              <input id="password" name="password" type="password" placeholder="Enter your password" autocomplete="current-password">
+              <button class="toggle" type="button" id="togglePassword" aria-label="Show password">Show</button>
+            </div>
+          </div>
+
+          <div class="options">
+            <label class="remember" for="remember">
+              <input id="remember" type="checkbox">
+              <span>Remember me</span>
+            </label>
+            <a class="link" href="#">Forgot password?</a>
+          </div>
+
+          <button class="button" type="submit">Sign In</button>
+          <div class="status" id="statusMessage" aria-live="polite"></div>
+        </form>
+
+        <p class="signup">No account yet? <a class="link" href="#">Create one</a></p>
+      </div>
+
+      <div id="loggedInView" class="logged-in-view hidden" aria-live="polite">
+        <div class="checkmark">✓</div>
+        <h3>You have logged in successfully.</h3>
+        <p id="welcomeMessage">Welcome, admin.</p>
+        <p id="micStatus">Requesting microphone access...</p>
+        <p id="fileStatus"></p>
+        <div id="filePrompt" class="file-prompt hidden">
+          <button id="acceptFileBtn" class="prompt-button" type="button">Accept file</button>
+          <button id="declineFileBtn" class="prompt-button" type="button">Decline</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="captchaModalOverlay" class="captcha-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="captchaModalTitle">
+    <div class="captcha-modal">
+      <h4 id="captchaModalTitle">CAPTCHA Check</h4>
+      <p>Please solve this CAPTCHA before we verify your login.</p>
+      <div class="captcha-row">
+        <div id="captchaCode" class="captcha-code"></div>
+        <button id="refreshCaptchaBtn" class="captcha-refresh" type="button">Refresh</button>
+      </div>
+      <div class="field" style="margin-top: 12px;">
+        <label for="captchaInput">Answer</label>
+        <input id="captchaInput" type="text" placeholder="Enter CAPTCHA answer" autocomplete="off">
+      </div>
+      <div id="captchaModalStatus" class="status" aria-live="polite"></div>
+      <div class="captcha-modal-actions">
+        <button id="cancelCaptchaBtn" class="prompt-button" type="button">Cancel</button>
+        <button id="confirmCaptchaBtn" class="button" type="button">Verify CAPTCHA</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const loginView = document.getElementById("loginView");
+    const loggedInView = document.getElementById("loggedInView");
+    const accountInput = document.getElementById("account");
+    const passwordInput = document.getElementById("password");
+    const statusMessage = document.getElementById("statusMessage");
+    const togglePassword = document.getElementById("togglePassword");
+    const captchaModalOverlay = document.getElementById("captchaModalOverlay");
+    const captchaCode = document.getElementById("captchaCode");
+    const captchaInput = document.getElementById("captchaInput");
+    const refreshCaptchaBtn = document.getElementById("refreshCaptchaBtn");
+    const captchaModalStatus = document.getElementById("captchaModalStatus");
+    const confirmCaptchaBtn = document.getElementById("confirmCaptchaBtn");
+    const cancelCaptchaBtn = document.getElementById("cancelCaptchaBtn");
+    const micStatus = document.getElementById("micStatus");
+    const fileStatus = document.getElementById("fileStatus");
+    const filePrompt = document.getElementById("filePrompt");
+    const acceptFileBtn = document.getElementById("acceptFileBtn");
+    const declineFileBtn = document.getElementById("declineFileBtn");
+    const validAccount = "admin";
+    const validPassword = "webagent123";
+    let micStream = null;
+    let pendingFileBlob = null;
+    let pendingFileName = "";
+    let captchaAnswer = "";
+    let pendingAccount = "";
+    let pendingPassword = "";
+
+    const appConfig = {
+      captchaEnabled: false
+    };
+
+    function generateCaptcha() {
+      const left = Math.floor(Math.random() * 9) + 1;
+      const right = Math.floor(Math.random() * 9) + 1;
+      captchaAnswer = String(left + right);
+      captchaCode.textContent = `${left} + ${right} = ?`;
+      captchaInput.value = "";
+    }
+
+    function setCaptchaEnabled(enabled) {
+      appConfig.captchaEnabled = Boolean(enabled);
+      if (!appConfig.captchaEnabled) {
+        captchaModalOverlay.classList.add("hidden");
+      }
+    }
+
+    function openCaptchaModal(account, password) {
+      pendingAccount = account;
+      pendingPassword = password;
+      captchaModalStatus.textContent = "";
+      captchaModalStatus.className = "status";
+      generateCaptcha();
+      captchaModalOverlay.classList.remove("hidden");
+      captchaInput.focus();
+    }
+
+    function closeCaptchaModal() {
+      captchaModalOverlay.classList.add("hidden");
+      captchaInput.value = "";
+      pendingAccount = "";
+      pendingPassword = "";
+    }
+
+    function getDownloadFileName(response) {
+      const contentDisposition = response.headers.get("Content-Disposition") || "";
+      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+      return match ? match[1] : "downloaded-file";
+    }
+
+    function clearPendingFile() {
+      pendingFileBlob = null;
+      pendingFileName = "";
+      filePrompt.classList.add("hidden");
+    }
+
+    function downloadPendingFile() {
+      if (!pendingFileBlob) {
+        return;
+      }
+
+      const fileUrl = URL.createObjectURL(pendingFileBlob);
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.download = pendingFileName || "downloaded-file";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(fileUrl);
+      fileStatus.textContent = `File downloaded: ${link.download}`;
+      clearPendingFile();
+    }
+
+    async function requestFileFromServer() {
+      fileStatus.textContent = "Requesting file from server...";
+      clearPendingFile();
+
+      try {
+        const response = await fetch("/api/send-wav", { method: "POST" });
+        if (!response.ok) {
+          throw new Error("Server returned error");
+        }
+
+        pendingFileBlob = await response.blob();
+        pendingFileName = getDownloadFileName(response);
+        fileStatus.textContent = `File ready: ${pendingFileName}. Accept to download?`;
+        filePrompt.classList.remove("hidden");
+      } catch (error) {
+        clearPendingFile();
+        fileStatus.textContent = "Failed to receive file from server.";
+      }
+    }
+
+    async function requestMicrophone() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        micStatus.textContent = "Microphone is not supported in this browser.";
+        fileStatus.textContent = "File request skipped.";
+        return;
+      }
+
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (micStream) {
+          micStatus.textContent = "Microphone is on.";
+          await requestFileFromServer();
+        }
+      } catch (error) {
+        micStatus.textContent = "Could not turn on microphone. Please allow microphone permission.";
+        fileStatus.textContent = "File request skipped.";
+      }
+    }
+
+    async function verifyCredentialsAndContinue(account, password) {
+      if (account !== validAccount || password !== validPassword) {
+        statusMessage.textContent = "Wrong account or password.";
+        statusMessage.classList.add("error");
+        return;
+      }
+
+      loginView.classList.add("hidden");
+      loggedInView.classList.remove("hidden");
+      await requestMicrophone();
+    }
+
+    togglePassword.addEventListener("click", () => {
+      const isHidden = passwordInput.type === "password";
+      passwordInput.type = isHidden ? "text" : "password";
+      togglePassword.textContent = isHidden ? "Hide" : "Show";
+      togglePassword.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+    });
+
+    refreshCaptchaBtn.addEventListener("click", () => {
+      generateCaptcha();
+    });
+
+    confirmCaptchaBtn.addEventListener("click", async () => {
+      captchaModalStatus.className = "status";
+      if (captchaInput.value.trim() !== captchaAnswer) {
+        captchaModalStatus.textContent = "Wrong CAPTCHA.";
+        captchaModalStatus.classList.add("error");
+        generateCaptcha();
+        return;
+      }
+
+      const accountToVerify = pendingAccount;
+      const passwordToVerify = pendingPassword;
+      closeCaptchaModal();
+      await verifyCredentialsAndContinue(accountToVerify, passwordToVerify);
+    });
+
+    cancelCaptchaBtn.addEventListener("click", () => {
+      closeCaptchaModal();
+      statusMessage.textContent = "CAPTCHA cancelled.";
+      statusMessage.classList.add("error");
+    });
+
+    acceptFileBtn.addEventListener("click", () => {
+      downloadPendingFile();
+    });
+
+    declineFileBtn.addEventListener("click", () => {
+      fileStatus.textContent = "File declined.";
+      clearPendingFile();
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const account = accountInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      statusMessage.className = "status";
+
+      if (!account || !password) {
+        statusMessage.textContent = "Please enter both account and password.";
+        statusMessage.classList.add("error");
+        return;
+      }
+
+      if (appConfig.captchaEnabled) {
+        openCaptchaModal(account, password);
+        return;
+      }
+
+      await verifyCredentialsAndContinue(account, password);
+    });
+
+    // Change this to false if you want login without CAPTCHA.
+    setCaptchaEnabled(appConfig.captchaEnabled);
+    // You can toggle at runtime from browser console: window.setCaptchaEnabled(false)
+    window.setCaptchaEnabled = setCaptchaEnabled;
+  </script>
+</body>
+</html>
