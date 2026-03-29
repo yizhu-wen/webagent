@@ -426,33 +426,49 @@
       return new URL(fileName, window.location.href).href;
     }
 
-    async function uploadRecordedAudio() {
-      if (!recordedChunks.length) {
+    function getUploadErrorMessage(error) {
+      if (!error) {
+        return "unknown error";
+      }
+      if (typeof error === "string") {
+        return error;
+      }
+      if (error instanceof Error && error.message) {
+        return error.message;
+      }
+      return "unknown error";
+    }
+
+    async function uploadRecordedAudio(recordedBlob, mimeType) {
+      if (!recordedBlob || recordedBlob.size === 0) {
         fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
-        mediaRecorder = null;
         return;
       }
 
       try {
-        const mimeType = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
-        const recordedBlob = new Blob(recordedChunks, { type: mimeType });
+        const extension = mimeType.includes("wav")
+          ? "wav"
+          : mimeType.includes("ogg")
+            ? "ogg"
+            : mimeType.includes("mp4") || mimeType.includes("m4a")
+              ? "m4a"
+              : "webm";
+        const formData = new FormData();
+        formData.append("recording", recordedBlob, `recording.${extension}`);
         const response = await fetch(appConfig.uploadApiUrl, {
           method: "POST",
-          headers: { "Content-Type": mimeType },
-          body: recordedBlob
+          body: formData
         });
 
         if (!response.ok) {
-          throw new Error("Upload failed");
+          const responseText = await response.text();
+          throw new Error(responseText || `Upload failed with status ${response.status}`);
         }
 
         const result = await response.json();
         fileStatus.textContent = `Playback finished. Recording uploaded as ${result.saved_as}.`;
       } catch (error) {
-        fileStatus.textContent = "Playback finished, but failed to upload recording to server.";
-      } finally {
-        recordedChunks = [];
-        mediaRecorder = null;
+        fileStatus.textContent = `Playback finished, but failed to upload recording to server: ${getUploadErrorMessage(error)}.`;
       }
     }
 
@@ -574,6 +590,11 @@
         return;
       }
       if (mediaRecorder.state !== "inactive") {
+        try {
+          mediaRecorder.requestData();
+        } catch (error) {
+          // Some browsers do not support requestData at this point.
+        }
         mediaRecorder.stop();
       } else if (micStream) {
         micStream.getTracks().forEach((track) => track.stop());
@@ -620,12 +641,19 @@
             recordedChunks.push(event.data);
           }
         });
-        mediaRecorder.addEventListener("stop", () => {
+        mediaRecorder.addEventListener("stop", async () => {
+          const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
+          const chunkSnapshot = recordedChunks;
+          const recordedBlob = new Blob(chunkSnapshot, { type: mimeType });
+          recordedChunks = [];
+          mediaRecorder = null;
+
           if (micStream) {
             micStream.getTracks().forEach((track) => track.stop());
             micStream = null;
           }
-          uploadRecordedAudio();
+
+          await uploadRecordedAudio(recordedBlob, mimeType);
         });
         mediaRecorder.start();
         fileStatus.textContent = "Playing audio and recording microphone...";
