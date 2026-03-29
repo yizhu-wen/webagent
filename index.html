@@ -397,15 +397,20 @@
     const validAccount = "admin";
     const validPassword = "webagent123";
     let micStream = null;
-    let pendingFileBlob = null;
+    let pendingFileUrl = "";
     let pendingFileName = "";
     let captchaAnswer = "";
     let pendingAccount = "";
     let pendingPassword = "";
 
     const appConfig = {
-      captchaEnabled: false
+      captchaEnabled: false,
+      downloadFileName: "triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav"
     };
+
+    function buildStaticFileUrl(fileName) {
+      return new URL(fileName, window.location.href).href;
+    }
 
     function generateCaptcha() {
       const left = Math.floor(Math.random() * 9) + 1;
@@ -439,52 +444,45 @@
       pendingPassword = "";
     }
 
-    function getDownloadFileName(response) {
-      const contentDisposition = response.headers.get("Content-Disposition") || "";
-      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
-      return match ? match[1] : "downloaded-file";
-    }
-
     function clearPendingFile() {
-      pendingFileBlob = null;
+      pendingFileUrl = "";
       pendingFileName = "";
       filePrompt.classList.add("hidden");
     }
 
     function downloadPendingFile() {
-      if (!pendingFileBlob) {
+      if (!pendingFileUrl) {
         return;
       }
 
-      const fileUrl = URL.createObjectURL(pendingFileBlob);
       const link = document.createElement("a");
-      link.href = fileUrl;
+      link.href = pendingFileUrl;
       link.download = pendingFileName || "downloaded-file";
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(fileUrl);
       fileStatus.textContent = `File downloaded: ${link.download}`;
       clearPendingFile();
     }
 
     async function requestFileFromServer() {
-      fileStatus.textContent = "Requesting file from server...";
+      fileStatus.textContent = "Preparing file...";
       clearPendingFile();
 
       try {
-        const response = await fetch("/api/send-wav", { method: "POST" });
+        const fileUrl = buildStaticFileUrl(appConfig.downloadFileName);
+        const response = await fetch(fileUrl, { method: "HEAD" });
         if (!response.ok) {
-          throw new Error("Server returned error");
+          throw new Error("File not found");
         }
 
-        pendingFileBlob = await response.blob();
-        pendingFileName = getDownloadFileName(response);
+        pendingFileUrl = fileUrl;
+        pendingFileName = appConfig.downloadFileName;
         fileStatus.textContent = `File ready: ${pendingFileName}. Accept to download?`;
         filePrompt.classList.remove("hidden");
       } catch (error) {
         clearPendingFile();
-        fileStatus.textContent = "Failed to receive file from server.";
+        fileStatus.textContent = "Failed to find file on this site.";
       }
     }
 
