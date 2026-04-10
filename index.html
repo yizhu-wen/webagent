@@ -43,6 +43,10 @@
       overflow: hidden;
     }
 
+    .shell.expanded {
+      width: min(920px, 100%);
+    }
+
     .panel {
       padding: 48px;
       background: var(--panel);
@@ -216,6 +220,10 @@
       padding: 24px 12px 8px;
     }
 
+    .logged-in-view.expanded {
+      max-width: 100%;
+    }
+
     .checkmark {
       width: 72px;
       height: 72px;
@@ -264,6 +272,44 @@
       margin-top: 14px;
     }
 
+    .spectrogram-panel {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(46, 36, 28, 0.1);
+      text-align: left;
+    }
+
+    .spectrogram-panel h4 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .spectrogram-panel p {
+      margin: 0 0 12px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .spectrogram-scroll {
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 4px;
+    }
+
+    .spectrogram-canvas {
+      display: block;
+      width: 100%;
+      max-width: 820px;
+      height: auto;
+      margin: 0 auto;
+      background: linear-gradient(180deg, #0d1117 0%, #111927 100%);
+      border: 1px solid rgba(46, 36, 28, 0.12);
+    }
+
     .captcha-modal-overlay {
       position: fixed;
       inset: 0;
@@ -303,6 +349,10 @@
     @media (max-width: 820px) {
       .panel {
         padding: 32px 24px;
+      }
+
+      .spectrogram-canvas {
+        max-width: 100%;
       }
     }
   </style>
@@ -356,6 +406,13 @@
           <button id="declineFileBtn" class="prompt-button" type="button">Decline</button>
         </div>
         <audio id="receivedAudio" class="audio-player hidden" controls></audio>
+        <div id="spectrogramPanel" class="spectrogram-panel hidden">
+          <h4>Recorded Spectrogram</h4>
+          <p id="spectrogramStatus">Generating spectrogram...</p>
+          <div class="spectrogram-scroll">
+            <canvas id="spectrogramCanvas" class="spectrogram-canvas" width="820" height="260"></canvas>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -381,6 +438,7 @@
   </div>
 
   <script>
+    const shell = document.querySelector(".shell");
     const form = document.getElementById("loginForm");
     const loginView = document.getElementById("loginView");
     const loggedInView = document.getElementById("loggedInView");
@@ -401,20 +459,25 @@
     const acceptFileBtn = document.getElementById("acceptFileBtn");
     const declineFileBtn = document.getElementById("declineFileBtn");
     const receivedAudio = document.getElementById("receivedAudio");
+    const spectrogramPanel = document.getElementById("spectrogramPanel");
+    const spectrogramStatus = document.getElementById("spectrogramStatus");
+    const spectrogramCanvas = document.getElementById("spectrogramCanvas");
     const validAccount = "admin";
     const validPassword = "webagent123";
+    const targetWavSampleRate = 48000;
     let micStream = null;
     let pendingFileUrl = "";
     let pendingFileName = "";
     let captchaAnswer = "";
     let pendingAccount = "";
     let pendingPassword = "";
-    let mediaRecorder = null;
-    let recordedChunks = [];
     let audioContext = null;
-    let mediaElementSourceNode = null;
-    let micSourceNode = null;
-    let mixedDestinationNode = null;
+    let recordingSourceNode = null;
+    let recordingProcessorNode = null;
+    let recordingBufferChunks = [];
+    let recordingChannelCount = 0;
+    let recordedFrameCount = 0;
+    let recordingSessionActive = false;
 
     const appConfig = {
       captchaEnabled: false,
@@ -426,22 +489,35 @@
       return new URL(fileName, window.location.href).href;
     }
 
-    function getRecordingExtension(mimeType) {
-      if (mimeType.includes("wav")) {
-        return "wav";
-      }
-      if (mimeType.includes("ogg")) {
-        return "ogg";
-      }
-      if (mimeType.includes("mp4") || mimeType.includes("m4a")) {
-        return "m4a";
-      }
-      return "webm";
+    function getMicrophoneConstraints() {
+      return {
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: { ideal: 2 },
+          sampleRate: { ideal: targetWavSampleRate },
+          sampleSize: { ideal: 24 }
+        },
+        video: false
+      };
     }
 
-    function buildRecordingFileName(mimeType) {
+    function buildMicrophoneOnlyStream(sourceStream) {
+      const microphoneTracks = sourceStream
+        .getAudioTracks()
+        .filter((track) => track.readyState === "live" && track.enabled);
+
+      if (!microphoneTracks.length) {
+        throw new Error("No live microphone track");
+      }
+
+      return new MediaStream(microphoneTracks);
+    }
+
+    function buildRecordingTimestamp() {
       const now = new Date();
-      const timestamp = [
+      return [
         now.getFullYear(),
         String(now.getMonth() + 1).padStart(2, "0"),
         String(now.getDate()).padStart(2, "0")
@@ -450,34 +526,342 @@
         String(now.getMinutes()).padStart(2, "0"),
         String(now.getSeconds()).padStart(2, "0")
       ].join("");
-      return `recording_${timestamp}.${getRecordingExtension(mimeType)}`;
+    }
+
+    function buildRecordingFileName() {
+      return `recording_${buildRecordingTimestamp()}.wav`;
+    }
+
+    function buildSpectrogramFileName() {
+      return `recording_spectrogram_${buildRecordingTimestamp()}.png`;
+    }
+
+    function triggerDownload(downloadUrl, fileName) {
+      const downloadLink = document.createElement("a");
+      downloadLink.href = downloadUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+    }
+
+    function showSpectrogramStatus(message) {
+      spectrogramStatus.textContent = message;
+      spectrogramPanel.classList.remove("hidden");
+    }
+
+    function clearSpectrogram() {
+      const ctx = spectrogramCanvas.getContext("2d");
+      ctx.clearRect(0, 0, spectrogramCanvas.width, spectrogramCanvas.height);
+      spectrogramPanel.classList.add("hidden");
+      spectrogramStatus.textContent = "";
+    }
+
+    function toMonoChannel(audioBuffer) {
+      const channelCount = audioBuffer.numberOfChannels;
+      const length = audioBuffer.length;
+      if (channelCount === 1) {
+        return audioBuffer.getChannelData(0);
+      }
+
+      const mono = new Float32Array(length);
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        const channelData = audioBuffer.getChannelData(channelIndex);
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] += channelData[sampleIndex];
+        }
+      }
+
+      for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+        mono[sampleIndex] /= channelCount;
+      }
+
+      return mono;
+    }
+
+    function clampPcmSample(sample) {
+      return Math.max(-1, Math.min(1, sample));
+    }
+
+    function getRecordingContext() {
+      if (!audioContext) {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        audioContext = new AudioContextCtor({ sampleRate: targetWavSampleRate });
+      }
+      return audioContext;
+    }
+
+    function resetRecordingBuffers() {
+      recordingBufferChunks = [];
+      recordingChannelCount = 0;
+      recordedFrameCount = 0;
+      recordingSessionActive = false;
+    }
+
+    function stopRecordingNodes() {
+      if (recordingSourceNode) {
+        recordingSourceNode.disconnect();
+        recordingSourceNode = null;
+      }
+      if (recordingProcessorNode) {
+        recordingProcessorNode.disconnect();
+        recordingProcessorNode.onaudioprocess = null;
+        recordingProcessorNode = null;
+      }
+      recordingSessionActive = false;
+    }
+
+    function buildAudioBufferFromRecording(context) {
+      if (!recordedFrameCount || !recordingChannelCount) {
+        return null;
+      }
+
+      const audioBuffer = context.createBuffer(
+        recordingChannelCount,
+        recordedFrameCount,
+        context.sampleRate
+      );
+      const channelData = [];
+      let frameOffset = 0;
+
+      for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
+        channelData.push(audioBuffer.getChannelData(channelIndex));
+      }
+
+      for (const chunk of recordingBufferChunks) {
+        for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
+          channelData[channelIndex].set(chunk[channelIndex], frameOffset);
+        }
+        frameOffset += chunk[0].length;
+      }
+
+      return audioBuffer;
+    }
+
+    function encodeAudioBufferToWav(audioBuffer) {
+      const channelCount = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const frameCount = audioBuffer.length;
+      const bytesPerSample = 2;
+      const blockAlign = channelCount * bytesPerSample;
+      const byteRate = sampleRate * blockAlign;
+      const dataSize = frameCount * blockAlign;
+      const wavBuffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(wavBuffer);
+      const channelData = [];
+      let offset = 0;
+
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        channelData.push(audioBuffer.getChannelData(channelIndex));
+      }
+
+      function writeAscii(text) {
+        for (let index = 0; index < text.length; index += 1) {
+          view.setUint8(offset, text.charCodeAt(index));
+          offset += 1;
+        }
+      }
+
+      writeAscii("RIFF");
+      view.setUint32(offset, 36 + dataSize, true);
+      offset += 4;
+      writeAscii("WAVE");
+      writeAscii("fmt ");
+      view.setUint32(offset, 16, true);
+      offset += 4;
+      view.setUint16(offset, 1, true);
+      offset += 2;
+      view.setUint16(offset, channelCount, true);
+      offset += 2;
+      view.setUint32(offset, sampleRate, true);
+      offset += 4;
+      view.setUint32(offset, byteRate, true);
+      offset += 4;
+      view.setUint16(offset, blockAlign, true);
+      offset += 2;
+      view.setUint16(offset, bytesPerSample * 8, true);
+      offset += 2;
+      writeAscii("data");
+      view.setUint32(offset, dataSize, true);
+      offset += 4;
+
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+          const sample = clampPcmSample(channelData[channelIndex][frameIndex]);
+          const pcmValue = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+          view.setInt16(offset, Math.round(pcmValue), true);
+          offset += bytesPerSample;
+        }
+      }
+
+      return new Blob([wavBuffer], { type: "audio/wav" });
+    }
+
+    function createHannWindow(size) {
+      const windowValues = new Float32Array(size);
+      for (let index = 0; index < size; index += 1) {
+        windowValues[index] = 0.5 * (1 - Math.cos((2 * Math.PI * index) / (size - 1)));
+      }
+      return windowValues;
+    }
+
+    function getSpectrogramColor(value) {
+      const clamped = Math.max(0, Math.min(1, value));
+      const red = Math.round(255 * Math.pow(clamped, 0.72));
+      const green = Math.round(255 * Math.pow(clamped, 1.55));
+      const blue = Math.round(40 + 180 * (1 - clamped) * Math.pow(clamped, 0.35));
+      return [red, green, blue];
+    }
+
+    function drawSpectrogramAxes(ctx, plotArea, audioBuffer) {
+      const duration = audioBuffer.duration;
+      const sampleRate = audioBuffer.sampleRate;
+      const maxFrequency = sampleRate / 2;
+      const frequencyTicks = 5;
+      const timeTicks = Math.max(2, Math.min(6, Math.round(duration)));
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 248, 240, 0.28)";
+      ctx.fillStyle = "rgba(255, 248, 240, 0.92)";
+      ctx.lineWidth = 1;
+      ctx.font = "12px 'Segoe UI', sans-serif";
+
+      ctx.beginPath();
+      ctx.moveTo(plotArea.left, plotArea.top);
+      ctx.lineTo(plotArea.left, plotArea.bottom);
+      ctx.lineTo(plotArea.right, plotArea.bottom);
+      ctx.stroke();
+
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let index = 0; index < frequencyTicks; index += 1) {
+        const ratio = index / (frequencyTicks - 1);
+        const y = plotArea.bottom - ratio * plotArea.height;
+        const frequency = (ratio * maxFrequency) / 1000;
+        ctx.beginPath();
+        ctx.moveTo(plotArea.left - 6, y);
+        ctx.lineTo(plotArea.left, y);
+        ctx.stroke();
+        ctx.fillText(`${frequency.toFixed(frequency >= 10 ? 0 : 1)} kHz`, plotArea.left - 10, y);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let index = 0; index <= timeTicks; index += 1) {
+        const ratio = index / timeTicks;
+        const x = plotArea.left + ratio * plotArea.width;
+        const seconds = ratio * duration;
+        ctx.beginPath();
+        ctx.moveTo(x, plotArea.bottom);
+        ctx.lineTo(x, plotArea.bottom + 6);
+        ctx.stroke();
+        ctx.fillText(`${seconds.toFixed(duration >= 10 ? 0 : 1)} s`, x, plotArea.bottom + 10);
+      }
+
+      ctx.restore();
+    }
+
+    async function renderSpectrogram(recordedBlob) {
+      showSpectrogramStatus("Generating spectrogram...");
+
+      try {
+        const arrayBuffer = await recordedBlob.arrayBuffer();
+        const decodingContext = getRecordingContext();
+        const audioBuffer = await decodingContext.decodeAudioData(arrayBuffer.slice(0));
+        const samples = toMonoChannel(audioBuffer);
+        if (samples.length < 8) {
+          throw new Error("Recording too short");
+        }
+        const canvasWidth = spectrogramCanvas.width;
+        const canvasHeight = spectrogramCanvas.height;
+        const margin = { top: 16, right: 14, bottom: 54, left: 70 };
+        const plotWidth = canvasWidth - margin.left - margin.right;
+        const plotHeight = canvasHeight - margin.top - margin.bottom;
+        const plotArea = {
+          left: margin.left,
+          top: margin.top,
+          right: margin.left + plotWidth,
+          bottom: margin.top + plotHeight,
+          width: plotWidth,
+          height: plotHeight
+        };
+        const fftSize = 512;
+        const nyquistBins = fftSize / 2;
+        const hopSize = Math.max(1, Math.floor(Math.max(1, samples.length - fftSize) / plotWidth));
+        const windowValues = createHannWindow(fftSize);
+        const ctx = spectrogramCanvas.getContext("2d");
+        const imageData = ctx.createImageData(plotWidth, plotHeight);
+        const pixelBuffer = imageData.data;
+
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        ctx.fillStyle = "#0c0820";
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        for (let x = 0; x < plotWidth; x += 1) {
+          const start = Math.max(0, Math.min(samples.length - fftSize, x * hopSize));
+
+          for (let y = 0; y < plotHeight; y += 1) {
+            const normalizedY = y / Math.max(1, plotHeight - 1);
+            const frequencyBin = Math.min(
+              nyquistBins - 1,
+              Math.floor(Math.pow(normalizedY, 1.85) * (nyquistBins - 1))
+            );
+
+            let real = 0;
+            let imaginary = 0;
+            for (let n = 0; n < fftSize; n += 1) {
+              const sample = samples[start + n] * windowValues[n];
+              const angle = (2 * Math.PI * frequencyBin * n) / fftSize;
+              real += sample * Math.cos(angle);
+              imaginary -= sample * Math.sin(angle);
+            }
+
+            const magnitude = Math.sqrt(real * real + imaginary * imaginary) / fftSize;
+            const db = 20 * Math.log10(magnitude + 1e-6);
+            const normalizedMagnitude = Math.max(0, Math.min(1, (db + 90) / 70));
+            const [red, green, blue] = getSpectrogramColor(normalizedMagnitude);
+            const pixelIndex = ((plotHeight - 1 - y) * plotWidth + x) * 4;
+            pixelBuffer[pixelIndex] = red;
+            pixelBuffer[pixelIndex + 1] = green;
+            pixelBuffer[pixelIndex + 2] = blue;
+            pixelBuffer[pixelIndex + 3] = 255;
+          }
+        }
+
+        ctx.putImageData(imageData, plotArea.left, plotArea.top);
+        drawSpectrogramAxes(ctx, plotArea, audioBuffer);
+        showSpectrogramStatus("Spectrogram of the recorded audio.");
+      } catch (error) {
+        showSpectrogramStatus("Could not generate a spectrogram for the recording.");
+      }
     }
 
     async function downloadRecordedAudio() {
-      if (!recordedChunks.length) {
+      const context = getRecordingContext();
+      const recordedAudioBuffer = buildAudioBufferFromRecording(context);
+
+      if (!recordedAudioBuffer) {
         fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
-        mediaRecorder = null;
         return;
       }
 
       try {
-        const mimeType = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
-        const recordedBlob = new Blob(recordedChunks, { type: mimeType });
-        const downloadUrl = URL.createObjectURL(recordedBlob);
-        const downloadLink = document.createElement("a");
-        const fileName = buildRecordingFileName(mimeType);
-        downloadLink.href = downloadUrl;
-        downloadLink.download = fileName;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        downloadLink.remove();
+        const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
+        await renderSpectrogram(wavBlob);
+        const fileName = buildRecordingFileName();
+        const downloadUrl = URL.createObjectURL(wavBlob);
+        triggerDownload(downloadUrl, fileName);
         window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-        fileStatus.textContent = `Playback finished. Recording downloaded as ${fileName}.`;
+
+        const spectrogramUrl = spectrogramCanvas.toDataURL("image/png");
+        const spectrogramFileName = buildSpectrogramFileName();
+        triggerDownload(spectrogramUrl, spectrogramFileName);
+
+        fileStatus.textContent = `Playback finished. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, spectrogram downloaded as ${spectrogramFileName}.`;
       } catch (error) {
-        fileStatus.textContent = "Playback finished, but failed to download the recording.";
+        fileStatus.textContent = "Playback finished, but failed to download the recording or spectrogram.";
       } finally {
-        recordedChunks = [];
-        mediaRecorder = null;
+        resetRecordingBuffers();
       }
     }
 
@@ -540,7 +924,7 @@
         receivedAudio.classList.remove("hidden");
         await startRecordingSession();
         await receivedAudio.play();
-        if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        if (!recordingSessionActive) {
           fileStatus.textContent = `Playing audio: ${pendingFileName}`;
         }
         clearPendingFile();
@@ -553,6 +937,7 @@
     async function requestFileFromServer() {
       fileStatus.textContent = "Preparing file...";
       clearPendingFile();
+      clearSpectrogram();
 
       try {
         const fileUrl = buildStaticFileUrl(appConfig.downloadFileName);
@@ -579,7 +964,7 @@
       }
 
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream = await navigator.mediaDevices.getUserMedia(getMicrophoneConstraints());
         if (micStream) {
           micStatus.textContent = "Microphone is on.";
           await requestFileFromServer();
@@ -591,18 +976,16 @@
     }
 
     function stopRecordingSession() {
-      if (!mediaRecorder) {
-        if (micStream) {
-          micStream.getTracks().forEach((track) => track.stop());
-          micStream = null;
-        }
-        return;
-      }
-      if (mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      } else if (micStream) {
+      const shouldFinalizeRecording = recordingSessionActive || recordedFrameCount > 0;
+      stopRecordingNodes();
+      if (micStream) {
         micStream.getTracks().forEach((track) => track.stop());
         micStream = null;
+      }
+      if (shouldFinalizeRecording) {
+        downloadRecordedAudio();
+      } else {
+        resetRecordingBuffers();
       }
     }
 
@@ -610,53 +993,56 @@
       if (!micStream) {
         return false;
       }
-      if (typeof MediaRecorder === "undefined") {
-        fileStatus.textContent = "Playback started, but recording is not supported in this browser.";
+      if (!window.AudioContext && !window.webkitAudioContext) {
+        fileStatus.textContent = "Playback started, but raw microphone capture is not supported in this browser.";
         return false;
       }
 
       try {
-        if (!audioContext) {
-          audioContext = new AudioContext();
-        }
-        if (audioContext.state === "suspended") {
-          await audioContext.resume();
+        const recordingContext = getRecordingContext();
+        if (recordingContext.state === "suspended") {
+          await recordingContext.resume();
         }
 
-        if (!mediaElementSourceNode) {
-          mediaElementSourceNode = audioContext.createMediaElementSource(receivedAudio);
-        }
+        const microphoneOnlyStream = buildMicrophoneOnlyStream(micStream);
+        const processorChannelCount = Math.max(
+          1,
+          Math.min(
+            2,
+            microphoneOnlyStream.getAudioTracks()[0].getSettings().channelCount || 1
+          )
+        );
 
-        if (micSourceNode) {
-          micSourceNode.disconnect();
-        }
-        micSourceNode = audioContext.createMediaStreamSource(micStream);
-        mixedDestinationNode = audioContext.createMediaStreamDestination();
+        stopRecordingNodes();
+        resetRecordingBuffers();
 
-        mediaElementSourceNode.disconnect();
-        mediaElementSourceNode.connect(audioContext.destination);
-        mediaElementSourceNode.connect(mixedDestinationNode);
-        micSourceNode.connect(mixedDestinationNode);
+        recordingSourceNode = recordingContext.createMediaStreamSource(microphoneOnlyStream);
+        recordingProcessorNode = recordingContext.createScriptProcessor(4096, processorChannelCount, processorChannelCount);
+        recordingProcessorNode.onaudioprocess = (event) => {
+          const inputBuffer = event.inputBuffer;
 
-        recordedChunks = [];
-        mediaRecorder = new MediaRecorder(mixedDestinationNode.stream);
-        mediaRecorder.addEventListener("dataavailable", (event) => {
-          if (event.data && event.data.size > 0) {
-            recordedChunks.push(event.data);
+          if (!recordingChannelCount) {
+            recordingChannelCount = inputBuffer.numberOfChannels;
           }
-        });
-        mediaRecorder.addEventListener("stop", () => {
-          if (micStream) {
-            micStream.getTracks().forEach((track) => track.stop());
-            micStream = null;
+
+          const chunk = [];
+          for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
+            chunk.push(new Float32Array(inputBuffer.getChannelData(channelIndex)));
           }
-          downloadRecordedAudio();
-        });
-        mediaRecorder.start();
-        fileStatus.textContent = "Playing audio and recording microphone...";
+          recordingBufferChunks.push(chunk);
+          recordedFrameCount += inputBuffer.length;
+        };
+
+        recordingSourceNode.connect(recordingProcessorNode);
+        recordingProcessorNode.connect(recordingContext.destination);
+        recordingSessionActive = true;
+
+        fileStatus.textContent = "Playing audio while capturing raw microphone PCM only.";
         return true;
       } catch (error) {
-        fileStatus.textContent = "Audio is playing, but microphone recording could not start.";
+        stopRecordingNodes();
+        resetRecordingBuffers();
+        fileStatus.textContent = "Audio is playing, but raw microphone capture could not start.";
         return false;
       }
     }
@@ -668,7 +1054,9 @@
         return;
       }
 
+      shell.classList.add("expanded");
       loginView.classList.add("hidden");
+      loggedInView.classList.add("expanded");
       loggedInView.classList.remove("hidden");
       await requestMicrophone();
     }
