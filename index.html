@@ -478,6 +478,7 @@
     let recordingChannelCount = 0;
     let recordedFrameCount = 0;
     let recordingSessionActive = false;
+    let playbackStartInProgress = false;
 
     const appConfig = {
       captchaEnabled: false,
@@ -513,6 +514,23 @@
       }
 
       return new MediaStream(microphoneTracks);
+    }
+
+    function hasActiveMicrophoneStream() {
+      if (!micStream) {
+        return false;
+      }
+
+      return micStream.getAudioTracks().some((track) => track.readyState === "live");
+    }
+
+    function stopMicrophoneStream() {
+      if (!micStream) {
+        return;
+      }
+
+      micStream.getTracks().forEach((track) => track.stop());
+      micStream = null;
     }
 
     function buildRecordingTimestamp() {
@@ -836,10 +854,7 @@
       }
     }
 
-    async function downloadRecordedAudio() {
-      const context = getRecordingContext();
-      const recordedAudioBuffer = buildAudioBufferFromRecording(context);
-
+    async function downloadRecordedAudio(recordedAudioBuffer) {
       if (!recordedAudioBuffer) {
         fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
         return;
@@ -922,7 +937,7 @@
         const objectUrl = URL.createObjectURL(audioBlob);
         receivedAudio.src = objectUrl;
         receivedAudio.classList.remove("hidden");
-        await startRecordingSession();
+        await prepareRecordingForPlayback();
         await receivedAudio.play();
         if (!recordingSessionActive) {
           fileStatus.textContent = `Playing audio: ${pendingFileName}`;
@@ -957,35 +972,51 @@
     }
 
     async function requestMicrophone() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        micStatus.textContent = "Microphone is not supported in this browser.";
+      const microphoneReady = await ensureMicrophoneReady();
+      if (!microphoneReady) {
         fileStatus.textContent = "File request skipped.";
         return;
+      }
+
+      await requestFileFromServer();
+    }
+
+    async function ensureMicrophoneReady() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        micStatus.textContent = "Microphone is not supported in this browser.";
+        return false;
+      }
+
+      if (hasActiveMicrophoneStream()) {
+        micStatus.textContent = "Microphone is on.";
+        return true;
       }
 
       try {
         micStream = await navigator.mediaDevices.getUserMedia(getMicrophoneConstraints());
         if (micStream) {
           micStatus.textContent = "Microphone is on.";
-          await requestFileFromServer();
+          return true;
         }
       } catch (error) {
         micStatus.textContent = "Could not turn on microphone. Please allow microphone permission.";
-        fileStatus.textContent = "File request skipped.";
+        return false;
       }
+
+      return false;
     }
 
     function stopRecordingSession() {
       const shouldFinalizeRecording = recordingSessionActive || recordedFrameCount > 0;
+      const completedRecording = shouldFinalizeRecording
+        ? buildAudioBufferFromRecording(getRecordingContext())
+        : null;
       stopRecordingNodes();
-      if (micStream) {
-        micStream.getTracks().forEach((track) => track.stop());
-        micStream = null;
-      }
-      if (shouldFinalizeRecording) {
-        downloadRecordedAudio();
+      resetRecordingBuffers();
+      if (completedRecording) {
+        void downloadRecordedAudio(completedRecording);
       } else {
-        resetRecordingBuffers();
+        fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
       }
     }
 
@@ -1015,6 +1046,7 @@
 
         stopRecordingNodes();
         resetRecordingBuffers();
+        clearSpectrogram();
 
         recordingSourceNode = recordingContext.createMediaStreamSource(microphoneOnlyStream);
         recordingProcessorNode = recordingContext.createScriptProcessor(4096, processorChannelCount, processorChannelCount);
@@ -1044,6 +1076,25 @@
         resetRecordingBuffers();
         fileStatus.textContent = "Audio is playing, but raw microphone capture could not start.";
         return false;
+      }
+    }
+
+    async function prepareRecordingForPlayback() {
+      if (recordingSessionActive || playbackStartInProgress) {
+        return recordingSessionActive;
+      }
+
+      playbackStartInProgress = true;
+      try {
+        const microphoneReady = await ensureMicrophoneReady();
+        if (!microphoneReady) {
+          fileStatus.textContent = "Audio is playing, but microphone recording could not start.";
+          return false;
+        }
+
+        return await startRecordingSession();
+      } finally {
+        playbackStartInProgress = false;
       }
     }
 
@@ -1108,6 +1159,20 @@
 
     receivedAudio.addEventListener("error", () => {
       stopRecordingSession();
+    });
+
+    receivedAudio.addEventListener("play", () => {
+      if (recordingSessionActive || playbackStartInProgress) {
+        return;
+      }
+
+      void prepareRecordingForPlayback();
+    });
+
+    window.addEventListener("pagehide", () => {
+      stopRecordingNodes();
+      resetRecordingBuffers();
+      stopMicrophoneStream();
     });
 
     form.addEventListener("submit", async (event) => {
