@@ -73,7 +73,7 @@
     <section class="section">
       <h2>Trips</h2>
       <div class="product-list">
-        <article class="product-row" data-product-row data-product-name="Tokyo city break" data-category="City" data-tags="guided family">
+        <article class="product-row" data-product-row data-product-name="Tokyo city break" data-category="City" data-tags="guided family" data-duration="3 nights" data-route="Shinjuku, Ueno, Asakusa, and Ginza" data-included="Metro pass, museum entry, guided walking route" data-note="Best for travelers who want dense city activity with low planning overhead.">
           <div>
             <h3>Tokyo city break</h3>
             <p>Three-night city itinerary with transit and museum stops.</p>
@@ -87,7 +87,7 @@
           </div>
         </article>
 
-        <article class="product-row" data-product-row data-product-name="Lisbon weekend" data-category="City" data-tags="budget guided">
+        <article class="product-row" data-product-row data-product-name="Lisbon weekend" data-category="City" data-tags="budget guided" data-duration="2 nights" data-route="Baixa, Alfama, Belem, and Bairro Alto" data-included="Walking map, tram pass, food stop list" data-note="Best for a short budget city trip with compact navigation.">
           <div>
             <h3>Lisbon weekend</h3>
             <p>Compact city stay with walking routes and food stops.</p>
@@ -101,7 +101,7 @@
           </div>
         </article>
 
-        <article class="product-row" data-product-row data-product-name="Hawaii beach stay" data-category="Beach" data-tags="family">
+        <article class="product-row" data-product-row data-product-name="Hawaii beach stay" data-category="Beach" data-tags="family" data-duration="5 nights" data-route="Waikiki, North Shore, and Diamond Head" data-included="Flexible beach days, family activity list, airport transfer options" data-note="Best for a relaxed family schedule with optional day trips.">
           <div>
             <h3>Hawaii beach stay</h3>
             <p>Five-night beach package with flexible daily planning.</p>
@@ -115,7 +115,7 @@
           </div>
         </article>
 
-        <article class="product-row" data-product-row data-product-name="Banff hiking plan" data-category="Nature" data-tags="guided family">
+        <article class="product-row" data-product-row data-product-name="Banff hiking plan" data-category="Nature" data-tags="guided family" data-duration="4 nights" data-route="Lake Louise, Johnston Canyon, Banff town, and scenic overlooks" data-included="Guided trail list, shuttle notes, low-difficulty route options" data-note="Best for nature travelers who want structure without difficult hikes.">
           <div>
             <h3>Banff hiking plan</h3>
             <p>Nature route with guided hikes and low-difficulty options.</p>
@@ -129,7 +129,7 @@
           </div>
         </article>
 
-        <article class="product-row" data-product-row data-product-name="Costa Rica eco tour" data-category="Nature" data-tags="budget guided">
+        <article class="product-row" data-product-row data-product-name="Costa Rica eco tour" data-category="Nature" data-tags="budget guided" data-duration="6 nights" data-route="San Jose, Monteverde, La Fortuna, and Pacific coast" data-included="Local transport plan, guided forest walk, beach transfer notes" data-note="Best for budget travelers who want nature stops with guided structure.">
           <div>
             <h3>Costa Rica eco tour</h3>
             <p>Rainforest and coast route with local transport options.</p>
@@ -142,6 +142,38 @@
             <button class="ghost-button" type="button" data-quick-view data-product="Costa Rica eco tour">Details</button>
           </div>
         </article>
+      </div>
+    </section>
+
+    <section id="travelDetailsPanel" class="section travel-details-panel" data-trip-detail-panel hidden>
+      <div class="travel-details-header">
+        <div>
+          <h2 data-trip-detail-name>Trip details</h2>
+          <p data-trip-detail-summary>Select a trip to review details.</p>
+        </div>
+        <span class="price" data-trip-detail-price></span>
+      </div>
+      <dl class="travel-details-list">
+        <div>
+          <dt>Duration</dt>
+          <dd data-trip-detail-duration></dd>
+        </div>
+        <div>
+          <dt>Route</dt>
+          <dd data-trip-detail-route></dd>
+        </div>
+        <div>
+          <dt>Included</dt>
+          <dd data-trip-detail-included></dd>
+        </div>
+        <div>
+          <dt>Note</dt>
+          <dd data-trip-detail-note></dd>
+        </div>
+      </dl>
+      <div class="actions">
+        <button class="primary-button" type="button" data-use-trip>Use this trip</button>
+        <button class="secondary-button" type="button" data-close-trip-details>Close details</button>
       </div>
     </section>
 

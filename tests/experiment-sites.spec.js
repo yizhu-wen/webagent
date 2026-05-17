@@ -172,6 +172,15 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await page.locator("[data-add-cart]").first().click();
   await page.locator("[data-toggle-favorite]").first().click();
   await page.locator("[data-quick-view]").first().click();
+  await expect(page.locator("#travelDetailsPanel")).toBeVisible();
+  await expect(page.locator("[data-trip-detail-name]")).toHaveText("Tokyo city break");
+  await expect(page.locator("[data-trip-detail-duration]")).toHaveText("3 nights");
+  await expect(page.locator("[data-trip-detail-route]")).toContainText("Shinjuku");
+  await page.locator("[data-use-trip]").click();
+  await expect(page.locator("[data-cart-count]")).toHaveText("2");
+  await expect(page.locator("textarea[name='notes']")).toHaveValue(/Tokyo city break/);
+  await page.locator("[data-close-trip-details]").click();
+  await expect(page.locator("#travelDetailsPanel")).toBeHidden();
 
   await page.waitForTimeout(300);
   await page.mouse.move(140, 140);
