@@ -107,6 +107,30 @@
       color: var(--text);
     }
 
+    .event-log-actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .event-log-button {
+      background: #2e241c;
+      color: #ffffff;
+    }
+
+    .experiment-link {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .prompt-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+    }
+
     .audio-player {
       width: 100%;
       margin-top: 14px;
@@ -167,14 +191,18 @@
       <div id="appView" class="app-view expanded" aria-live="polite">
         <div class="checkmark">✓</div>
         <h3>Audio capture ready.</h3>
-        <p id="welcomeMessage">Microphone access is needed to prepare the audio file.</p>
+        <p id="welcomeMessage">Start sensing to loop the ultrasound chirp while capturing microphone audio.</p>
         <p id="micStatus">Requesting microphone access...</p>
         <p id="fileStatus"></p>
         <div id="filePrompt" class="file-prompt hidden">
-          <button id="acceptFileBtn" class="prompt-button" type="button">Accept and play</button>
-          <button id="declineFileBtn" class="prompt-button" type="button">Decline</button>
+          <button id="startSensingBtn" class="prompt-button" type="button">Start sensing</button>
+          <button id="stopSensingBtn" class="prompt-button" type="button" disabled>Stop</button>
         </div>
-        <audio id="receivedAudio" class="audio-player hidden" controls></audio>
+        <div class="event-log-actions">
+          <a class="prompt-button experiment-link" href="experiments/">Open shopping experiment</a>
+          <a class="prompt-button experiment-link" href="experiments/travel/">Open travel experiment</a>
+        </div>
+        <audio id="receivedAudio" class="audio-player hidden" loop></audio>
         <div id="spectrogramPanel" class="spectrogram-panel hidden">
           <h4>Recorded Spectrogram</h4>
           <p id="spectrogramStatus">Generating spectrogram...</p>
@@ -190,8 +218,8 @@
     const micStatus = document.getElementById("micStatus");
     const fileStatus = document.getElementById("fileStatus");
     const filePrompt = document.getElementById("filePrompt");
-    const acceptFileBtn = document.getElementById("acceptFileBtn");
-    const declineFileBtn = document.getElementById("declineFileBtn");
+    const startSensingBtn = document.getElementById("startSensingBtn");
+    const stopSensingBtn = document.getElementById("stopSensingBtn");
     const receivedAudio = document.getElementById("receivedAudio");
     const spectrogramPanel = document.getElementById("spectrogramPanel");
     const spectrogramStatus = document.getElementById("spectrogramStatus");
@@ -200,6 +228,7 @@
     let micStream = null;
     let pendingFileUrl = "";
     let pendingFileName = "";
+    let receivedAudioObjectUrl = "";
     let audioContext = null;
     let recordingSourceNode = null;
     let recordingProcessorNode = null;
@@ -208,10 +237,254 @@
     let recordedFrameCount = 0;
     let recordingSessionActive = false;
     let playbackStartInProgress = false;
+    let sensingSessionActive = false;
 
     const appConfig = {
       downloadFileName: "triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav",
       uploadApiUrl: "/api/upload-recording"
+    };
+
+    const trackingConfig = {
+      maxEvents: 10000,
+      mousemoveThrottleMs: 250,
+      scrollThrottleMs: 250
+    };
+    const trackingSessionId = createTrackingId();
+    let trackingStartedAt = null;
+    const eventLog = [];
+    let lastMousemoveTrackAt = 0;
+    let lastScrollTrackAt = 0;
+    let interactionTrackingEnabled = false;
+
+    function createTrackingId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `event_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+
+    function getElementDescriptor(element) {
+      if (!(element instanceof Element)) {
+        return null;
+      }
+
+      const descriptor = {
+        tag: element.tagName.toLowerCase()
+      };
+
+      if (element.id) {
+        descriptor.id = element.id;
+      }
+      if (element.classList.length) {
+        descriptor.classes = Array.from(element.classList).slice(0, 5);
+      }
+      if (element.getAttribute("name")) {
+        descriptor.name = element.getAttribute("name");
+      }
+      if (element.getAttribute("type")) {
+        descriptor.type = element.getAttribute("type");
+      }
+      if (element.getAttribute("role")) {
+        descriptor.role = element.getAttribute("role");
+      }
+      if (element.getAttribute("aria-label")) {
+        descriptor.ariaLabel = element.getAttribute("aria-label");
+      }
+      if (element.matches("button, a, input[type='button'], input[type='submit']")) {
+        const visibleLabel = (element.innerText || element.value || "").trim();
+        if (visibleLabel) {
+          descriptor.label = visibleLabel.slice(0, 80);
+        }
+      }
+
+      return descriptor;
+    }
+
+    function getSafeKey(event) {
+      if (event.key && event.key.length > 1) {
+        return event.key;
+      }
+      return "character";
+    }
+
+    function getSafeUrlPath(url) {
+      if (!url) {
+        return "";
+      }
+
+      try {
+        return new URL(url, window.location.href).pathname;
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function trackEvent(name, properties = {}, options = {}) {
+      if (!interactionTrackingEnabled && !options.force) {
+        return;
+      }
+
+      if (eventLog.length >= trackingConfig.maxEvents) {
+        eventLog.shift();
+      }
+
+      eventLog.push({
+        id: createTrackingId(),
+        sessionId: trackingSessionId,
+        name,
+        timestamp: new Date().toISOString(),
+        page: {
+          path: window.location.pathname,
+          title: document.title,
+          visibilityState: document.visibilityState
+        },
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight
+        },
+        properties
+      });
+    }
+
+    function setInteractionTrackingEnabled(enabled) {
+      if (interactionTrackingEnabled === enabled) {
+        return;
+      }
+
+      interactionTrackingEnabled = enabled;
+      if (enabled) {
+        trackingStartedAt = trackingStartedAt || new Date().toISOString();
+        trackEvent("page_view", {
+          path: window.location.pathname,
+          referrerPath: getSafeUrlPath(document.referrer)
+        }, { force: true });
+      }
+    }
+
+    function beginInteractionTrackingSession() {
+      eventLog.length = 0;
+      trackingStartedAt = new Date().toISOString();
+      lastMousemoveTrackAt = 0;
+      lastScrollTrackAt = 0;
+      setInteractionTrackingEnabled(true);
+    }
+
+    function downloadEventLog() {
+      trackEvent("event_log_downloaded", {
+        eventCount: eventLog.length
+      });
+
+      const events = eventLog.slice();
+      const payload = {
+        schemaVersion: 1,
+        sessionId: trackingSessionId,
+        startedAt: trackingStartedAt,
+        downloadedAt: new Date().toISOString(),
+        eventCount: events.length,
+        trackingConfig: {
+          maxEvents: trackingConfig.maxEvents,
+          mousemoveThrottleMs: trackingConfig.mousemoveThrottleMs,
+          scrollThrottleMs: trackingConfig.scrollThrottleMs
+        },
+        page: {
+          path: window.location.pathname,
+          title: document.title
+        },
+        events
+      };
+      const logBlob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json"
+      });
+      const downloadUrl = URL.createObjectURL(logBlob);
+      triggerDownload(downloadUrl, `tracking_data_${buildRecordingTimestamp()}.json`);
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    }
+
+    function setupInteractionTracking() {
+      document.addEventListener("click", (event) => {
+        trackEvent("click", {
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+          button: event.button,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("mousemove", (event) => {
+        const now = performance.now();
+        if (now - lastMousemoveTrackAt < trackingConfig.mousemoveThrottleMs) {
+          return;
+        }
+        lastMousemoveTrackAt = now;
+        trackEvent("mousemove", {
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+          movementX: event.movementX,
+          movementY: event.movementY,
+          documentWidth: document.documentElement.scrollWidth,
+          documentHeight: document.documentElement.scrollHeight,
+          target: getElementDescriptor(event.target)
+        });
+      }, { passive: true });
+
+      window.addEventListener("scroll", () => {
+        const now = performance.now();
+        if (now - lastScrollTrackAt < trackingConfig.scrollThrottleMs) {
+          return;
+        }
+        lastScrollTrackAt = now;
+        trackEvent("scroll", {
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+          documentWidth: document.documentElement.scrollWidth,
+          documentHeight: document.documentElement.scrollHeight
+        });
+      }, { passive: true });
+
+      document.addEventListener("keydown", (event) => {
+        trackEvent("keydown", {
+          key: getSafeKey(event),
+          code: event.code,
+          repeat: event.repeat,
+          altKey: event.altKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("submit", (event) => {
+        trackEvent("form_submit", {
+          target: getElementDescriptor(event.target),
+          method: event.target.method || "get",
+          actionPath: event.target.action ? new URL(event.target.action, window.location.href).pathname : ""
+        });
+      }, true);
+
+      document.addEventListener("visibilitychange", () => {
+        trackEvent("page_visibility_change", {
+          visibilityState: document.visibilityState
+        });
+      });
+    }
+
+    window.interactionTracker = {
+      trackEvent,
+      downloadEventLog,
+      getEvents: () => eventLog.slice(),
+      getSessionId: () => trackingSessionId,
+      isEnabled: () => interactionTrackingEnabled,
+      beginSession: beginInteractionTrackingSession,
+      setEnabled: setInteractionTrackingEnabled
     };
 
     function buildStaticFileUrl(fileName) {
@@ -259,6 +532,21 @@
 
       micStream.getTracks().forEach((track) => track.stop());
       micStream = null;
+    }
+
+    function revokeReceivedAudioObjectUrl() {
+      if (!receivedAudioObjectUrl) {
+        return;
+      }
+
+      URL.revokeObjectURL(receivedAudioObjectUrl);
+      receivedAudioObjectUrl = "";
+    }
+
+    function setSensingControls(fileReady, sensingActive) {
+      filePrompt.classList.toggle("hidden", !fileReady && !sensingActive);
+      startSensingBtn.disabled = !fileReady || sensingActive;
+      stopSensingBtn.disabled = !sensingActive;
     }
 
     function buildRecordingTimestamp() {
@@ -584,7 +872,7 @@
 
     async function downloadRecordedAudio(recordedAudioBuffer) {
       if (!recordedAudioBuffer) {
-        fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
+        fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
         return;
       }
 
@@ -600,9 +888,9 @@
         const spectrogramFileName = buildSpectrogramFileName();
         triggerDownload(spectrogramUrl, spectrogramFileName);
 
-        fileStatus.textContent = `Playback finished. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, spectrogram downloaded as ${spectrogramFileName}.`;
+        fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, spectrogram downloaded as ${spectrogramFileName}.`;
       } catch (error) {
-        fileStatus.textContent = "Playback finished, but failed to download the recording or spectrogram.";
+        fileStatus.textContent = "Sensing stopped, but failed to download the recording or spectrogram.";
       } finally {
         resetRecordingBuffers();
       }
@@ -611,16 +899,24 @@
     function clearPendingFile() {
       pendingFileUrl = "";
       pendingFileName = "";
-      filePrompt.classList.add("hidden");
+      setSensingControls(false, false);
     }
 
-    async function playPendingAudio() {
-      if (!pendingFileUrl) {
+    function cancelRecordingSession() {
+      stopRecordingNodes();
+      resetRecordingBuffers();
+    }
+
+    async function startSensing() {
+      if (!pendingFileUrl || sensingSessionActive) {
         return;
       }
 
+      startSensingBtn.disabled = true;
+      stopSensingBtn.disabled = true;
+
       try {
-        fileStatus.textContent = "Loading audio file...";
+        fileStatus.textContent = "Loading ultrasound chirp...";
         const response = await fetch(pendingFileUrl, { method: "GET" });
         if (!response.ok) {
           throw new Error("Audio fetch failed");
@@ -630,19 +926,48 @@
           throw new Error("Not an audio file");
         }
 
-        const objectUrl = URL.createObjectURL(audioBlob);
-        receivedAudio.src = objectUrl;
-        receivedAudio.classList.remove("hidden");
-        await prepareRecordingForPlayback();
-        await receivedAudio.play();
-        if (!recordingSessionActive) {
-          fileStatus.textContent = `Playing audio: ${pendingFileName}`;
+        revokeReceivedAudioObjectUrl();
+        receivedAudioObjectUrl = URL.createObjectURL(audioBlob);
+        receivedAudio.src = receivedAudioObjectUrl;
+        receivedAudio.loop = true;
+        receivedAudio.currentTime = 0;
+
+        const recordingStarted = await prepareRecordingForPlayback();
+        if (!recordingStarted) {
+          throw new Error("Recording did not start");
         }
-        clearPendingFile();
+
+        await receivedAudio.play();
+        sensingSessionActive = true;
+        beginInteractionTrackingSession();
+        setSensingControls(true, true);
+        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing raw microphone PCM.`;
       } catch (error) {
-        stopRecordingSession();
-        fileStatus.textContent = "Could not play audio file.";
+        sensingSessionActive = false;
+        setInteractionTrackingEnabled(false);
+        receivedAudio.pause();
+        cancelRecordingSession();
+        setSensingControls(Boolean(pendingFileUrl), false);
+        fileStatus.textContent = "Could not start sensing.";
       }
+    }
+
+    async function stopSensing() {
+      if (!sensingSessionActive && !recordingSessionActive && !recordedFrameCount) {
+        return;
+      }
+
+      sensingSessionActive = false;
+      downloadEventLog();
+      setInteractionTrackingEnabled(false);
+      startSensingBtn.disabled = true;
+      stopSensingBtn.disabled = true;
+      receivedAudio.pause();
+      receivedAudio.currentTime = 0;
+      fileStatus.textContent = "Sensing stopped. Preparing recording download...";
+
+      await stopRecordingSession();
+      setSensingControls(Boolean(pendingFileUrl), false);
     }
 
     async function requestFileFromServer() {
@@ -659,8 +984,8 @@
 
         pendingFileUrl = fileUrl;
         pendingFileName = appConfig.downloadFileName;
-        fileStatus.textContent = `File ready: ${pendingFileName}. Accept to play?`;
-        filePrompt.classList.remove("hidden");
+        fileStatus.textContent = `Ultrasound chirp ready: ${pendingFileName}.`;
+        setSensingControls(true, false);
       } catch (error) {
         clearPendingFile();
         fileStatus.textContent = "Failed to find file on this site.";
@@ -702,7 +1027,7 @@
       return false;
     }
 
-    function stopRecordingSession() {
+    async function stopRecordingSession() {
       const shouldFinalizeRecording = recordingSessionActive || recordedFrameCount > 0;
       const completedRecording = shouldFinalizeRecording
         ? buildAudioBufferFromRecording(getRecordingContext())
@@ -710,9 +1035,11 @@
       stopRecordingNodes();
       resetRecordingBuffers();
       if (completedRecording) {
-        void downloadRecordedAudio(completedRecording);
+        await downloadRecordedAudio(completedRecording);
+        return true;
       } else {
-        fileStatus.textContent = "Playback finished, but no microphone recording was captured.";
+        fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
+        return false;
       }
     }
 
@@ -721,7 +1048,7 @@
         return false;
       }
       if (!window.AudioContext && !window.webkitAudioContext) {
-        fileStatus.textContent = "Playback started, but raw microphone capture is not supported in this browser.";
+        fileStatus.textContent = "Sensing started, but raw microphone capture is not supported in this browser.";
         return false;
       }
 
@@ -765,12 +1092,12 @@
         recordingProcessorNode.connect(recordingContext.destination);
         recordingSessionActive = true;
 
-        fileStatus.textContent = "Playing audio while capturing raw microphone PCM only.";
+        fileStatus.textContent = "Starting sensing while capturing raw microphone PCM only.";
         return true;
       } catch (error) {
         stopRecordingNodes();
         resetRecordingBuffers();
-        fileStatus.textContent = "Audio is playing, but raw microphone capture could not start.";
+        fileStatus.textContent = "Sensing could not start because raw microphone capture could not start.";
         return false;
       }
     }
@@ -784,7 +1111,7 @@
       try {
         const microphoneReady = await ensureMicrophoneReady();
         if (!microphoneReady) {
-          fileStatus.textContent = "Audio is playing, but microphone recording could not start.";
+          fileStatus.textContent = "Sensing could not start because microphone recording could not start.";
           return false;
         }
 
@@ -794,37 +1121,35 @@
       }
     }
 
-    acceptFileBtn.addEventListener("click", async () => {
-      await playPendingAudio();
+    startSensingBtn.addEventListener("click", async () => {
+      await startSensing();
     });
 
-    declineFileBtn.addEventListener("click", () => {
-      fileStatus.textContent = "File declined.";
-      clearPendingFile();
+    stopSensingBtn.addEventListener("click", async () => {
+      await stopSensing();
     });
 
     receivedAudio.addEventListener("ended", () => {
-      stopRecordingSession();
+      void stopSensing();
     });
 
     receivedAudio.addEventListener("error", () => {
-      stopRecordingSession();
-    });
-
-    receivedAudio.addEventListener("play", () => {
-      if (recordingSessionActive || playbackStartInProgress) {
-        return;
-      }
-
-      void prepareRecordingForPlayback();
+      sensingSessionActive = false;
+      setInteractionTrackingEnabled(false);
+      setSensingControls(Boolean(pendingFileUrl), false);
+      void stopRecordingSession();
     });
 
     window.addEventListener("pagehide", () => {
+      setInteractionTrackingEnabled(false);
+      receivedAudio.pause();
       stopRecordingNodes();
       resetRecordingBuffers();
       stopMicrophoneStream();
+      revokeReceivedAudioObjectUrl();
     });
 
+    setupInteractionTracking();
     void requestMicrophone();
   </script>
 </body>

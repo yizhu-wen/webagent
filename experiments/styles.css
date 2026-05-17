@@ -1,0 +1,367 @@
+:root {
+  --ink: #1f2933;
+  --muted: #65727d;
+  --line: #d5dde3;
+  --panel: #ffffff;
+  --bg: #f7f9fb;
+  --accent: #0f766e;
+  --accent-dark: #0b5f59;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: Arial, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand,
+.link-button,
+.primary-button,
+.secondary-button,
+.ghost-button {
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand {
+  font-weight: 700;
+}
+
+.nav-actions,
+.actions,
+.product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+#shoppingSensingAudio,
+[data-sensing-audio] {
+  display: none;
+}
+
+.spectrogram-panel {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.spectrogram-canvas {
+  display: block;
+  width: 100%;
+  max-width: 820px;
+  height: auto;
+  border: 1px solid var(--line);
+  background: #0c1320;
+}
+
+.link-button,
+.primary-button,
+.secondary-button,
+.ghost-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.primary-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.primary-button:hover {
+  background: var(--accent-dark);
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+p,
+.meta {
+  color: var(--muted);
+}
+
+.section,
+.product-row,
+.status-bar {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.section {
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #c7d0d8;
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: #ffffff;
+}
+
+textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.check-list {
+  display: grid;
+  gap: 10px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-row input {
+  width: auto;
+}
+
+.product-list {
+  display: grid;
+  gap: 12px;
+}
+
+.product-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.product-row[hidden] {
+  display: none;
+}
+
+.price {
+  font-weight: 700;
+}
+
+.product-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.product-labels span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.status-bar {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+body.travel-site {
+  --ink: #17212b;
+  --muted: #596672;
+  --line: #cbd7df;
+  --panel: #fffdf8;
+  --bg: #eef4f7;
+  --accent: #1f6f8b;
+  --accent-dark: #174e63;
+  background:
+    linear-gradient(90deg, rgba(31, 111, 139, 0.08) 0, rgba(31, 111, 139, 0.08) 72px, transparent 72px),
+    var(--bg);
+}
+
+body.travel-site .topbar {
+  position: static;
+  background: #17212b;
+  border-bottom: 0;
+  color: #f7fbfc;
+}
+
+body.travel-site .brand {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+body.travel-site .link-button,
+body.travel-site .secondary-button,
+body.travel-site .ghost-button {
+  border-color: #a8bac5;
+  background: #ffffff;
+  color: #17212b;
+}
+
+body.travel-site .page {
+  max-width: 1040px;
+}
+
+body.travel-site .section,
+body.travel-site .status-bar {
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+body.travel-site .travel-hero {
+  border-left: 6px solid var(--accent);
+}
+
+body.travel-site .travel-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+body.travel-site .travel-status-grid p,
+body.travel-site .status-bar {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: #f8fbfc;
+  padding: 10px 12px;
+}
+
+body.travel-site .form-grid {
+  align-items: end;
+}
+
+body.travel-site .check-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body.travel-site .product-list {
+  counter-reset: trip;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+body.travel-site .product-row {
+  counter-increment: trip;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: #ffffff;
+}
+
+body.travel-site .product-row::before {
+  content: counter(trip, decimal-leading-zero);
+  align-self: start;
+  border-left: 3px solid #d59c37;
+  padding-left: 10px;
+  color: #8a5d14;
+  font-weight: 700;
+}
+
+body.travel-site .product-row:last-child {
+  border-bottom: 0;
+}
+
+body.travel-site .product-row[hidden] {
+  display: none;
+}
+
+body.travel-site .product-labels span {
+  border-radius: 4px;
+  background: #eef4f7;
+}
+
+@media (max-width: 720px) {
+  .topbar,
+  .product-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid .wide {
+    grid-column: auto;
+  }
+
+  body.travel-site .travel-status-grid,
+  body.travel-site .check-list {
+    grid-template-columns: 1fr;
+  }
+
+  body.travel-site .product-row {
+    grid-template-columns: 1fr;
+  }
+}
