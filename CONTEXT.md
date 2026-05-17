@@ -125,6 +125,9 @@ Features:
 - Search input, trip type select, and checkbox filters.
 - Filters apply only after clicking `Apply search`.
 - Select trip, save, details, booking form, scrolling, mouse movement, keydown, and form-submit actions are available for tracking.
+- Each trip has a `Details` button that expands details inline inside that same trip row, not in a shared bottom panel.
+- Inline trip details show duration, route, included items, note, and price.
+- Inline trip details include `Use this trip`, which adds that trip to the booking count and can prefill booking notes, plus `Close details`.
 - Download filename prefix: `travel_recording`.
 - Tracking JSON slug: `travel-tourism`.
 
@@ -138,7 +141,7 @@ Run:
 npm test
 ```
 
-Latest known result after adding and restyling the travel site:
+Latest known result after moving travel details inline:
 
 ```text
 5 passed
@@ -160,6 +163,7 @@ awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html | node --check 
 - Do not re-add manual download tracking buttons unless explicitly requested.
 - The shopping and travel sites share `experiments/site.js`; prefer data attributes and scoped CSS over duplicating logic.
 - Travel-specific visual styling should remain scoped under `body.travel-site`.
+- Travel trip details should stay inline inside the corresponding trip item.
 - Avoid adding image-heavy or visually distracting content to dummy sites unless the task explicitly changes direction.
 - Browser microphone APIs require a secure context, but `localhost` is allowed by modern browsers.
 - Avoid committing generated recordings, spectrograms, large datasets, or model artifacts unless intentionally part of the project.
