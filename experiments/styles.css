@@ -342,7 +342,11 @@ body.travel-site .product-labels span {
 }
 
 body.travel-site .travel-details-panel {
+  grid-column: 2 / -1;
+  border: 1px solid var(--line);
   border-left: 6px solid #d59c37;
+  background: #fffdf8;
+  padding: 14px;
 }
 
 body.travel-site .travel-details-header {
@@ -353,6 +357,10 @@ body.travel-site .travel-details-header {
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
   margin-bottom: 14px;
+}
+
+body.travel-site .travel-details-header h4 {
+  margin: 0 0 4px;
 }
 
 body.travel-site .travel-details-list {
@@ -401,6 +409,10 @@ body.travel-site .travel-details-list dd {
 
   body.travel-site .product-row {
     grid-template-columns: 1fr;
+  }
+
+  body.travel-site .travel-details-panel {
+    grid-column: 1;
   }
 
   body.travel-site .travel-details-header {

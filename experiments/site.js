@@ -12,9 +12,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const spectrogramPanel = document.querySelector("[data-spectrogram-panel]") || document.getElementById("shoppingSpectrogramPanel");
   const spectrogramStatus = document.querySelector("[data-spectrogram-status]") || document.getElementById("shoppingSpectrogramStatus");
   const spectrogramCanvas = document.querySelector("[data-spectrogram-canvas]") || document.getElementById("shoppingSpectrogramCanvas");
-  const tripDetailPanel = document.querySelector("[data-trip-detail-panel]");
-  const useTripButton = document.querySelector("[data-use-trip]");
-  const closeTripDetailsButton = document.querySelector("[data-close-trip-details]");
   const chirpAudioUrl = document.body.dataset.chirpAudio || "/triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav";
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
@@ -578,21 +575,84 @@ document.addEventListener("DOMContentLoaded", () => {
     return button.closest("[data-product-row]");
   }
 
-  function setTripDetailText(selector, text) {
-    const node = tripDetailPanel ? tripDetailPanel.querySelector(selector) : null;
+  function setTripDetailText(panel, selector, text) {
+    const node = panel ? panel.querySelector(selector) : null;
     if (node) {
       node.textContent = text || "";
     }
   }
 
+  function getOrCreateTripDetailPanel(productRow) {
+    let panel = productRow.querySelector("[data-trip-detail-panel]");
+    if (panel) {
+      return panel;
+    }
+
+    panel = document.createElement("div");
+    panel.className = "travel-details-panel";
+    panel.dataset.tripDetailPanel = "";
+    panel.hidden = true;
+    panel.innerHTML = `
+      <div class="travel-details-header">
+        <div>
+          <h4 data-trip-detail-name>Trip details</h4>
+          <p data-trip-detail-summary>Select a trip to review details.</p>
+        </div>
+        <span class="price" data-trip-detail-price></span>
+      </div>
+      <dl class="travel-details-list">
+        <div>
+          <dt>Duration</dt>
+          <dd data-trip-detail-duration></dd>
+        </div>
+        <div>
+          <dt>Route</dt>
+          <dd data-trip-detail-route></dd>
+        </div>
+        <div>
+          <dt>Included</dt>
+          <dd data-trip-detail-included></dd>
+        </div>
+        <div>
+          <dt>Note</dt>
+          <dd data-trip-detail-note></dd>
+        </div>
+      </dl>
+      <div class="actions">
+        <button class="primary-button" type="button" data-use-trip>Use this trip</button>
+        <button class="secondary-button" type="button" data-close-trip-details>Close details</button>
+      </div>
+    `;
+    panel.querySelector("[data-use-trip]").addEventListener("click", useSelectedTrip);
+    panel.querySelector("[data-close-trip-details]").addEventListener("click", () => {
+      closeTripDetails(panel);
+    });
+    productRow.appendChild(panel);
+    return panel;
+  }
+
+  function hideOtherTripDetails(activePanel) {
+    document.querySelectorAll("[data-trip-detail-panel]").forEach((panel) => {
+      if (panel === activePanel) {
+        return;
+      }
+      panel.hidden = true;
+      const detailsButton = panel.closest("[data-product-row]")?.querySelector("[data-quick-view]");
+      if (detailsButton) {
+        detailsButton.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
   function showTripDetails(button) {
     const productRow = getProductRow(button);
     const productName = button.dataset.product || (productRow && productRow.dataset.productName) || "Trip";
-    if (!tripDetailPanel || !productRow) {
+    if (!document.body.classList.contains("travel-site") || !productRow) {
       setActivity(`Quick view opened for ${productName}.`);
       return;
     }
 
+    const tripDetailPanel = getOrCreateTripDetailPanel(productRow);
     const priceNode = productRow.querySelector(".price");
     const summaryNode = productRow.querySelector("p:not(.product-labels)");
     const priceText = priceNode ? priceNode.textContent.trim() : "";
@@ -603,17 +663,20 @@ document.addEventListener("DOMContentLoaded", () => {
       duration: productRow.dataset.duration || "",
       route: productRow.dataset.route || "",
       included: productRow.dataset.included || "",
-      note: productRow.dataset.note || ""
+      note: productRow.dataset.note || "",
+      panel: tripDetailPanel
     };
 
-    setTripDetailText("[data-trip-detail-name]", productName);
-    setTripDetailText("[data-trip-detail-summary]", summaryText);
-    setTripDetailText("[data-trip-detail-price]", priceText);
-    setTripDetailText("[data-trip-detail-duration]", selectedDetailTrip.duration);
-    setTripDetailText("[data-trip-detail-route]", selectedDetailTrip.route);
-    setTripDetailText("[data-trip-detail-included]", selectedDetailTrip.included);
-    setTripDetailText("[data-trip-detail-note]", selectedDetailTrip.note);
+    hideOtherTripDetails(tripDetailPanel);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-name]", productName);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-summary]", summaryText);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-price]", priceText);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-duration]", selectedDetailTrip.duration);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-route]", selectedDetailTrip.route);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-included]", selectedDetailTrip.included);
+    setTripDetailText(tripDetailPanel, "[data-trip-detail-note]", selectedDetailTrip.note);
     tripDetailPanel.hidden = false;
+    button.setAttribute("aria-expanded", "true");
     tripDetailPanel.scrollIntoView({ block: "nearest" });
     setActivity(`Details opened for ${productName}.`);
   }
@@ -631,9 +694,14 @@ document.addEventListener("DOMContentLoaded", () => {
     setActivity(`${selectedDetailTrip.name} added to booking from details.`);
   }
 
-  function closeTripDetails() {
-    if (tripDetailPanel) {
-      tripDetailPanel.hidden = true;
+  function closeTripDetails(panel = null) {
+    const targetPanel = panel || selectedDetailTrip?.panel;
+    if (targetPanel) {
+      targetPanel.hidden = true;
+      const detailsButton = targetPanel.closest("[data-product-row]")?.querySelector("[data-quick-view]");
+      if (detailsButton) {
+        detailsButton.setAttribute("aria-expanded", "false");
+      }
     }
     setActivity("Trip details closed.");
   }
@@ -660,14 +728,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showTripDetails(button);
     });
   });
-
-  if (useTripButton) {
-    useTripButton.addEventListener("click", useSelectedTrip);
-  }
-
-  if (closeTripDetailsButton) {
-    closeTripDetailsButton.addEventListener("click", closeTripDetails);
-  }
 
   document.querySelectorAll("form").forEach((form) => {
     form.addEventListener("submit", (event) => {
