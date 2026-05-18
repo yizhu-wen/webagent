@@ -15,7 +15,7 @@ The current design goal is intentionally simple and functional, with minimal vis
 
 - `index.html`: Main sensing page. Contains UI, microphone capture, chirp playback, event tracking, WAV export, and spectrogram rendering.
 - `server.py`: Lightweight Python HTTP server for local static serving and legacy audio endpoints.
-- `triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav`: Ultrasound chirp file used for sensing playback.
+- `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`: Ultrasound chirp file used for sensing playback.
 - `experiments/index.html`: Simple shopping dummy website.
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
 - `experiments/site.js`: Shared experiment-site behavior for sensing, microphone recording, spectrogram generation, filtering, selection buttons, forms, and downloads.
@@ -48,7 +48,7 @@ http://localhost:8000/experiments/travel/
 ## Main Site Behavior
 
 - Requests microphone permission on load.
-- Loads `triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav`.
+- Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
 - Start sensing loops the chirp audio.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.

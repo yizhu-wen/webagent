@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
-AUDIO_FILE_NAME = "triangle_fmcw_20-24kHz_7ms_48kHz_10s.wav"
+AUDIO_FILE_NAME = "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav"
 AUDIO_FILE_PATH = Path(__file__).resolve().parent / AUDIO_FILE_NAME
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 
