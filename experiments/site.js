@@ -12,7 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const spectrogramPanel = document.querySelector("[data-spectrogram-panel]") || document.getElementById("shoppingSpectrogramPanel");
   const spectrogramStatus = document.querySelector("[data-spectrogram-status]") || document.getElementById("shoppingSpectrogramStatus");
   const spectrogramCanvas = document.querySelector("[data-spectrogram-canvas]") || document.getElementById("shoppingSpectrogramCanvas");
-  const chirpAudioUrl = document.body.dataset.chirpAudio || "/triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav";
+  const chirpAudioFileName = "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav";
+  const chirpAudioUrl = resolveChirpAudioUrl();
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
@@ -26,6 +27,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let recordedFrameCount = 0;
   let sensingActive = false;
   let selectedDetailTrip = null;
+
+  function resolveChirpAudioUrl() {
+    if (document.body.dataset.chirpAudio) {
+      return new URL(document.body.dataset.chirpAudio, window.location.href).href;
+    }
+
+    const siteScript = Array.from(document.scripts).find((script) => {
+      const src = script.getAttribute("src") || "";
+      return src.endsWith("site.js") || src.includes("/site.js?");
+    });
+    const siteScriptUrl = siteScript ? siteScript.src : window.location.href;
+    return new URL(`../${chirpAudioFileName}`, siteScriptUrl).href;
+  }
 
   function setActivity(message) {
     if (activityNode) {
