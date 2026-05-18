@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Travel Task</title>
+  <link rel="stylesheet" href="../styles.css">
+  <script src="../tracker.js" defer></script>
+  <script src="../site.js" defer></script>
+</head>
+<body
+  class="travel-site"
+  data-site-slug="travel-tourism"
+  data-site-label="Travel behavior"
+  data-result-label="trips"
+  data-recording-prefix="travel_recording"
+>
+  <header class="topbar">
+    <a class="brand" href="../../index.html">Original sensing site</a>
+    <nav class="nav-actions" aria-label="Page actions">
+      <a class="link-button" href="../index.html">Shopping</a>
+      <a class="link-button" href="../../index.html">Back</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="section travel-hero">
+      <h1>Simple Travel Task</h1>
+      <p>Use this plain travel page to collect booking and browsing behavior without visual distractions.</p>
+      <div class="travel-status-grid">
+        <p id="travelMicStatus" data-mic-status>Requesting microphone access...</p>
+        <p id="travelSensingStatus" data-sensing-status>Sensing is stopped.</p>
+      </div>
+      <div class="actions">
+        <button id="travelStartSensingBtn" class="primary-button" type="button" data-start-sensing disabled>Start sensing</button>
+        <button id="travelStopSensingBtn" class="secondary-button" type="button" data-stop-sensing disabled>Stop</button>
+      </div>
+      <audio id="travelSensingAudio" data-sensing-audio loop></audio>
+      <div id="travelSpectrogramPanel" class="spectrogram-panel" data-spectrogram-panel hidden>
+        <h2>Recorded Spectrogram</h2>
+        <p id="travelSpectrogramStatus" data-spectrogram-status>Generating spectrogram...</p>
+        <canvas id="travelSpectrogramCanvas" class="spectrogram-canvas" width="820" height="260" data-spectrogram-canvas></canvas>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Search and filter</h2>
+      <form id="travel-search" class="form-grid" action="/experiments/travel/search" method="get" data-filter-form="true" data-success-message="Search submitted.">
+        <label class="field">Search
+          <input name="query" type="search" autocomplete="off" placeholder="Type a destination">
+        </label>
+        <label class="field">Trip type
+          <select name="category">
+            <option>All</option>
+            <option>City</option>
+            <option>Beach</option>
+            <option>Nature</option>
+          </select>
+        </label>
+        <fieldset class="wide check-list">
+          <legend>Filters</legend>
+          <label class="check-row"><input type="checkbox" name="filter" value="budget"> Budget</label>
+          <label class="check-row"><input type="checkbox" name="filter" value="guided"> Guided</label>
+          <label class="check-row"><input type="checkbox" name="filter" value="family"> Family friendly</label>
+        </fieldset>
+        <button class="primary-button" type="submit">Apply search</button>
+        <p class="meta" data-form-status="travel-search"></p>
+      </form>
+    </section>
+
+    <div class="status-bar" data-activity-status>No trips selected.</div>
+
+    <section class="section">
+      <h2>Trips</h2>
+      <div class="product-list">
+        <article class="product-row" data-product-row data-product-name="Tokyo city break" data-category="City" data-tags="guided family" data-duration="3 nights" data-route="Shinjuku, Ueno, Asakusa, and Ginza" data-included="Metro pass, museum entry, guided walking route" data-note="Best for travelers who want dense city activity with low planning overhead.">
+          <div>
+            <h3>Tokyo city break</h3>
+            <p>Three-night city itinerary with transit and museum stops.</p>
+            <p class="product-labels"><span>City</span><span>Guided</span><span>Family friendly</span></p>
+            <span class="price">$860.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Tokyo city break" data-price="860">Select trip</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+            <button class="ghost-button" type="button" data-quick-view data-product="Tokyo city break">Details</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Lisbon weekend" data-category="City" data-tags="budget guided" data-duration="2 nights" data-route="Baixa, Alfama, Belem, and Bairro Alto" data-included="Walking map, tram pass, food stop list" data-note="Best for a short budget city trip with compact navigation.">
+          <div>
+            <h3>Lisbon weekend</h3>
+            <p>Compact city stay with walking routes and food stops.</p>
+            <p class="product-labels"><span>City</span><span>Budget</span><span>Guided</span></p>
+            <span class="price">$540.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Lisbon weekend" data-price="540">Select trip</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+            <button class="ghost-button" type="button" data-quick-view data-product="Lisbon weekend">Details</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Hawaii beach stay" data-category="Beach" data-tags="family" data-duration="5 nights" data-route="Waikiki, North Shore, and Diamond Head" data-included="Flexible beach days, family activity list, airport transfer options" data-note="Best for a relaxed family schedule with optional day trips.">
+          <div>
+            <h3>Hawaii beach stay</h3>
+            <p>Five-night beach package with flexible daily planning.</p>
+            <p class="product-labels"><span>Beach</span><span>Family friendly</span></p>
+            <span class="price">$1240.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Hawaii beach stay" data-price="1240">Select trip</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+            <button class="ghost-button" type="button" data-quick-view data-product="Hawaii beach stay">Details</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Banff hiking plan" data-category="Nature" data-tags="guided family" data-duration="4 nights" data-route="Lake Louise, Johnston Canyon, Banff town, and scenic overlooks" data-included="Guided trail list, shuttle notes, low-difficulty route options" data-note="Best for nature travelers who want structure without difficult hikes.">
+          <div>
+            <h3>Banff hiking plan</h3>
+            <p>Nature route with guided hikes and low-difficulty options.</p>
+            <p class="product-labels"><span>Nature</span><span>Guided</span><span>Family friendly</span></p>
+            <span class="price">$980.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Banff hiking plan" data-price="980">Select trip</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+            <button class="ghost-button" type="button" data-quick-view data-product="Banff hiking plan">Details</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Costa Rica eco tour" data-category="Nature" data-tags="budget guided" data-duration="6 nights" data-route="San Jose, Monteverde, La Fortuna, and Pacific coast" data-included="Local transport plan, guided forest walk, beach transfer notes" data-note="Best for budget travelers who want nature stops with guided structure.">
+          <div>
+            <h3>Costa Rica eco tour</h3>
+            <p>Rainforest and coast route with local transport options.</p>
+            <p class="product-labels"><span>Nature</span><span>Budget</span><span>Guided</span></p>
+            <span class="price">$760.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Costa Rica eco tour" data-price="760">Select trip</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+            <button class="ghost-button" type="button" data-quick-view data-product="Costa Rica eco tour">Details</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Booking form</h2>
+      <p><strong data-cart-count>0</strong> trips, total <strong data-cart-total>$0.00</strong></p>
+      <form id="booking-form" class="form-grid" action="/experiments/travel/book" method="post" data-success-message="Booking request submitted.">
+        <label class="field">Name
+          <input name="traveler_name" type="text" autocomplete="name" placeholder="Name">
+        </label>
+        <label class="field">Email
+          <input name="email" type="email" autocomplete="email" placeholder="Email">
+        </label>
+        <label class="field">Start date
+          <input name="start_date" type="date">
+        </label>
+        <label class="field">Travelers
+          <input name="traveler_count" type="number" min="1" max="8" value="1">
+        </label>
+        <label class="field wide">Notes
+          <textarea name="notes" placeholder="Destination preferences or booking notes"></textarea>
+        </label>
+        <button class="primary-button" type="submit">Submit booking</button>
+        <p class="meta" data-form-status="booking-form"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

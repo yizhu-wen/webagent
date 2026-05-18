@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Shopping Task</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="tracker.js" defer></script>
+  <script src="site.js" defer></script>
+</head>
+<body data-site-slug="simple-shopping">
+  <header class="topbar">
+    <a class="brand" href="../index.html">Original sensing site</a>
+    <nav class="nav-actions" aria-label="Page actions">
+      <a class="link-button" href="../index.html">Back</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="section">
+      <h1>Simple Shopping Task</h1>
+      <p>Use this plain e-commerce page to collect interaction behavior without visual distractions.</p>
+      <p id="shoppingMicStatus">Requesting microphone access...</p>
+      <p id="shoppingSensingStatus">Sensing is stopped.</p>
+      <div class="actions">
+        <button id="shoppingStartSensingBtn" class="primary-button" type="button" disabled>Start sensing</button>
+        <button id="shoppingStopSensingBtn" class="secondary-button" type="button" disabled>Stop</button>
+      </div>
+      <audio id="shoppingSensingAudio" loop></audio>
+      <div id="shoppingSpectrogramPanel" class="spectrogram-panel" hidden>
+        <h2>Recorded Spectrogram</h2>
+        <p id="shoppingSpectrogramStatus">Generating spectrogram...</p>
+        <canvas id="shoppingSpectrogramCanvas" class="spectrogram-canvas" width="820" height="260"></canvas>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Search and filter</h2>
+      <form id="shopping-search" class="form-grid" action="/experiments/search" method="get" data-success-message="Search submitted.">
+        <label class="field">Search
+          <input name="query" type="search" autocomplete="off" placeholder="Type a product name">
+        </label>
+        <label class="field">Category
+          <select name="category">
+            <option>All</option>
+            <option>Desk</option>
+            <option>Kitchen</option>
+            <option>Home</option>
+          </select>
+        </label>
+        <fieldset class="wide check-list">
+          <legend>Filters</legend>
+          <label class="check-row"><input type="checkbox" name="filter" value="sale"> Sale</label>
+          <label class="check-row"><input type="checkbox" name="filter" value="fast_shipping"> Fast shipping</label>
+          <label class="check-row"><input type="checkbox" name="filter" value="high_rating"> High rating</label>
+        </fieldset>
+        <button class="primary-button" type="submit">Apply search</button>
+        <p class="meta" data-form-status="shopping-search"></p>
+      </form>
+    </section>
+
+    <div class="status-bar" data-activity-status>Cart is empty.</div>
+
+    <section class="section">
+      <h2>Products</h2>
+      <div class="product-list">
+        <article class="product-row" data-product-row data-product-name="Desk organizer" data-category="Desk" data-tags="sale fast_shipping high_rating">
+          <div>
+            <h3>Desk organizer</h3>
+            <p>Plain product row for shopping behavior.</p>
+            <p class="product-labels"><span>Desk</span><span>Sale</span><span>Fast shipping</span><span>High rating</span></p>
+            <span class="price">$24.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Desk organizer" data-price="24">Add to cart</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Notebook pack" data-category="Desk" data-tags="sale">
+          <div>
+            <h3>Notebook pack</h3>
+            <p>Another item for repeated cart and save clicks.</p>
+            <p class="product-labels"><span>Desk</span><span>Sale</span></p>
+            <span class="price">$12.50</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Notebook pack" data-price="12.5">Add to cart</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Water bottle" data-category="Home" data-tags="high_rating">
+          <div>
+            <h3>Water bottle</h3>
+            <p>A third item so users can compare and choose.</p>
+            <p class="product-labels"><span>Home</span><span>High rating</span></p>
+            <span class="price">$18.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Water bottle" data-price="18">Add to cart</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Desk lamp" data-category="Desk" data-tags="fast_shipping high_rating">
+          <div>
+            <h3>Desk lamp</h3>
+            <p>Simple item for another cart decision.</p>
+            <p class="product-labels"><span>Desk</span><span>Fast shipping</span><span>High rating</span></p>
+            <span class="price">$31.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Desk lamp" data-price="31">Add to cart</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+          </div>
+        </article>
+
+        <article class="product-row" data-product-row data-product-name="Storage box" data-category="Home" data-tags="sale fast_shipping">
+          <div>
+            <h3>Storage box</h3>
+            <p>Additional product row for browsing and scrolling.</p>
+            <p class="product-labels"><span>Home</span><span>Sale</span><span>Fast shipping</span></p>
+            <span class="price">$16.00</span>
+          </div>
+          <div class="product-actions">
+            <button class="primary-button" type="button" data-add-cart data-product="Storage box" data-price="16">Add to cart</button>
+            <button class="ghost-button" type="button" data-toggle-favorite aria-pressed="false">Save</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Checkout form</h2>
+      <p><strong data-cart-count>0</strong> items, total <strong data-cart-total>$0.00</strong></p>
+      <form id="checkout-form" class="form-grid" action="/experiments/checkout" method="post" data-success-message="Checkout form submitted.">
+        <label class="field">Name
+          <input name="customer_name" type="text" autocomplete="name" placeholder="Name">
+        </label>
+        <label class="field">Email
+          <input name="email" type="email" autocomplete="email" placeholder="Email">
+        </label>
+        <label class="field wide">Notes
+          <textarea name="notes" placeholder="Delivery or order notes"></textarea>
+        </label>
+        <button class="primary-button" type="submit">Submit checkout</button>
+        <p class="meta" data-form-status="checkout-form"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
