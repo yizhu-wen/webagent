@@ -1,3 +1,4 @@
+const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
 test("loops the chirp between start and stop sensing", async ({ page }) => {
@@ -5,11 +6,11 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
 
   const startButton = page.locator("#startSensingBtn");
   const stopButton = page.locator("#stopSensingBtn");
-  const audioState = () => page.evaluate(() => {
+  const sensingState = () => page.evaluate(() => {
     const audio = document.getElementById("receivedAudio");
     return {
       loop: audio.loop,
-      paused: audio.paused
+      playbackActive: window.webAgentSensing.isPlaybackActive()
     };
   });
 
@@ -23,8 +24,8 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
 
   await expect(stopButton).toBeEnabled();
   await expect(startButton).toBeDisabled();
-  await expect.poll(async () => (await audioState()).loop).toBe(true);
-  await expect.poll(async () => (await audioState()).paused).toBe(false);
+  await expect.poll(async () => (await sensingState()).loop).toBe(true);
+  await expect.poll(async () => (await sensingState()).playbackActive).toBe(true);
 
   await page.waitForTimeout(500);
 
@@ -36,11 +37,38 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   await stopButton.click();
 
   await expect.poll(() => downloads.length, { timeout: 20000 }).toBeGreaterThanOrEqual(2);
-  await expect.poll(async () => (await audioState()).paused).toBe(true);
+  await expect.poll(async () => (await sensingState()).playbackActive).toBe(false);
   await expect(startButton).toBeEnabled();
   await expect(stopButton).toBeDisabled();
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
   expect(fileNames.some((name) => /^recording_\d{8}_\d{6}\.wav$/.test(name))).toBe(true);
   expect(fileNames.some((name) => /^recording_spectrogram_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
+  expect(fileNames.some((name) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(name))).toBe(true);
+  expect(fileNames.some((name) => /^input_events_amplitude_phase\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^keydown_amplitude_phase\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^01_alignment_and_recording_spectrogram_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^02_keystroke_motion_overlay_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^03_key_event_aligned_features_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^04_average_range_profile_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^05_keydown_zoom_overlay_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+
+  const audioDownload = downloads.find((item) => /^recording_\d{8}_\d{6}\.wav$/.test(item.suggestedFilename()));
+  const wav = fs.readFileSync(await audioDownload.path());
+  expect(wav.toString("ascii", 0, 4)).toBe("RIFF");
+  expect(wav.toString("ascii", 8, 12)).toBe("WAVE");
+  expect(wav.readUInt16LE(20)).toBe(3);
+  expect(wav.readUInt16LE(22)).toBe(1);
+  expect(wav.readUInt32LE(24)).toBe(48000);
+  expect(wav.readUInt16LE(34)).toBe(32);
+
+  const diagnosticsDownload = downloads.find((item) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(item.suggestedFilename()));
+  const diagnostics = JSON.parse(fs.readFileSync(await diagnosticsDownload.path(), "utf8"));
+  expect(diagnostics.requestedMicrophoneConstraints.channelCount.ideal).toBe(1);
+  expect(diagnostics.requestedMicrophoneConstraints.sampleRate.ideal).toBe(48000);
+  expect(diagnostics.audioContext.sampleRate).toBe(48000);
+  expect(diagnostics.recordingExport.encoding).toBe("IEEE_FLOAT");
+  expect(diagnostics.recordingExport.channels).toBe(1);
+  expect(diagnostics.recordingExport.bitsPerSample).toBe(32);
+  expect(diagnostics.signalCheck.method).toBe("normalized_autocorrelation_near_20ms_chirp_period");
 });

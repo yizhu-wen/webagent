@@ -7,7 +7,7 @@ module.exports = defineConfig({
     timeout: 5000
   },
   webServer: {
-    command: "python3 -m http.server 8010 --bind 127.0.0.1",
+    command: "node test-server.js",
     url: "http://127.0.0.1:8010/",
     reuseExistingServer: !process.env.CI,
     timeout: 10000

@@ -15,7 +15,7 @@
     }
 
     * {
-      box-sizing: border-box;
+      box-sizing: border-box; 
     }
 
     body {
@@ -230,6 +230,8 @@
     let pendingFileName = "";
     let receivedAudioObjectUrl = "";
     let audioContext = null;
+    let chirpPlaybackBuffer = null;
+    let chirpSourceNode = null;
     let recordingSourceNode = null;
     let recordingProcessorNode = null;
     let recordingBufferChunks = [];
@@ -241,19 +243,33 @@
 
     const appConfig = {
       downloadFileName: "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav",
-      uploadApiUrl: "/api/upload-recording"
+      uploadApiUrl: "/api/upload-recording",
+      analysisApiUrl: "/api/analyze-recording"
     };
 
     const trackingConfig = {
       maxEvents: 10000,
-      mousemoveThrottleMs: 250,
-      scrollThrottleMs: 250
+      pointerMoveThrottleMs: 120,
+      doubleTapWindowMs: 320,
+      doublePressWindowMs: 900,
+      tapMaxDurationMs: 300,
+      tapMaxDistancePx: 10,
+      pressMinDurationMs: 300,
+      longPressMinDurationMs: 650,
+      dragMinDistancePx: 8,
+      swipeMinDistancePx: 40,
+      swipeMaxDurationMs: 700,
+      pinchMinScaleDelta: 0.04
     };
     const trackingSessionId = createTrackingId();
     let trackingStartedAt = null;
+    let trackingStartedEpochSeconds = null;
     const eventLog = [];
-    let lastMousemoveTrackAt = 0;
-    let lastScrollTrackAt = 0;
+    const activePointers = new Map();
+    let lastTap = null;
+    let lastPress = null;
+    let pendingClickGesture = null;
+    let pinchSession = null;
     let interactionTrackingEnabled = false;
 
     function createTrackingId() {
@@ -301,22 +317,122 @@
     }
 
     function getSafeKey(event) {
-      if (event.key && event.key.length > 1) {
-        return event.key;
+      if (typeof event.key !== "string" || event.key.length === 0) {
+        return "Unidentified";
       }
-      return "character";
+      return event.key.length === 1 ? "character" : event.key;
     }
 
-    function getSafeUrlPath(url) {
-      if (!url) {
+    function sanitizePipeValue(value) {
+      return String(value ?? "")
+        .replace(/\s+/g, " ")
+        .replace(/\|/g, "/")
+        .trim()
+        .slice(0, 500);
+    }
+
+    function describeTargetForPipe(target) {
+      if (!target) {
         return "";
       }
 
-      try {
-        return new URL(url, window.location.href).pathname;
-      } catch (error) {
-        return "";
+      const parts = [target.tag || "element"];
+      if (target.id) {
+        parts.push(`#${target.id}`);
       }
+      if (target.name) {
+        parts.push(`name=${target.name}`);
+      }
+      if (target.type) {
+        parts.push(`type=${target.type}`);
+      }
+      if (target.label) {
+        parts.push(`label=${target.label}`);
+      }
+      return sanitizePipeValue(parts.join(" "));
+    }
+
+    function getEpochSeconds(event) {
+      if (Number.isFinite(event.epochSeconds)) {
+        return event.epochSeconds;
+      }
+
+      const parsed = Date.parse(event.timestamp || "");
+      return Number.isFinite(parsed) ? parsed / 1000 : Date.now() / 1000;
+    }
+
+    function getOsEventTag(event) {
+      return event.name.toUpperCase();
+    }
+
+    function getOsEventValue(event) {
+      const props = event.properties || {};
+      return sanitizePipeValue([
+        props.gesture ? `gesture=${props.gesture}` : "",
+        props.key ? `key=${props.key}` : "",
+        props.code ? `code=${props.code}` : "",
+        Number.isFinite(props.location) ? `location=${props.location}` : "",
+        props.repeat ? "repeat=true" : "",
+        props.altKey ? "altKey=true" : "",
+        props.ctrlKey ? "ctrlKey=true" : "",
+        props.metaKey ? "metaKey=true" : "",
+        props.shiftKey ? "shiftKey=true" : "",
+        props.pointerType ? `pointerType=${props.pointerType}` : "",
+        Number.isFinite(props.pointerCount) ? `pointerCount=${props.pointerCount}` : "",
+        Number.isFinite(props.button) ? `button=${props.button}` : "",
+        Number.isFinite(props.buttons) ? `buttons=${props.buttons}` : "",
+        Number.isFinite(props.pressure) ? `pressure=${props.pressure.toFixed(3)}` : "",
+        Number.isFinite(props.x) ? `x=${props.x}` : "",
+        Number.isFinite(props.y) ? `y=${props.y}` : "",
+        Number.isFinite(props.pageX) ? `pageX=${props.pageX}` : "",
+        Number.isFinite(props.pageY) ? `pageY=${props.pageY}` : "",
+        Number.isFinite(props.dx) ? `dx=${props.dx}` : "",
+        Number.isFinite(props.dy) ? `dy=${props.dy}` : "",
+        Number.isFinite(props.deltaX) ? `deltaX=${props.deltaX.toFixed(1)}` : "",
+        Number.isFinite(props.deltaY) ? `deltaY=${props.deltaY.toFixed(1)}` : "",
+        Number.isFinite(props.deltaZ) ? `deltaZ=${props.deltaZ.toFixed(1)}` : "",
+        Number.isFinite(props.deltaMode) ? `deltaMode=${props.deltaMode}` : "",
+        Number.isFinite(props.distance) ? `distance=${props.distance.toFixed(1)}` : "",
+        Number.isFinite(props.durationMs) ? `durationMs=${props.durationMs.toFixed(1)}` : "",
+        Number.isFinite(props.scale) ? `scale=${props.scale.toFixed(3)}` : "",
+        props.direction ? `direction=${props.direction}` : "",
+        props.value !== undefined ? `value=${props.value}` : "",
+        props.method ? `method=${props.method}` : "",
+        props.actionPath ? `actionPath=${props.actionPath}` : "",
+        describeTargetForPipe(props.target)
+      ].filter(Boolean).join(" "));
+    }
+
+    function buildOsLevelEventLog(events, downloadedEpochSeconds) {
+      const startEpoch = Number.isFinite(trackingStartedEpochSeconds)
+        ? trackingStartedEpochSeconds
+        : getEpochSeconds(events[0] || {});
+
+      const lines = [
+        `# start_epoch | ${startEpoch.toFixed(6)}`,
+        `# downloaded_epoch | ${downloadedEpochSeconds.toFixed(6)}`,
+        `# session_id | ${trackingSessionId}`,
+        "# schema | webagent_os_events_v1",
+        "# format | EVENT | VALUE | EPOCH_SECONDS",
+        "# scope | browser_page_events_not_global_os_hooks"
+      ];
+
+      for (const event of events) {
+        lines.push(`${getOsEventTag(event)} | ${getOsEventValue(event)} | ${getEpochSeconds(event).toFixed(6)}`);
+      }
+
+      return `${lines.join("\n")}\n`;
+    }
+
+    function downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug) {
+      const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
+      const logBlob = new Blob([osEventLog], {
+        type: "text/plain"
+      });
+      const downloadUrl = URL.createObjectURL(logBlob);
+      triggerDownload(downloadUrl, `os_event_log_${timestampSlug}.txt`);
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      return osEventLog;
     }
 
     function trackEvent(name, properties = {}, options = {}) {
@@ -328,11 +444,13 @@
         eventLog.shift();
       }
 
+      const eventDate = new Date();
       eventLog.push({
         id: createTrackingId(),
         sessionId: trackingSessionId,
         name,
-        timestamp: new Date().toISOString(),
+        timestamp: eventDate.toISOString(),
+        epochSeconds: eventDate.getTime() / 1000,
         page: {
           path: window.location.pathname,
           title: document.title,
@@ -346,6 +464,132 @@
       });
     }
 
+    function getPointProperties(event) {
+      return {
+        pointerId: event.pointerId,
+        pointerType: event.pointerType || "unknown",
+        isPrimary: event.isPrimary,
+        button: event.button,
+        buttons: event.buttons,
+        pressure: Number.isFinite(event.pressure) ? event.pressure : 0,
+        x: event.clientX,
+        y: event.clientY,
+        pageX: event.pageX,
+        pageY: event.pageY,
+        target: getElementDescriptor(event.target)
+      };
+    }
+
+    function getDirection(dx, dy) {
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx >= 0 ? "right" : "left";
+      }
+      return dy >= 0 ? "down" : "up";
+    }
+
+    function getPointerDistance(a, b) {
+      return Math.hypot(a.lastX - b.lastX, a.lastY - b.lastY);
+    }
+
+    function getPointerCenter(a, b) {
+      return {
+        x: (a.lastX + b.lastX) / 2,
+        y: (a.lastY + b.lastY) / 2,
+        pageX: (a.lastPageX + b.lastPageX) / 2,
+        pageY: (a.lastPageY + b.lastPageY) / 2
+      };
+    }
+
+    function getPointerPair() {
+      const pointers = Array.from(activePointers.values());
+      return pointers.length === 2 ? pointers : null;
+    }
+
+    function updatePinchTracking() {
+      const pair = getPointerPair();
+      if (!pair) {
+        return;
+      }
+
+      const [a, b] = pair;
+      const distance = getPointerDistance(a, b);
+      const center = getPointerCenter(a, b);
+
+      if (!pinchSession) {
+        pinchSession = {
+          startDistance: distance,
+          startCenter: center,
+          lastCenter: center,
+          lastScale: 1,
+          startTime: performance.now(),
+          target: a.target || b.target
+        };
+        trackEvent("pinch_start", {
+          gesture: "pinch",
+          pointerCount: 2,
+          distance,
+          scale: 1,
+          ...center,
+          target: pinchSession.target
+        });
+        return;
+      }
+
+      const scale = distance / Math.max(1, pinchSession.startDistance);
+      pinchSession.lastCenter = center;
+      if (Math.abs(scale - pinchSession.lastScale) < trackingConfig.pinchMinScaleDelta) {
+        return;
+      }
+
+      pinchSession.lastScale = scale;
+      trackEvent("pinch_change", {
+        gesture: "pinch",
+        pointerCount: 2,
+        distance,
+        scale,
+        ...center,
+        target: pinchSession.target
+      });
+    }
+
+    function endPinchTracking() {
+      if (!pinchSession) {
+        return;
+      }
+
+      const center = pinchSession.lastCenter || pinchSession.startCenter;
+      const dx = center.x - pinchSession.startCenter.x;
+      const dy = center.y - pinchSession.startCenter.y;
+      const distance = Math.hypot(dx, dy);
+      const durationMs = performance.now() - pinchSession.startTime;
+
+      if (distance >= trackingConfig.swipeMinDistancePx && Math.abs(pinchSession.lastScale - 1) < 0.15) {
+        trackEvent("two_finger_swipe", {
+          gesture: "two_finger_swipe",
+          pointerCount: 2,
+          x: center.x,
+          y: center.y,
+          pageX: center.pageX,
+          pageY: center.pageY,
+          dx,
+          dy,
+          distance,
+          durationMs,
+          direction: getDirection(dx, dy),
+          target: pinchSession.target
+        });
+      }
+
+      trackEvent("pinch_end", {
+        gesture: "pinch",
+        pointerCount: activePointers.size,
+        scale: pinchSession.lastScale,
+        durationMs,
+        target: pinchSession.target
+      });
+      pinchSession = null;
+    }
+
     function setInteractionTrackingEnabled(enabled) {
       if (interactionTrackingEnabled === enabled) {
         return;
@@ -353,38 +597,84 @@
 
       interactionTrackingEnabled = enabled;
       if (enabled) {
-        trackingStartedAt = trackingStartedAt || new Date().toISOString();
-        trackEvent("page_view", {
-          path: window.location.pathname,
-          referrerPath: getSafeUrlPath(document.referrer)
-        }, { force: true });
+        const startDate = new Date();
+        trackingStartedAt = trackingStartedAt || startDate.toISOString();
+        trackingStartedEpochSeconds = trackingStartedEpochSeconds ?? startDate.getTime() / 1000;
       }
     }
 
     function beginInteractionTrackingSession() {
       eventLog.length = 0;
-      trackingStartedAt = new Date().toISOString();
-      lastMousemoveTrackAt = 0;
-      lastScrollTrackAt = 0;
+      const startDate = new Date();
+      trackingStartedAt = startDate.toISOString();
+      trackingStartedEpochSeconds = startDate.getTime() / 1000;
+      activePointers.clear();
+      lastTap = null;
+      lastPress = null;
+      pendingClickGesture = null;
+      pinchSession = null;
       setInteractionTrackingEnabled(true);
     }
 
-    function downloadEventLog() {
+    function rememberClickGesture(name, properties, time) {
+      pendingClickGesture = {
+        name,
+        time,
+        x: properties.x,
+        y: properties.y,
+        properties: {
+          ...properties,
+          gesture: name,
+          inferredFrom: "pointer_duration"
+        }
+      };
+    }
+
+    function takePendingClickGesture(event) {
+      if (!pendingClickGesture) {
+        return null;
+      }
+
+      const ageMs = performance.now() - pendingClickGesture.time;
+      const distance = Math.hypot(event.clientX - pendingClickGesture.x, event.clientY - pendingClickGesture.y);
+      if (ageMs > 500 || distance > trackingConfig.tapMaxDistancePx * 3) {
+        pendingClickGesture = null;
+        return null;
+      }
+
+      const gesture = pendingClickGesture;
+      pendingClickGesture = null;
+      return gesture;
+    }
+
+    function downloadEventLog(timestampSlug = buildRecordingTimestamp()) {
       trackEvent("event_log_downloaded", {
         eventCount: eventLog.length
       });
 
       const events = eventLog.slice();
+      const downloadedAt = new Date();
       const payload = {
         schemaVersion: 1,
         sessionId: trackingSessionId,
         startedAt: trackingStartedAt,
-        downloadedAt: new Date().toISOString(),
+        startEpochSeconds: trackingStartedEpochSeconds,
+        downloadedAt: downloadedAt.toISOString(),
+        downloadedEpochSeconds: downloadedAt.getTime() / 1000,
         eventCount: events.length,
         trackingConfig: {
           maxEvents: trackingConfig.maxEvents,
-          mousemoveThrottleMs: trackingConfig.mousemoveThrottleMs,
-          scrollThrottleMs: trackingConfig.scrollThrottleMs
+          pointerMoveThrottleMs: trackingConfig.pointerMoveThrottleMs,
+          doubleTapWindowMs: trackingConfig.doubleTapWindowMs,
+          doublePressWindowMs: trackingConfig.doublePressWindowMs,
+          tapMaxDurationMs: trackingConfig.tapMaxDurationMs,
+          tapMaxDistancePx: trackingConfig.tapMaxDistancePx,
+          pressMinDurationMs: trackingConfig.pressMinDurationMs,
+          longPressMinDurationMs: trackingConfig.longPressMinDurationMs,
+          dragMinDistancePx: trackingConfig.dragMinDistancePx,
+          swipeMinDistancePx: trackingConfig.swipeMinDistancePx,
+          swipeMaxDurationMs: trackingConfig.swipeMaxDurationMs,
+          pinchMinScaleDelta: trackingConfig.pinchMinScaleDelta
         },
         page: {
           path: window.location.pathname,
@@ -396,63 +686,318 @@
         type: "application/json"
       });
       const downloadUrl = URL.createObjectURL(logBlob);
-      triggerDownload(downloadUrl, `tracking_data_${buildRecordingTimestamp()}.json`);
+      triggerDownload(downloadUrl, `tracking_data_${timestampSlug}.json`);
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
+      const osEventLog = downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug);
+      return {
+        payload,
+        osEventLog,
+        timestampSlug,
+        downloadedEpochSeconds
+      };
     }
 
     function setupInteractionTracking() {
+      document.addEventListener("pointerdown", (event) => {
+        const pointer = {
+          pointerId: event.pointerId,
+          pointerType: event.pointerType || "unknown",
+          startX: event.clientX,
+          startY: event.clientY,
+          startPageX: event.pageX,
+          startPageY: event.pageY,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          lastPageX: event.pageX,
+          lastPageY: event.pageY,
+          startTime: performance.now(),
+          lastMoveTrackAt: 0,
+          target: getElementDescriptor(event.target),
+          dragging: false
+        };
+        activePointers.set(event.pointerId, pointer);
+        trackEvent("pointer_down", getPointProperties(event));
+      }, true);
+
+      document.addEventListener("pointermove", (event) => {
+        const pointer = activePointers.get(event.pointerId);
+        if (!pointer) {
+          return;
+        }
+
+        pointer.lastX = event.clientX;
+        pointer.lastY = event.clientY;
+        pointer.lastPageX = event.pageX;
+        pointer.lastPageY = event.pageY;
+        const dx = event.clientX - pointer.startX;
+        const dy = event.clientY - pointer.startY;
+        const distance = Math.hypot(dx, dy);
+
+        if (activePointers.size === 2) {
+          updatePinchTracking();
+          return;
+        }
+
+        if (distance < trackingConfig.dragMinDistancePx) {
+          return;
+        }
+
+        const now = performance.now();
+        if (!pointer.dragging) {
+          pointer.dragging = true;
+          trackEvent("drag_start", {
+            gesture: "drag",
+            pointerId: event.pointerId,
+            pointerType: pointer.pointerType,
+            x: pointer.startX,
+            y: pointer.startY,
+            pageX: pointer.startPageX,
+            pageY: pointer.startPageY,
+            target: pointer.target
+          });
+        }
+
+        if (now - pointer.lastMoveTrackAt >= trackingConfig.pointerMoveThrottleMs) {
+          pointer.lastMoveTrackAt = now;
+          trackEvent("drag_move", {
+            gesture: "drag",
+            pointerId: event.pointerId,
+            pointerType: pointer.pointerType,
+            x: event.clientX,
+            y: event.clientY,
+            pageX: event.pageX,
+            pageY: event.pageY,
+            dx,
+            dy,
+            distance,
+            direction: getDirection(dx, dy),
+            target: pointer.target
+          });
+        }
+      }, { passive: true, capture: true });
+
+      document.addEventListener("pointerup", (event) => {
+        const pointer = activePointers.get(event.pointerId);
+        if (!pointer) {
+          return;
+        }
+
+        const now = performance.now();
+        const dx = event.clientX - pointer.startX;
+        const dy = event.clientY - pointer.startY;
+        const distance = Math.hypot(dx, dy);
+        const durationMs = now - pointer.startTime;
+        const direction = getDirection(dx, dy);
+        const base = {
+          pointerId: event.pointerId,
+          pointerType: pointer.pointerType,
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.pageX,
+          pageY: event.pageY,
+          dx,
+          dy,
+          distance,
+          durationMs,
+          direction,
+          target: pointer.target
+        };
+
+        trackEvent("pointer_up", { ...getPointProperties(event), durationMs });
+
+        if (pointer.dragging) {
+          trackEvent("drag_end", { gesture: "drag", ...base });
+        } else if (distance <= trackingConfig.tapMaxDistancePx && durationMs <= trackingConfig.tapMaxDurationMs) {
+          trackEvent("tap", { gesture: "tap", ...base });
+          let clickGestureName = "tap_to_click";
+          if (
+            lastTap &&
+            now - lastTap.time <= trackingConfig.doubleTapWindowMs &&
+            Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= trackingConfig.tapMaxDistancePx * 2
+          ) {
+            trackEvent("double_tap", {
+              gesture: "double_tap",
+              pointerType: pointer.pointerType,
+              x: event.clientX,
+              y: event.clientY,
+              pageX: event.pageX,
+              pageY: event.pageY,
+              intervalMs: now - lastTap.time,
+              target: pointer.target
+            });
+            lastTap = null;
+            clickGestureName = "double_tap_to_click";
+          } else {
+            lastTap = { time: now, x: event.clientX, y: event.clientY };
+          }
+          rememberClickGesture(clickGestureName, base, now);
+        } else if (distance >= trackingConfig.swipeMinDistancePx && durationMs <= trackingConfig.swipeMaxDurationMs) {
+          trackEvent("swipe", { gesture: "swipe", pointerCount: activePointers.size || 1, ...base });
+        } else if (durationMs >= trackingConfig.longPressMinDurationMs) {
+          trackEvent("long_press", { gesture: "long_press", ...base });
+          rememberClickGesture("long_press_to_click", base, now);
+          lastPress = null;
+        } else if (durationMs >= trackingConfig.pressMinDurationMs) {
+          trackEvent("press", { gesture: "press", ...base });
+          let clickGestureName = "press_to_click";
+          if (
+            lastPress &&
+            now - lastPress.time <= trackingConfig.doublePressWindowMs &&
+            Math.hypot(event.clientX - lastPress.x, event.clientY - lastPress.y) <= trackingConfig.tapMaxDistancePx * 2
+          ) {
+            trackEvent("double_press", {
+              gesture: "double_press",
+              pointerType: pointer.pointerType,
+              x: event.clientX,
+              y: event.clientY,
+              pageX: event.pageX,
+              pageY: event.pageY,
+              intervalMs: now - lastPress.time,
+              durationMs,
+              target: pointer.target
+            });
+            lastPress = null;
+            clickGestureName = "double_press_to_click";
+          } else {
+            lastPress = { time: now, x: event.clientX, y: event.clientY };
+          }
+          rememberClickGesture(clickGestureName, base, now);
+        }
+
+        activePointers.delete(event.pointerId);
+        if (activePointers.size < 2) {
+          endPinchTracking();
+        }
+      }, true);
+
+      document.addEventListener("pointercancel", (event) => {
+        const pointer = activePointers.get(event.pointerId);
+        trackEvent("pointer_cancel", {
+          ...getPointProperties(event),
+          target: pointer ? pointer.target : getElementDescriptor(event.target)
+        });
+        activePointers.delete(event.pointerId);
+        if (activePointers.size < 2) {
+          endPinchTracking();
+        }
+      }, true);
+
       document.addEventListener("click", (event) => {
+        const inferredClickGesture = takePendingClickGesture(event);
+        if (inferredClickGesture) {
+          trackEvent(inferredClickGesture.name, {
+            ...inferredClickGesture.properties,
+            clickX: event.clientX,
+            clickY: event.clientY,
+            button: event.button
+          });
+        }
         trackEvent("click", {
+          gesture: "click",
           x: event.clientX,
           y: event.clientY,
           pageX: event.clientX + window.scrollX,
           pageY: event.clientY + window.scrollY,
-          scrollX: window.scrollX,
-          scrollY: window.scrollY,
           button: event.button,
           target: getElementDescriptor(event.target)
         });
       }, true);
 
-      document.addEventListener("mousemove", (event) => {
-        const now = performance.now();
-        if (now - lastMousemoveTrackAt < trackingConfig.mousemoveThrottleMs) {
-          return;
-        }
-        lastMousemoveTrackAt = now;
-        trackEvent("mousemove", {
+      document.addEventListener("dblclick", (event) => {
+        trackEvent("double_click", {
+          gesture: "double_click",
           x: event.clientX,
           y: event.clientY,
           pageX: event.clientX + window.scrollX,
           pageY: event.clientY + window.scrollY,
-          scrollX: window.scrollX,
-          scrollY: window.scrollY,
-          movementX: event.movementX,
-          movementY: event.movementY,
-          documentWidth: document.documentElement.scrollWidth,
-          documentHeight: document.documentElement.scrollHeight,
+          button: event.button,
           target: getElementDescriptor(event.target)
         });
-      }, { passive: true });
+      }, true);
 
-      window.addEventListener("scroll", () => {
-        const now = performance.now();
-        if (now - lastScrollTrackAt < trackingConfig.scrollThrottleMs) {
+      document.addEventListener("wheel", (event) => {
+        trackEvent(event.ctrlKey ? "wheel_pinch" : "wheel_swipe", {
+          gesture: event.ctrlKey ? "pinch" : "wheel_swipe",
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaZ: event.deltaZ,
+          deltaMode: event.deltaMode,
+          ctrlKey: event.ctrlKey,
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          target: getElementDescriptor(event.target)
+        });
+      }, { passive: true, capture: true });
+
+      document.addEventListener("input", (event) => {
+        if (!(event.target instanceof HTMLInputElement) || event.target.type !== "range") {
           return;
         }
-        lastScrollTrackAt = now;
-        trackEvent("scroll", {
-          scrollX: window.scrollX,
-          scrollY: window.scrollY,
-          documentWidth: document.documentElement.scrollWidth,
-          documentHeight: document.documentElement.scrollHeight
+        trackEvent("range_input", {
+          gesture: "range_input",
+          value: event.target.value,
+          min: event.target.min,
+          max: event.target.max,
+          step: event.target.step,
+          target: getElementDescriptor(event.target)
         });
-      }, { passive: true });
+      }, true);
+
+      document.addEventListener("change", (event) => {
+        if (!(event.target instanceof HTMLInputElement) || event.target.type !== "range") {
+          return;
+        }
+        trackEvent("range_change", {
+          gesture: "range_change",
+          value: event.target.value,
+          min: event.target.min,
+          max: event.target.max,
+          step: event.target.step,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("dragstart", (event) => {
+        trackEvent("native_drag_start", {
+          gesture: "native_drag",
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("drop", (event) => {
+        trackEvent("native_drop", {
+          gesture: "native_drag",
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("dragend", (event) => {
+        trackEvent("native_drag_end", {
+          gesture: "native_drag",
+          x: event.clientX,
+          y: event.clientY,
+          pageX: event.clientX + window.scrollX,
+          pageY: event.clientY + window.scrollY,
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
 
       document.addEventListener("keydown", (event) => {
         trackEvent("keydown", {
           key: getSafeKey(event),
-          code: event.code,
+          code: event.code || "",
+          location: event.location,
           repeat: event.repeat,
           altKey: event.altKey,
           ctrlKey: event.ctrlKey,
@@ -464,17 +1009,12 @@
 
       document.addEventListener("submit", (event) => {
         trackEvent("form_submit", {
+          gesture: "form_submit",
           target: getElementDescriptor(event.target),
           method: event.target.method || "get",
           actionPath: event.target.action ? new URL(event.target.action, window.location.href).pathname : ""
         });
       }, true);
-
-      document.addEventListener("visibilitychange", () => {
-        trackEvent("page_visibility_change", {
-          visibilityState: document.visibilityState
-        });
-      });
     }
 
     window.interactionTracker = {
@@ -487,6 +1027,12 @@
       setEnabled: setInteractionTrackingEnabled
     };
 
+    window.webAgentSensing = {
+      isPlaybackActive: () => Boolean(chirpSourceNode),
+      getRecordingChannelCount: () => recordingChannelCount,
+      getTargetSampleRate: () => targetWavSampleRate
+    };
+
     function buildStaticFileUrl(fileName) {
       return new URL(fileName, window.location.href).href;
     }
@@ -497,12 +1043,209 @@
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
-          channelCount: { ideal: 2 },
+          channelCount: { ideal: 1 },
           sampleRate: { ideal: targetWavSampleRate },
-          sampleSize: { ideal: 24 }
+          sampleSize: { ideal: 32 }
         },
         video: false
       };
+    }
+
+    function getPrimaryAudioTrack() {
+      if (!micStream) {
+        return null;
+      }
+      return micStream.getAudioTracks().find((track) => track.readyState === "live") || null;
+    }
+
+    function tryCallTrackMethod(track, methodName) {
+      if (!track || typeof track[methodName] !== "function") {
+        return null;
+      }
+
+      try {
+        return track[methodName]();
+      } catch (error) {
+        return { error: error.message };
+      }
+    }
+
+    function estimateChirpPeriod(audioBuffer) {
+      const sampleRate = audioBuffer.sampleRate;
+      const expectedPeriodSamples = Math.round(0.020 * sampleRate);
+      const samples = toMonoChannel(audioBuffer);
+      const analysisLength = Math.min(samples.length, Math.round(sampleRate * 1.5));
+
+      if (analysisLength < expectedPeriodSamples * 4) {
+        return {
+          status: "insufficient_audio",
+          expectedPeriodSamples,
+          sampleRate
+        };
+      }
+
+      let energy = 0;
+      for (let index = 0; index < analysisLength; index += 1) {
+        energy += samples[index] * samples[index];
+      }
+      const rms = Math.sqrt(energy / analysisLength);
+      if (rms < 1e-6) {
+        return {
+          status: "too_quiet",
+          expectedPeriodSamples,
+          sampleRate,
+          rms
+        };
+      }
+
+      const searchRadius = Math.max(2, Math.round(expectedPeriodSamples * 0.02));
+      let bestLag = expectedPeriodSamples;
+      let bestScore = -Infinity;
+
+      for (let lag = expectedPeriodSamples - searchRadius; lag <= expectedPeriodSamples + searchRadius; lag += 1) {
+        let cross = 0;
+        let energyA = 0;
+        let energyB = 0;
+        const compareLength = analysisLength - lag;
+
+        for (let index = 0; index < compareLength; index += 1) {
+          const a = samples[index];
+          const b = samples[index + lag];
+          cross += a * b;
+          energyA += a * a;
+          energyB += b * b;
+        }
+
+        const score = cross / Math.sqrt((energyA * energyB) + 1e-24);
+        if (score > bestScore) {
+          bestScore = score;
+          bestLag = lag;
+        }
+      }
+
+      return {
+        status: bestScore > 0.05 ? "estimated" : "low_confidence",
+        expectedPeriodSamples,
+        estimatedPeriodSamples: bestLag,
+        deviationSamples: bestLag - expectedPeriodSamples,
+        estimatedPeriodMs: (bestLag / sampleRate) * 1000,
+        expectedPeriodMs: 20,
+        normalizedCorrelation: bestScore,
+        analyzedSamples: analysisLength,
+        sampleRate,
+        rms
+      };
+    }
+
+    function buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate) {
+      const track = getPrimaryAudioTrack();
+      const context = getRecordingContext();
+      return {
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        browser: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform
+        },
+        requestedMicrophoneConstraints: getMicrophoneConstraints().audio,
+        microphoneTrack: {
+          present: Boolean(track),
+          label: track ? track.label : "",
+          readyState: track ? track.readyState : "",
+          enabled: track ? track.enabled : null,
+          muted: track ? track.muted : null,
+          settings: tryCallTrackMethod(track, "getSettings"),
+          capabilities: tryCallTrackMethod(track, "getCapabilities"),
+          constraints: tryCallTrackMethod(track, "getConstraints")
+        },
+        audioContext: {
+          sampleRate: context.sampleRate,
+          state: context.state,
+          baseLatency: Number.isFinite(context.baseLatency) ? context.baseLatency : null,
+          outputLatency: Number.isFinite(context.outputLatency) ? context.outputLatency : null
+        },
+        playback: {
+          engine: "Web Audio AudioBufferSourceNode",
+          chirpFileName: appConfig.downloadFileName,
+          chirpBufferSampleRate: chirpPlaybackBuffer ? chirpPlaybackBuffer.sampleRate : null,
+          chirpBufferLength: chirpPlaybackBuffer ? chirpPlaybackBuffer.length : null,
+          chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
+          loop: true
+        },
+        recordingExport: {
+          container: "WAV",
+          encoding: "IEEE_FLOAT",
+          channels: 1,
+          bitsPerSample: 32,
+          sampleRate: recordedAudioBuffer.sampleRate,
+          frameCount: recordedAudioBuffer.length,
+          duration: recordedAudioBuffer.duration
+        },
+        signalCheck: {
+          method: "normalized_autocorrelation_near_20ms_chirp_period",
+          chirpPeriodEstimate
+        },
+        limitations: [
+          "Browser APIs report the stream visible to JavaScript, not every conversion inside the OS mixer or hardware driver.",
+          "If device hardware runs at a different native rate, the browser or OS may resample before JavaScript receives audio.",
+          "The chirp-period signal check is empirical evidence from the exported recording, not direct access to hardware clocks."
+        ]
+      };
+    }
+
+    function downloadAudioDiagnostics(diagnostics, timestamp) {
+      const diagnosticsUrl = URL.createObjectURL(new Blob([JSON.stringify(diagnostics, null, 2)], {
+        type: "application/json"
+      }));
+      triggerDownload(diagnosticsUrl, `recording_diagnostics_${timestamp}.json`);
+      window.setTimeout(() => URL.revokeObjectURL(diagnosticsUrl), 1000);
+    }
+
+    function downloadGeneratedFigures(result) {
+      if (!result || !Array.isArray(result.figures)) {
+        return 0;
+      }
+
+      for (const figure of result.figures) {
+        if (!figure || !figure.url || !figure.name) {
+          continue;
+        }
+        triggerDownload(figure.url, figure.name);
+      }
+
+      return result.figures.length;
+    }
+
+    async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp) {
+      if (!trackingArtifacts || !trackingArtifacts.osEventLog) {
+        return null;
+      }
+
+      const formData = new FormData();
+      formData.append("recording", wavBlob, `recording_${timestamp}.wav`);
+      formData.append(
+        "events",
+        new Blob([trackingArtifacts.osEventLog], { type: "text/plain" }),
+        `os_event_log_${timestamp}.txt`
+      );
+      formData.append(
+        "diagnostics",
+        new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" }),
+        `recording_diagnostics_${timestamp}.json`
+      );
+      formData.append("timestamp", timestamp);
+      formData.append("prefix", "recording");
+
+      const response = await fetch(appConfig.analysisApiUrl, {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) {
+        return null;
+      }
+
+      const result = await response.json();
+      return result && result.ok ? result : null;
     }
 
     function buildMicrophoneOnlyStream(sourceStream) {
@@ -617,6 +1360,27 @@
       return Math.max(-1, Math.min(1, sample));
     }
 
+    function toMonoFloat32(inputBuffer) {
+      const channelCount = inputBuffer.numberOfChannels;
+      const length = inputBuffer.length;
+      const mono = new Float32Array(length);
+
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        const channelData = inputBuffer.getChannelData(channelIndex);
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] += channelData[sampleIndex];
+        }
+      }
+
+      if (channelCount > 1) {
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] /= channelCount;
+        }
+      }
+
+      return mono;
+    }
+
     function getRecordingContext() {
       if (!audioContext) {
         const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
@@ -645,49 +1409,79 @@
       recordingSessionActive = false;
     }
 
+    async function loadChirpPlaybackBuffer(audioBlob) {
+      const recordingContext = getRecordingContext();
+      const chirpArrayBuffer = await audioBlob.arrayBuffer();
+      chirpPlaybackBuffer = await recordingContext.decodeAudioData(chirpArrayBuffer.slice(0));
+    }
+
+    function startChirpPlayback() {
+      if (!chirpPlaybackBuffer) {
+        throw new Error("Chirp audio is not decoded");
+      }
+
+      const recordingContext = getRecordingContext();
+      stopChirpPlayback();
+      chirpSourceNode = recordingContext.createBufferSource();
+      chirpSourceNode.buffer = chirpPlaybackBuffer;
+      chirpSourceNode.loop = true;
+      chirpSourceNode.connect(recordingContext.destination);
+      chirpSourceNode.onended = () => {
+        chirpSourceNode = null;
+      };
+      chirpSourceNode.start(0);
+      receivedAudio.loop = true;
+    }
+
+    function stopChirpPlayback() {
+      if (!chirpSourceNode) {
+        return;
+      }
+
+      const sourceNode = chirpSourceNode;
+      chirpSourceNode = null;
+      sourceNode.onended = null;
+      try {
+        sourceNode.stop();
+      } catch (error) {
+        // Already stopped.
+      }
+      sourceNode.disconnect();
+    }
+
     function buildAudioBufferFromRecording(context) {
       if (!recordedFrameCount || !recordingChannelCount) {
         return null;
       }
 
       const audioBuffer = context.createBuffer(
-        recordingChannelCount,
+        1,
         recordedFrameCount,
         context.sampleRate
       );
-      const channelData = [];
+      const channelData = audioBuffer.getChannelData(0);
       let frameOffset = 0;
 
-      for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-        channelData.push(audioBuffer.getChannelData(channelIndex));
-      }
-
       for (const chunk of recordingBufferChunks) {
-        for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-          channelData[channelIndex].set(chunk[channelIndex], frameOffset);
-        }
-        frameOffset += chunk[0].length;
+        channelData.set(chunk, frameOffset);
+        frameOffset += chunk.length;
       }
 
       return audioBuffer;
     }
 
     function encodeAudioBufferToWav(audioBuffer) {
-      const channelCount = audioBuffer.numberOfChannels;
       const sampleRate = audioBuffer.sampleRate;
       const frameCount = audioBuffer.length;
-      const bytesPerSample = 2;
+      const channelCount = 1;
+      const bytesPerSample = 4;
       const blockAlign = channelCount * bytesPerSample;
       const byteRate = sampleRate * blockAlign;
       const dataSize = frameCount * blockAlign;
       const wavBuffer = new ArrayBuffer(44 + dataSize);
       const view = new DataView(wavBuffer);
-      const channelData = [];
+      const channelData = toMonoChannel(audioBuffer);
       let offset = 0;
-
-      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-        channelData.push(audioBuffer.getChannelData(channelIndex));
-      }
 
       function writeAscii(text) {
         for (let index = 0; index < text.length; index += 1) {
@@ -703,7 +1497,7 @@
       writeAscii("fmt ");
       view.setUint32(offset, 16, true);
       offset += 4;
-      view.setUint16(offset, 1, true);
+      view.setUint16(offset, 3, true);
       offset += 2;
       view.setUint16(offset, channelCount, true);
       offset += 2;
@@ -720,12 +1514,8 @@
       offset += 4;
 
       for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
-        for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-          const sample = clampPcmSample(channelData[channelIndex][frameIndex]);
-          const pcmValue = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-          view.setInt16(offset, Math.round(pcmValue), true);
-          offset += bytesPerSample;
-        }
+        view.setFloat32(offset, clampPcmSample(channelData[frameIndex]), true);
+        offset += bytesPerSample;
       }
 
       return new Blob([wavBuffer], { type: "audio/wav" });
@@ -870,25 +1660,47 @@
       }
     }
 
-    async function downloadRecordedAudio(recordedAudioBuffer) {
+    async function downloadRecordedAudio(recordedAudioBuffer, options = {}) {
       if (!recordedAudioBuffer) {
         fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
         return;
       }
 
       try {
+        const timestamp = options.timestamp || buildRecordingTimestamp();
+        const chirpPeriodEstimate = estimateChirpPeriod(recordedAudioBuffer);
+        const diagnostics = buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate);
         const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
         await renderSpectrogram(wavBlob);
-        const fileName = buildRecordingFileName();
+        const fileName = `recording_${timestamp}.wav`;
         const downloadUrl = URL.createObjectURL(wavBlob);
         triggerDownload(downloadUrl, fileName);
         window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 
         const spectrogramUrl = spectrogramCanvas.toDataURL("image/png");
-        const spectrogramFileName = buildSpectrogramFileName();
+        const spectrogramFileName = `recording_spectrogram_${timestamp}.png`;
         triggerDownload(spectrogramUrl, spectrogramFileName);
+        downloadAudioDiagnostics(diagnostics, timestamp);
 
-        fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, spectrogram downloaded as ${spectrogramFileName}.`;
+        fileStatus.textContent = "Sensing stopped. Running Python IQ pipeline for input-event amplitude/phase figure...";
+        let figureCount = 0;
+        try {
+          const analysisResult = await requestFigureGeneration(
+            wavBlob,
+            diagnostics,
+            options.trackingArtifacts,
+            timestamp
+          );
+          figureCount = downloadGeneratedFigures(analysisResult);
+        } catch (error) {
+          figureCount = 0;
+        }
+
+        if (figureCount > 0) {
+          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram, diagnostics, and ${figureCount} Python IQ input-event figure.`;
+        } else {
+          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram and diagnostics. Exact Python figures require serving the app with webagent/server.py.`;
+        }
       } catch (error) {
         fileStatus.textContent = "Sensing stopped, but failed to download the recording or spectrogram.";
       } finally {
@@ -931,21 +1743,22 @@
         receivedAudio.src = receivedAudioObjectUrl;
         receivedAudio.loop = true;
         receivedAudio.currentTime = 0;
+        await loadChirpPlaybackBuffer(audioBlob);
 
         const recordingStarted = await prepareRecordingForPlayback();
         if (!recordingStarted) {
           throw new Error("Recording did not start");
         }
 
-        await receivedAudio.play();
+        startChirpPlayback();
         sensingSessionActive = true;
         beginInteractionTrackingSession();
         setSensingControls(true, true);
-        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing raw microphone PCM.`;
+        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing mono float microphone PCM.`;
       } catch (error) {
         sensingSessionActive = false;
         setInteractionTrackingEnabled(false);
-        receivedAudio.pause();
+        stopChirpPlayback();
         cancelRecordingSession();
         setSensingControls(Boolean(pendingFileUrl), false);
         fileStatus.textContent = "Could not start sensing.";
@@ -957,16 +1770,17 @@
         return;
       }
 
+      const timestamp = buildRecordingTimestamp();
       sensingSessionActive = false;
-      downloadEventLog();
+      const trackingArtifacts = downloadEventLog(timestamp);
       setInteractionTrackingEnabled(false);
       startSensingBtn.disabled = true;
       stopSensingBtn.disabled = true;
-      receivedAudio.pause();
+      stopChirpPlayback();
       receivedAudio.currentTime = 0;
       fileStatus.textContent = "Sensing stopped. Preparing recording download...";
 
-      await stopRecordingSession();
+      await stopRecordingSession({ timestamp, trackingArtifacts });
       setSensingControls(Boolean(pendingFileUrl), false);
     }
 
@@ -1027,7 +1841,7 @@
       return false;
     }
 
-    async function stopRecordingSession() {
+    async function stopRecordingSession(options = {}) {
       const shouldFinalizeRecording = recordingSessionActive || recordedFrameCount > 0;
       const completedRecording = shouldFinalizeRecording
         ? buildAudioBufferFromRecording(getRecordingContext())
@@ -1035,7 +1849,7 @@
       stopRecordingNodes();
       resetRecordingBuffers();
       if (completedRecording) {
-        await downloadRecordedAudio(completedRecording);
+        await downloadRecordedAudio(completedRecording, options);
         return true;
       } else {
         fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
@@ -1059,13 +1873,7 @@
         }
 
         const microphoneOnlyStream = buildMicrophoneOnlyStream(micStream);
-        const processorChannelCount = Math.max(
-          1,
-          Math.min(
-            2,
-            microphoneOnlyStream.getAudioTracks()[0].getSettings().channelCount || 1
-          )
-        );
+        const processorChannelCount = 1;
 
         stopRecordingNodes();
         resetRecordingBuffers();
@@ -1077,22 +1885,19 @@
           const inputBuffer = event.inputBuffer;
 
           if (!recordingChannelCount) {
-            recordingChannelCount = inputBuffer.numberOfChannels;
+            recordingChannelCount = 1;
           }
 
-          const chunk = [];
-          for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-            chunk.push(new Float32Array(inputBuffer.getChannelData(channelIndex)));
-          }
+          const chunk = toMonoFloat32(inputBuffer);
           recordingBufferChunks.push(chunk);
-          recordedFrameCount += inputBuffer.length;
+          recordedFrameCount += chunk.length;
         };
 
         recordingSourceNode.connect(recordingProcessorNode);
         recordingProcessorNode.connect(recordingContext.destination);
         recordingSessionActive = true;
 
-        fileStatus.textContent = "Starting sensing while capturing raw microphone PCM only.";
+        fileStatus.textContent = "Starting sensing while capturing mono float microphone PCM only.";
         return true;
       } catch (error) {
         stopRecordingNodes();
@@ -1137,12 +1942,13 @@
       sensingSessionActive = false;
       setInteractionTrackingEnabled(false);
       setSensingControls(Boolean(pendingFileUrl), false);
+      stopChirpPlayback();
       void stopRecordingSession();
     });
 
     window.addEventListener("pagehide", () => {
       setInteractionTrackingEnabled(false);
-      receivedAudio.pause();
+      stopChirpPlayback();
       stopRecordingNodes();
       resetRecordingBuffers();
       stopMicrophoneStream();

@@ -26,7 +26,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await page.locator("#shoppingStartSensingBtn").click();
   await expect(page.locator("#shoppingStopSensingBtn")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
-  await expect.poll(() => page.evaluate(() => document.getElementById("shoppingSensingAudio").paused)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
 
   await page.locator("input[name='query']").click();
   await page.keyboard.type("desk");
@@ -74,7 +74,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await expect(page.locator("#shoppingStartSensingBtn")).toBeEnabled();
   await expect(page.locator("#shoppingStopSensingBtn")).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
-  await expect.poll(() => page.evaluate(() => document.getElementById("shoppingSensingAudio").paused)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
 
   await expect(page.locator("#shoppingSpectrogramPanel")).toBeVisible();
   await expect(page.locator("#shoppingSpectrogramStatus")).toContainText("Spectrogram");
@@ -115,24 +115,26 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   const eventNames = payload.events.map((event) => event.name);
 
   for (const expectedEvent of [
-    "page_view",
     "click",
-    "mousemove",
-    "scroll",
+    "tap",
+    "pointer_down",
+    "pointer_up",
     "keydown",
-    "form_submit",
-    "page_visibility_change"
+    "wheel_swipe",
+    "form_submit"
   ]) {
     expect(eventNames).toContain(expectedEvent);
   }
 
-  const scrolledMousemove = payload.events
-    .filter((event) => event.name === "mousemove")
-    .find((event) => event.properties.scrollY > 0);
-  expect(scrolledMousemove).toBeTruthy();
-  expect(scrolledMousemove.properties.pageY).toBe(
-    scrolledMousemove.properties.y + scrolledMousemove.properties.scrollY
-  );
+  for (const removedEvent of [
+    "page_view",
+    "mousemove",
+    "scroll",
+    "keyup",
+    "page_visibility_change"
+  ]) {
+    expect(eventNames).not.toContain(removedEvent);
+  }
 
   const formSubmits = payload.events.filter((event) => event.name === "form_submit");
   expect(formSubmits.length).toBeGreaterThanOrEqual(2);
@@ -154,7 +156,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await page.locator("#travelStartSensingBtn").click();
   await expect(page.locator("#travelStopSensingBtn")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
-  await expect.poll(() => page.evaluate(() => document.getElementById("travelSensingAudio").paused)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
 
   await page.locator("input[name='query']").click();
   await page.keyboard.type("lisbon");
@@ -213,7 +215,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await expect(page.locator("#travelStartSensingBtn")).toBeEnabled();
   await expect(page.locator("#travelStopSensingBtn")).toBeDisabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
-  await expect.poll(() => page.evaluate(() => document.getElementById("travelSensingAudio").paused)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
 
   await expect(page.locator("#travelSpectrogramPanel")).toBeVisible();
   await expect(page.locator("#travelSpectrogramStatus")).toContainText("Spectrogram");
@@ -248,15 +250,25 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   const eventNames = payload.events.map((event) => event.name);
 
   for (const expectedEvent of [
-    "page_view",
     "click",
-    "mousemove",
-    "scroll",
+    "tap",
+    "pointer_down",
+    "pointer_up",
     "keydown",
-    "form_submit",
-    "page_visibility_change"
+    "wheel_swipe",
+    "form_submit"
   ]) {
     expect(eventNames).toContain(expectedEvent);
+  }
+
+  for (const removedEvent of [
+    "page_view",
+    "mousemove",
+    "scroll",
+    "keyup",
+    "page_visibility_change"
+  ]) {
+    expect(eventNames).not.toContain(removedEvent);
   }
 
   const formSubmits = payload.events.filter((event) => event.name === "form_submit");

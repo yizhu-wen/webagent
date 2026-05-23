@@ -49,11 +49,24 @@ http://localhost:8000/experiments/travel/
 
 - Requests microphone permission on load.
 - Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
-- Start sensing loops the chirp audio.
+- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
-- Stop automatically downloads the tracking JSON for that sensing period.
-- Stop also downloads the sensed microphone audio WAV and rendered spectrogram PNG.
+- Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.
+- Stop also downloads the sensed microphone audio WAV, rendered spectrogram PNG,
+  and recording diagnostics JSON.
+- Stop can generate an input-event analysis PNG from the recorded WAV, keydown
+  events, and touchpad-style events when the app is served by `webagent/server.py`.
+  The browser uploads the recorded WAV, OS-style event log, and diagnostics to
+  the Python backend, which runs the full IQ processing chain in
+  `analyze_webagent_recording.py`.
+- Microphone capture is constrained toward 48 kHz mono with browser DSP disabled,
+  buffered as float samples, and exported as mono 32-bit IEEE-float WAV to match
+  the Python `sounddevice`/`soundfile` capture path as closely as browser APIs allow.
+- The diagnostics JSON records requested microphone constraints, browser-reported
+  `MediaStreamTrack` settings/capabilities/constraints, `AudioContext` sample
+  rate/latency, playback buffer rate, exported WAV format, and an empirical
+  autocorrelation check around the expected 20 ms / 960-sample chirp period.
 - The spectrogram renderer includes axes and uses the same visual generation style expected by the tests.
 - The main page links to both dummy experiment sites.
 
@@ -65,28 +78,117 @@ Both shopping and travel:
 - Have Start sensing and Stop buttons.
 - Track behavior only while sensing is active.
 - Reset tracking data at the start of each sensing session.
+- Decode and loop the chirp through the 48 kHz Web Audio context.
+- Capture mono float microphone samples and export mono 32-bit IEEE-float WAV.
 - On Stop, automatically download:
   - Tracking JSON
+  - Pipe-delimited OS-style event log
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
+  - Recording diagnostics JSON
+  - Input-event amplitude/phase analysis PNG, when the Python server endpoint is available
 - Show the recorded spectrogram on the page after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.
 
+## Figure Generation
+
+The exact Python pipeline generates only the input-event amplitude/phase figure on
+Stop when the app is served by the Python backend:
+
+- `input_events_amplitude_phase.png`
+
+This figure has two panels:
+
+- Normalized matched-filter amplitude from the full IQ chain with `keydown`
+  and touchpad-style markers and labels.
+- Unwrapped matched-filter phase from the full IQ chain with the same
+  `keydown` and touchpad-style markers and labels.
+
+Use these inputs:
+
+- Recorded microphone WAV from Stop sensing.
+- OS-style event log from the same Stop sensing session.
+- Recording diagnostics JSON, optional but uploaded when available.
+
+Start the Python backend with:
+
+```text
+python webagent/server.py
+```
+
+The endpoint `/api/analyze-recording` saves each uploaded sensing session under
+`webagent/uploads/`, runs `analyze_webagent_recording.py --figure-set
+input-amplitude-phase`, and returns a link to the generated figure. If a
+plain static server is used, the regular WAV, browser spectrogram, diagnostics,
+and tracking downloads still work, but the exact Python figure cannot be
+generated.
+
+For manual analysis without using the website backend, run the local GUI from
+the project root:
+
+```text
+python webagent_analysis_gui.py
+```
+
+Choose the recorded WAV and matching `os_event_log_*.txt`. The diagnostics JSON
+is optional. The GUI runs the same analyzer and writes `input_events_amplitude_phase.png`
+to `analysis_outputs/<recording-name>/` unless another output folder is selected.
+
 ## Tracked User Events
 
-The behavioral tracker records these seven user event types:
+The behavioral tracker records gesture-focused events plus key-down events:
 
-- `page_view`
-- `click`
-- `mousemove`
-- `scroll`
+- `pointer_down`
+- `pointer_up`
+- `pointer_cancel`
 - `keydown`
+- `tap`
+- `tap_to_click`
+- `double_tap`
+- `double_tap_to_click`
+- `click`
+- `double_click`
+- `press`
+- `press_to_click`
+- `double_press`
+- `double_press_to_click`
+- `long_press`
+- `long_press_to_click`
+- `drag_start`
+- `drag_move`
+- `drag_end`
+- `swipe`
+- `two_finger_swipe`
+- `wheel_swipe`
+- `wheel_pinch`
+- `pinch_start`
+- `pinch_change`
+- `pinch_end`
+- `range_input`
+- `range_change`
+- `native_drag_start`
+- `native_drop`
+- `native_drag_end`
 - `form_submit`
-- `page_visibility_change`
 
 The downloadable log may also include an internal download marker event such as `tracking_data_downloaded`.
+Each JSON event includes both an ISO `timestamp` and numeric `epochSeconds`.
+The extra `os_event_log_*.txt` download uses the same broad shape as the Python capture logs:
 
-Mousemove events include full-page trajectory fields such as `pageX`, `pageY`, `scrollX`, `scrollY`, `documentWidth`, and `documentHeight`.
+```text
+# start_epoch | 1710000000.000000
+# format | EVENT | VALUE | EPOCH_SECONDS
+TAP | gesture=tap pointerType=mouse x=120 y=80 | 1710000001.234567
+KEYDOWN | key=Tab code=Tab location=0 button#stopSensingBtn label=Stop | 1710000001.300000
+DRAG_END | gesture=drag pointerType=mouse dx=90 dy=40 | 1710000001.345678
+CLICK | button=0 x=120 y=80 button#stopSensingBtn label=Stop | 1710000002.000000
+```
+
+This is browser-page scoped, not a global OS hook; events outside the page are not visible to the browser.
+
+The tracker intentionally no longer logs generic page views, raw mousemove,
+scroll, key-up, or visibility events. Printable `keydown` values are logged as
+`key=character`; browser `code` is still included so physical key identity is available.
 
 ## Shopping Experiment
 
@@ -104,7 +206,7 @@ Features:
 - Search input, category select, and checkbox filters.
 - Filters do not apply immediately; they apply only after clicking `Apply search`.
 - Product rows include labels/tags so filtering is visible and testable.
-- Add-to-cart, save, checkout form, scrolling, mouse movement, keydown, and form-submit actions are available for tracking.
+- Add-to-cart, save, checkout form, pointer/touch gestures, drag-like movement, wheel gestures, and form-submit actions are available for tracking.
 - Download filename prefix: `shopping_recording`.
 - Tracking JSON slug: `simple-shopping`.
 
@@ -124,7 +226,7 @@ Features:
 - Five trip rows with numbered itinerary-style layout.
 - Search input, trip type select, and checkbox filters.
 - Filters apply only after clicking `Apply search`.
-- Select trip, save, details, booking form, scrolling, mouse movement, keydown, and form-submit actions are available for tracking.
+- Select trip, save, details, booking form, pointer/touch gestures, drag-like movement, wheel gestures, and form-submit actions are available for tracking.
 - Each trip has a `Details` button that expands details inline inside that same trip row, not in a shared bottom panel.
 - Inline trip details show duration, route, included items, note, and price.
 - Inline trip details include `Use this trip`, which adds that trip to the booking count and can prefill booking notes, plus `Close details`.

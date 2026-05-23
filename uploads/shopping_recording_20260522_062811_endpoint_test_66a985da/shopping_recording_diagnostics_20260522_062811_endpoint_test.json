@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-05-22T13:28:11.885Z",
+  "browser": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+    "platform": "Win32"
+  },
+  "requestedMicrophoneConstraints": {
+    "echoCancellation": false,
+    "noiseSuppression": false,
+    "autoGainControl": false,
+    "channelCount": {
+      "ideal": 1
+    },
+    "sampleRate": {
+      "ideal": 48000
+    },
+    "sampleSize": {
+      "ideal": 32
+    }
+  },
+  "microphoneTrack": {
+    "present": true,
+    "label": "麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)",
+    "readyState": "live",
+    "enabled": true,
+    "muted": false,
+    "settings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "beadcd9a5e3bd608f3b8fa71bde45ab5e3b037f5a68f15669a8665d8850c8268",
+      "echoCancellation": false,
+      "groupId": "cc6767002c823fc53fae5398c6b252094e10dc46cae6b0ac2a96c4ee643f4d66",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 48000,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "capabilities": {
+      "autoGainControl": [
+        true,
+        false
+      ],
+      "channelCount": {
+        "max": 2,
+        "min": 1
+      },
+      "deviceId": "beadcd9a5e3bd608f3b8fa71bde45ab5e3b037f5a68f15669a8665d8850c8268",
+      "echoCancellation": [
+        true,
+        false,
+        "remote-only",
+        "all"
+      ],
+      "groupId": "cc6767002c823fc53fae5398c6b252094e10dc46cae6b0ac2a96c4ee643f4d66",
+      "latency": {
+        "max": 0.01,
+        "min": 0.002
+      },
+      "noiseSuppression": [
+        true,
+        false
+      ],
+      "sampleRate": {
+        "max": 48000,
+        "min": 48000
+      },
+      "sampleSize": {
+        "max": 16,
+        "min": 16
+      },
+      "voiceIsolation": [
+        true,
+        false
+      ]
+    },
+    "constraints": {
+      "autoGainControl": false,
+      "channelCount": 1,
+      "echoCancellation": false,
+      "noiseSuppression": false,
+      "sampleRate": 48000,
+      "sampleSize": 32
+    }
+  },
+  "audioContext": {
+    "sampleRate": 48000,
+    "state": "running",
+    "baseLatency": 0.01,
+    "outputLatency": 0.047
+  },
+  "playback": {
+    "engine": "Web Audio AudioBufferSourceNode",
+    "chirpFileName": "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav",
+    "chirpBufferSampleRate": 48000,
+    "chirpBufferLength": 28800000,
+    "chirpBufferDuration": 600,
+    "loop": true
+  },
+  "recordingExport": {
+    "container": "WAV",
+    "encoding": "IEEE_FLOAT",
+    "channels": 1,
+    "bitsPerSample": 32,
+    "sampleRate": 48000,
+    "frameCount": 831488,
+    "duration": 17.322666666666667
+  },
+  "signalCheck": {
+    "method": "normalized_autocorrelation_near_20ms_chirp_period",
+    "chirpPeriodEstimate": {
+      "status": "estimated",
+      "expectedPeriodSamples": 960,
+      "estimatedPeriodSamples": 960,
+      "deviationSamples": 0,
+      "estimatedPeriodMs": 20,
+      "expectedPeriodMs": 20,
+      "normalizedCorrelation": 0.44500344806047865,
+      "analyzedSamples": 72000,
+      "sampleRate": 48000,
+      "rms": 0.004836713909046933
+    }
+  },
+  "limitations": [
+    "Browser APIs report the stream visible to JavaScript, not every conversion inside the OS mixer or hardware driver.",
+    "If device hardware runs at a different native rate, the browser or OS may resample before JavaScript receives audio.",
+    "The chirp-period signal check is empirical evidence from the exported recording, not direct access to hardware clocks."
+  ]
+}

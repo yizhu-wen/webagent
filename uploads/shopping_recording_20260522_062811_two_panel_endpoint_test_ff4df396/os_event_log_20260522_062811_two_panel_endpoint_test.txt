@@ -1,0 +1,578 @@
+# start_epoch | 1779456474.498000
+# downloaded_epoch | 1779456491.866000
+# session_id | 31e050b9-6d26-44f8-90f6-393aad4121dd
+# schema | webagent_os_events_v1
+# format | EVENT | VALUE | EPOCH_SECONDS
+# scope | browser_page_events_not_global_os_hooks
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=467 input name=query type=search | 1779456476.405000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=481 input name=query type=search | 1779456476.410000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=491 input name=query type=search | 1779456476.418000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=491 input name=query type=search | 1779456476.424000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=506 input name=query type=search | 1779456476.432000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=511 input name=query type=search | 1779456476.441000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=511 input name=query type=search | 1779456476.446000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=522 input name=query type=search | 1779456476.455000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=522 input name=query type=search | 1779456476.462000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=527 input name=query type=search | 1779456476.468000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=541 input name=query type=search | 1779456476.474000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=541 input name=query type=search | 1779456476.479000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=566 input name=query type=search | 1779456476.488000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=566 input name=query type=search | 1779456476.499000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=594 input name=query type=search | 1779456476.502000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=607 input name=query type=search | 1779456476.510000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=625 input name=query type=search | 1779456476.518000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=642 input name=query type=search | 1779456476.524000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=653 input name=query type=search | 1779456476.533000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=667 input name=query type=search | 1779456476.538000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=667 input name=query type=search | 1779456476.546000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=684 input name=query type=search | 1779456476.552000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=717 input name=query type=search | 1779456476.560000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=738 input name=query type=search | 1779456476.566000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=759 input name=query type=search | 1779456476.574000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=759 input name=query type=search | 1779456476.580000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=780 input name=query type=search | 1779456476.588000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=817 input name=query type=search | 1779456476.596000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=853 input name=query type=search | 1779456476.602000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=853 input name=query type=search | 1779456476.607000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=901 input name=query type=search | 1779456476.616000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=901 input name=query type=search | 1779456476.624000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=949 input name=query type=search | 1779456476.630000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=969 input name=query type=search | 1779456476.638000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=969 input name=query type=search | 1779456476.643000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1035 input name=query type=search | 1779456476.657000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1044 input name=query type=search | 1779456476.663000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1044 input name=query type=search | 1779456476.671000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1045 input name=query type=search | 1779456476.671000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1052 input name=query type=search | 1779456476.674000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1060 input name=query type=search | 1779456476.677000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1066 input name=query type=search | 1779456476.679000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1066 input name=query type=search | 1779456476.685000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1079 input name=query type=search | 1779456476.688000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1084 input name=query type=search | 1779456476.690000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1089 input name=query type=search | 1779456476.693000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1095 input name=query type=search | 1779456476.696000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1099 input name=query type=search | 1779456476.698000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1104 input name=query type=search | 1779456476.701000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1109 input name=query type=search | 1779456476.704000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1114 input name=query type=search | 1779456476.707000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1118 input name=query type=search | 1779456476.710000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1122 input name=query type=search | 1779456476.712000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1126 input name=query type=search | 1779456476.715000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1130 input name=query type=search | 1779456476.718000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1134 input name=query type=search | 1779456476.721000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1138 input name=query type=search | 1779456476.724000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1141 input name=query type=search | 1779456476.727000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1145 input name=query type=search | 1779456476.729000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1149 input name=query type=search | 1779456476.732000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1152 input name=query type=search | 1779456476.734000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1155 input name=query type=search | 1779456476.738000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1159 input name=query type=search | 1779456476.741000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1162 input name=query type=search | 1779456476.744000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1165 input name=query type=search | 1779456476.746000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1168 input name=query type=search | 1779456476.749000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1171 input name=query type=search | 1779456476.751000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1173 input name=query type=search | 1779456476.754000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1176 input name=query type=search | 1779456476.757000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1179 input name=query type=search | 1779456476.760000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1182 input name=query type=search | 1779456476.762000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1184 input name=query type=search | 1779456476.765000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1187 input name=query type=search | 1779456476.768000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1189 input name=query type=search | 1779456476.771000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1192 input name=query type=search | 1779456476.774000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1195 input name=query type=search | 1779456476.776000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1197 input name=query type=search | 1779456476.779000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1199 input name=query type=search | 1779456476.782000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1202 input name=query type=search | 1779456476.785000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1204 input name=query type=search | 1779456476.788000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1206 input name=query type=search | 1779456476.790000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1208 input name=query type=search | 1779456476.793000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1211 input name=query type=search | 1779456476.796000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1213 input name=query type=search | 1779456476.798000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1215 input name=query type=search | 1779456476.801000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1217 input name=query type=search | 1779456476.804000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1219 input name=query type=search | 1779456476.807000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1221 input name=query type=search | 1779456476.809000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1223 input name=query type=search | 1779456476.812000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1225 input name=query type=search | 1779456476.815000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1227 input name=query type=search | 1779456476.818000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1229 input name=query type=search | 1779456476.821000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1231 input name=query type=search | 1779456476.824000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1232 input name=query type=search | 1779456476.826000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1234 input name=query type=search | 1779456476.829000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1236 input name=query type=search | 1779456476.832000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1238 input name=query type=search | 1779456476.835000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1239 input name=query type=search | 1779456476.837000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1241 input name=query type=search | 1779456476.840000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1243 input name=query type=search | 1779456476.843000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1244 input name=query type=search | 1779456476.846000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1246 input name=query type=search | 1779456476.848000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1248 input name=query type=search | 1779456476.851000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1249 input name=query type=search | 1779456476.854000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1251 input name=query type=search | 1779456476.857000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1252 input name=query type=search | 1779456476.859000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1254 input name=query type=search | 1779456476.862000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1255 input name=query type=search | 1779456476.865000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1257 input name=query type=search | 1779456476.868000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1258 input name=query type=search | 1779456476.871000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1260 input name=query type=search | 1779456476.873000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1261 input name=query type=search | 1779456476.876000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1263 input name=query type=search | 1779456476.879000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1264 input name=query type=search | 1779456476.882000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1265 input name=query type=search | 1779456476.884000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1267 input name=query type=search | 1779456476.887000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1268 input name=query type=search | 1779456476.890000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1269 input name=query type=search | 1779456476.893000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1271 input name=query type=search | 1779456476.896000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1272 input name=query type=search | 1779456476.899000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1273 input name=query type=search | 1779456476.901000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1274 input name=query type=search | 1779456476.904000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1276 input name=query type=search | 1779456476.907000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1277 input name=query type=search | 1779456476.909000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1278 input name=query type=search | 1779456476.912000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1279 input name=query type=search | 1779456476.915000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1281 input name=query type=search | 1779456476.918000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1282 input name=query type=search | 1779456476.921000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1283 input name=query type=search | 1779456476.923000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1284 input name=query type=search | 1779456476.926000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1285 input name=query type=search | 1779456476.929000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1286 input name=query type=search | 1779456476.932000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1287 input name=query type=search | 1779456476.934000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1288 input name=query type=search | 1779456476.938000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1290 input name=query type=search | 1779456476.940000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1291 input name=query type=search | 1779456476.943000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1292 input name=query type=search | 1779456476.946000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1293 input name=query type=search | 1779456476.949000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1294 input name=query type=search | 1779456476.951000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1295 input name=query type=search | 1779456476.954000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1296 input name=query type=search | 1779456476.957000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1297 input name=query type=search | 1779456476.959000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1298 input name=query type=search | 1779456476.962000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1299 input name=query type=search | 1779456476.965000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1300 input name=query type=search | 1779456476.968000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1301 input name=query type=search | 1779456476.971000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1302 input name=query type=search | 1779456476.974000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1303 input name=query type=search | 1779456476.977000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1304 input name=query type=search | 1779456476.980000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1305 input name=query type=search | 1779456476.982000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1306 input name=query type=search | 1779456476.985000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1307 input name=query type=search | 1779456476.988000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1308 input name=query type=search | 1779456476.991000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1309 input name=query type=search | 1779456476.993000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1310 input name=query type=search | 1779456476.999000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1311 input name=query type=search | 1779456477.002000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1312 input name=query type=search | 1779456477.005000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1313 input name=query type=search | 1779456477.007000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1314 input name=query type=search | 1779456477.010000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1315 input name=query type=search | 1779456477.016000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1316 input name=query type=search | 1779456477.018000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1317 input name=query type=search | 1779456477.021000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1318 input name=query type=search | 1779456477.024000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1319 input name=query type=search | 1779456477.029000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1320 input name=query type=search | 1779456477.032000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1321 input name=query type=search | 1779456477.038000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1322 input name=query type=search | 1779456477.041000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1323 input name=query type=search | 1779456477.043000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1324 input name=query type=search | 1779456477.049000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1325 input name=query type=search | 1779456477.052000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1326 input name=query type=search | 1779456477.057000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1327 input name=query type=search | 1779456477.060000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1328 input name=query type=search | 1779456477.066000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1329 input name=query type=search | 1779456477.068000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1330 input name=query type=search | 1779456477.074000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1331 input name=query type=search | 1779456477.077000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1332 input name=query type=search | 1779456477.082000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1332 h3 | 1779456477.091000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1366 h3 | 1779456477.099000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1407 h3 | 1779456477.107000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1407 h3 | 1779456477.113000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1473 h3 | 1779456477.118000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1505 h3 | 1779456477.127000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1534 h3 | 1779456477.135000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1573 h3 | 1779456477.140000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1593 h3 | 1779456477.149000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.154000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.163000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.171000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.179000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.184000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.193000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.198000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.207000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.210000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.218000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.223000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.226000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.229000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.232000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.234000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.237000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.240000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.243000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.245000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.248000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.251000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.254000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.257000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.259000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.262000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.265000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.268000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.270000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.273000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.276000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.279000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.282000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.284000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.287000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.290000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.293000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.296000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.301000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.304000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.307000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.309000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.312000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.315000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.318000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.320000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.323000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.326000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.329000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.332000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.334000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.337000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.340000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.343000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.346000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.351000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.354000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.357000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.359000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.362000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.365000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.368000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.371000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.373000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.376000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.379000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.382000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.384000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.387000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.390000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.393000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.395000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.398000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.401000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.404000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.407000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.409000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.412000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.415000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.418000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.420000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.423000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.426000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.429000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.432000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.434000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.440000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.443000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.445000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.448000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.451000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.457000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.459000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.462000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.465000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.471000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.473000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.476000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.482000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.484000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.490000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.493000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.498000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.501000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.507000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.512000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.516000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.520000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.526000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.532000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.534000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.540000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.545000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.551000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.557000
+WHEEL_SWIPE | gesture=wheel_swipe x=661 y=467 pageX=661 pageY=1613 h3 | 1779456477.565000
+POINTER_DOWN | pointerType=mouse x=676 y=732 pageX=676 pageY=1878 textarea name=notes | 1779456478.126000
+POINTER_UP | pointerType=mouse x=676 y=732 pageX=676 pageY=1878 durationMs=137.5 textarea name=notes | 1779456478.264000
+TAP | gesture=tap pointerType=mouse x=676 y=732 pageX=676 pageY=1878 dx=0 dy=0 distance=0.0 durationMs=137.5 direction=right textarea name=notes | 1779456478.264000
+CLICK | gesture=click x=676 y=732 pageX=676 pageY=1878 textarea name=notes | 1779456478.264000
+KEYDOWN | key=Process code=KeyS location=0 textarea name=notes | 1779456479.507000
+KEYDOWN | key=Process code=ShiftLeft location=1 shiftKey=true textarea name=notes | 1779456480.555000
+KEYDOWN | key=Shift code=ShiftLeft location=1 shiftKey=true textarea name=notes | 1779456480.555000
+KEYDOWN | key=character code=KeyH location=0 textarea name=notes | 1779456481.102000
+KEYDOWN | key=character code=KeyS location=0 textarea name=notes | 1779456481.386000
+KEYDOWN | key=character code=KeyN location=0 textarea name=notes | 1779456481.776000
+KEYDOWN | key=character code=KeyA location=0 textarea name=notes | 1779456482.062000
+KEYDOWN | key=character code=KeyB location=0 textarea name=notes | 1779456482.347000
+KEYDOWN | key=character code=KeyW location=0 textarea name=notes | 1779456482.934000
+KEYDOWN | key=character code=KeyH location=0 textarea name=notes | 1779456483.378000
+KEYDOWN | key=character code=KeyE location=0 textarea name=notes | 1779456483.677000
+KEYDOWN | key=character code=KeyU location=0 textarea name=notes | 1779456484.066000
+KEYDOWN | key=character code=KeyR location=0 textarea name=notes | 1779456484.397000
+KEYDOWN | key=character code=KeyI location=0 textarea name=notes | 1779456484.735000
+KEYDOWN | key=character code=KeyT location=0 textarea name=notes | 1779456485.041000
+KEYDOWN | key=character code=KeyK location=0 textarea name=notes | 1779456485.359000
+KEYDOWN | key=character code=KeyS location=0 textarea name=notes | 1779456485.757000
+KEYDOWN | key=character code=KeyP location=0 textarea name=notes | 1779456486.113000
+KEYDOWN | key=character code=KeyS location=0 textarea name=notes | 1779456486.417000
+KEYDOWN | key=character code=KeyO location=0 textarea name=notes | 1779456486.733000
+KEYDOWN | key=character code=KeyA location=0 textarea name=notes | 1779456487.021000
+KEYDOWN | key=character code=KeyL location=0 textarea name=notes | 1779456487.346000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1704 h2 | 1779456489.275000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1704 h2 | 1779456489.276000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1678 h2 | 1779456489.284000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1669 h2 | 1779456489.292000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1656 h2 | 1779456489.298000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1645 h2 | 1779456489.306000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1634 h2 | 1779456489.312000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1622 h2 | 1779456489.320000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1613 h2 | 1779456489.329000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1603 h2 | 1779456489.334000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1590 h2 | 1779456489.340000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1578 h2 | 1779456489.348000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1564 h2 | 1779456489.356000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1550 h2 | 1779456489.362000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1527 h2 | 1779456489.370000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1509 h2 | 1779456489.375000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1488 h2 | 1779456489.384000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1464 h2 | 1779456489.389000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1440 h2 | 1779456489.398000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1419 h2 | 1779456489.406000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1394 h2 | 1779456489.412000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1372 h2 | 1779456489.420000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1350 h2 | 1779456489.425000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1323 h2 | 1779456489.434000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1298 h2 | 1779456489.439000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1268 h2 | 1779456489.448000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1233 h2 | 1779456489.453000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1202 h2 | 1779456489.462000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1168 h2 | 1779456489.467000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1136 h2 | 1779456489.476000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1105 h2 | 1779456489.481000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1077 h2 | 1779456489.489000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1048 h2 | 1779456489.497000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=1024 h2 | 1779456489.503000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=999 h2 | 1779456489.512000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=978 h2 | 1779456489.517000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=960 h2 | 1779456489.525000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=957 h2 | 1779456489.531000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=956 h2 | 1779456489.539000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=956 h2 | 1779456489.546000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=950 h2 | 1779456489.548000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=946 h2 | 1779456489.551000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=946 h2 | 1779456489.554000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=937 h2 | 1779456489.558000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=933 h2 | 1779456489.561000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=929 h2 | 1779456489.564000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=925 h2 | 1779456489.567000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=922 h2 | 1779456489.570000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=918 h2 | 1779456489.572000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=915 h2 | 1779456489.575000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=912 h2 | 1779456489.578000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=909 h2 | 1779456489.581000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=906 h2 | 1779456489.583000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=903 h2 | 1779456489.586000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=901 h2 | 1779456489.589000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=898 h2 | 1779456489.592000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=896 h2 | 1779456489.595000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=893 h2 | 1779456489.597000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=891 h2 | 1779456489.600000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=888 h2 | 1779456489.603000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=886 h2 | 1779456489.606000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=884 h2 | 1779456489.608000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=882 h2 | 1779456489.611000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=879 h2 | 1779456489.614000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=878 h2 | 1779456489.617000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=875 h2 | 1779456489.619000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=874 h2 | 1779456489.622000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=872 h2 | 1779456489.625000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=870 h2 | 1779456489.628000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=868 h2 | 1779456489.631000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=866 h2 | 1779456489.633000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=865 h2 | 1779456489.636000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=863 h2 | 1779456489.639000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=861 h2 | 1779456489.642000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=860 h2 | 1779456489.644000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=858 h2 | 1779456489.647000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=856 h2 | 1779456489.650000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=855 h2 | 1779456489.653000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=854 h2 | 1779456489.656000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=852 h2 | 1779456489.658000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=851 h2 | 1779456489.661000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=849 h2 | 1779456489.664000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=848 h2 | 1779456489.667000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=847 h2 | 1779456489.669000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=845 h2 | 1779456489.672000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=844 h2 | 1779456489.675000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=843 h2 | 1779456489.678000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=842 h2 | 1779456489.681000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=840 h2 | 1779456489.684000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=839 h2 | 1779456489.686000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=838 h2 | 1779456489.689000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=837 h2 | 1779456489.692000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=836 h2 | 1779456489.694000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=835 h2 | 1779456489.697000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=833 h2 | 1779456489.700000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=832 h2 | 1779456489.703000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=831 h2 | 1779456489.706000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=830 h2 | 1779456489.708000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=829 h2 | 1779456489.711000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=828 h2 | 1779456489.714000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=827 h2 | 1779456489.717000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=826 h2 | 1779456489.719000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=825 h2 | 1779456489.722000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=824 h2 | 1779456489.725000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=823 h2 | 1779456489.728000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=822 h2 | 1779456489.731000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=821 h2 | 1779456489.734000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=820 h2 | 1779456489.737000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=819 h2 | 1779456489.740000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=818 h2 | 1779456489.742000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=817 h2 | 1779456489.748000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=816 h2 | 1779456489.751000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=815 h2 | 1779456489.753000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=814 h2 | 1779456489.756000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=813 h2 | 1779456489.761000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=812 h2 | 1779456489.765000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=811 h2 | 1779456489.770000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=810 h2 | 1779456489.773000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=809 h2 | 1779456489.776000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=808 h2 | 1779456489.781000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=807 h2 | 1779456489.784000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=806 h2 | 1779456489.789000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=805 h2 | 1779456489.795000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=804 h2 | 1779456489.798000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=803 h2 | 1779456489.803000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=802 h2 | 1779456489.809000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=801 h2 | 1779456489.815000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=800 h2 | 1779456489.817000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=799 h2 | 1779456489.823000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=798 h2 | 1779456489.828000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=797 h2 | 1779456489.834000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=796 h2 | 1779456489.839000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=795 h2 | 1779456489.845000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=794 h2 | 1779456489.853000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=793 h2 | 1779456489.859000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=792 h2 | 1779456489.864000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=791 h2 | 1779456489.873000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=790 h2 | 1779456489.878000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=789 h2 | 1779456489.887000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=788 h2 | 1779456489.904000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=763 h2 | 1779456489.909000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=751 h2 | 1779456489.915000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=730 h2 | 1779456489.925000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=715 h2 | 1779456489.928000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=694 h2 | 1779456489.936000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=676 h2 | 1779456489.942000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=655 h2 | 1779456489.951000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=636 h2 | 1779456489.959000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=616 h2 | 1779456489.964000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=595 h2 | 1779456489.973000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=573 h2 | 1779456489.978000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456489.987000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456489.993000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.002000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.010000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.015000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.024000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.029000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.037000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.042000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.051000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.057000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.065000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.070000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.079000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.084000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.098000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.107000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.113000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.130000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.135000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.138000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.140000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.143000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.145000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.148000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.151000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.153000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.157000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.159000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.162000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.165000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.168000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.170000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.173000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.176000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.179000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.182000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.185000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.188000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.190000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.192000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.195000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.198000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.201000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.204000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.206000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.209000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.212000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.215000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.218000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.220000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.223000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.226000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.229000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.231000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.235000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.237000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.240000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.242000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.245000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.249000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.251000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.255000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.259000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.262000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.265000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.267000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.270000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.274000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.279000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.282000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.285000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.290000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.293000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.298000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.301000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.306000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.313000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.315000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.321000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.326000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.331000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.337000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.344000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.348000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.354000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.363000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.367000
+WHEEL_SWIPE | gesture=wheel_swipe x=946 y=569 pageX=946 pageY=569 h2 | 1779456490.375000
+POINTER_DOWN | pointerType=mouse x=670 y=301 pageX=670 pageY=301 button #shoppingStopSensingBtn type=button label=Stop | 1779456491.759000
+POINTER_UP | pointerType=mouse x=670 y=301 pageX=670 pageY=301 durationMs=105.5 button #shoppingStopSensingBtn type=button label=Stop | 1779456491.865000
+TAP | gesture=tap pointerType=mouse x=670 y=301 pageX=670 pageY=301 dx=0 dy=0 distance=0.0 durationMs=105.5 direction=right button #shoppingStopSensingBtn type=button label=Stop | 1779456491.865000
+CLICK | gesture=click x=670 y=301 pageX=670 pageY=301 button #shoppingStopSensingBtn type=button label=Stop | 1779456491.865000
+TRACKING_DATA_DOWNLOADED |  | 1779456491.866000

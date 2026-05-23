@@ -17,9 +17,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
+  const analysisApiUrl = "/api/analyze-recording";
   const targetSampleRate = 48000;
   let micStream = null;
   let audioContext = null;
+  let chirpPlaybackBuffer = null;
+  let chirpSourceNode = null;
   let sensingSourceNode = null;
   let sensingProcessorNode = null;
   let recordingBufferChunks = [];
@@ -79,12 +82,31 @@ document.addEventListener("DOMContentLoaded", () => {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
-        channelCount: { ideal: 2 },
+        channelCount: { ideal: 1 },
         sampleRate: { ideal: targetSampleRate },
-        sampleSize: { ideal: 24 }
+        sampleSize: { ideal: 32 }
       },
       video: false
     };
+  }
+
+  function getPrimaryAudioTrack() {
+    if (!micStream) {
+      return null;
+    }
+    return micStream.getAudioTracks().find((track) => track.readyState === "live") || null;
+  }
+
+  function tryCallTrackMethod(track, methodName) {
+    if (!track || typeof track[methodName] !== "function") {
+      return null;
+    }
+
+    try {
+      return track[methodName]();
+    } catch (error) {
+      return { error: error.message };
+    }
   }
 
   function getAudioContext() {
@@ -105,6 +127,51 @@ document.addEventListener("DOMContentLoaded", () => {
       sensingProcessorNode.onaudioprocess = null;
       sensingProcessorNode = null;
     }
+  }
+
+  async function loadChirpPlaybackBuffer() {
+    const context = getAudioContext();
+    const response = await fetch(chirpAudioUrl);
+    if (!response.ok) {
+      throw new Error("Audio fetch failed");
+    }
+
+    const chirpArrayBuffer = await response.arrayBuffer();
+    chirpPlaybackBuffer = await context.decodeAudioData(chirpArrayBuffer.slice(0));
+  }
+
+  function startChirpPlayback() {
+    if (!chirpPlaybackBuffer) {
+      throw new Error("Chirp audio is not decoded");
+    }
+
+    const context = getAudioContext();
+    stopChirpPlayback();
+    chirpSourceNode = context.createBufferSource();
+    chirpSourceNode.buffer = chirpPlaybackBuffer;
+    chirpSourceNode.loop = true;
+    chirpSourceNode.connect(context.destination);
+    chirpSourceNode.onended = () => {
+      chirpSourceNode = null;
+    };
+    chirpSourceNode.start(0);
+    sensingAudio.loop = true;
+  }
+
+  function stopChirpPlayback() {
+    if (!chirpSourceNode) {
+      return;
+    }
+
+    const sourceNode = chirpSourceNode;
+    chirpSourceNode = null;
+    sourceNode.onended = null;
+    try {
+      sourceNode.stop();
+    } catch (error) {
+      // Already stopped.
+    }
+    sourceNode.disconnect();
   }
 
   function resetRecordingBuffers() {
@@ -141,49 +208,238 @@ document.addEventListener("DOMContentLoaded", () => {
     return Math.max(-1, Math.min(1, sample));
   }
 
+  function estimateChirpPeriod(audioBuffer) {
+    const sampleRate = audioBuffer.sampleRate;
+    const expectedPeriodSamples = Math.round(0.020 * sampleRate);
+    const samples = toMonoChannel(audioBuffer);
+    const analysisLength = Math.min(samples.length, Math.round(sampleRate * 1.5));
+
+    if (analysisLength < expectedPeriodSamples * 4) {
+      return {
+        status: "insufficient_audio",
+        expectedPeriodSamples,
+        sampleRate
+      };
+    }
+
+    let energy = 0;
+    for (let index = 0; index < analysisLength; index += 1) {
+      energy += samples[index] * samples[index];
+    }
+    const rms = Math.sqrt(energy / analysisLength);
+    if (rms < 1e-6) {
+      return {
+        status: "too_quiet",
+        expectedPeriodSamples,
+        sampleRate,
+        rms
+      };
+    }
+
+    const searchRadius = Math.max(2, Math.round(expectedPeriodSamples * 0.02));
+    let bestLag = expectedPeriodSamples;
+    let bestScore = -Infinity;
+
+    for (let lag = expectedPeriodSamples - searchRadius; lag <= expectedPeriodSamples + searchRadius; lag += 1) {
+      let cross = 0;
+      let energyA = 0;
+      let energyB = 0;
+      const compareLength = analysisLength - lag;
+
+      for (let index = 0; index < compareLength; index += 1) {
+        const a = samples[index];
+        const b = samples[index + lag];
+        cross += a * b;
+        energyA += a * a;
+        energyB += b * b;
+      }
+
+      const score = cross / Math.sqrt((energyA * energyB) + 1e-24);
+      if (score > bestScore) {
+        bestScore = score;
+        bestLag = lag;
+      }
+    }
+
+    return {
+      status: bestScore > 0.05 ? "estimated" : "low_confidence",
+      expectedPeriodSamples,
+      estimatedPeriodSamples: bestLag,
+      deviationSamples: bestLag - expectedPeriodSamples,
+      estimatedPeriodMs: (bestLag / sampleRate) * 1000,
+      expectedPeriodMs: 20,
+      normalizedCorrelation: bestScore,
+      analyzedSamples: analysisLength,
+      sampleRate,
+      rms
+    };
+  }
+
+  function buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate) {
+    const track = getPrimaryAudioTrack();
+    const context = getAudioContext();
+    return {
+      schemaVersion: 1,
+      createdAt: new Date().toISOString(),
+      browser: {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform
+      },
+      requestedMicrophoneConstraints: getMicrophoneConstraints().audio,
+      microphoneTrack: {
+        present: Boolean(track),
+        label: track ? track.label : "",
+        readyState: track ? track.readyState : "",
+        enabled: track ? track.enabled : null,
+        muted: track ? track.muted : null,
+        settings: tryCallTrackMethod(track, "getSettings"),
+        capabilities: tryCallTrackMethod(track, "getCapabilities"),
+        constraints: tryCallTrackMethod(track, "getConstraints")
+      },
+      audioContext: {
+        sampleRate: context.sampleRate,
+        state: context.state,
+        baseLatency: Number.isFinite(context.baseLatency) ? context.baseLatency : null,
+        outputLatency: Number.isFinite(context.outputLatency) ? context.outputLatency : null
+      },
+      playback: {
+        engine: "Web Audio AudioBufferSourceNode",
+        chirpFileName: chirpAudioFileName,
+        chirpBufferSampleRate: chirpPlaybackBuffer ? chirpPlaybackBuffer.sampleRate : null,
+        chirpBufferLength: chirpPlaybackBuffer ? chirpPlaybackBuffer.length : null,
+        chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
+        loop: true
+      },
+      recordingExport: {
+        container: "WAV",
+        encoding: "IEEE_FLOAT",
+        channels: 1,
+        bitsPerSample: 32,
+        sampleRate: recordedAudioBuffer.sampleRate,
+        frameCount: recordedAudioBuffer.length,
+        duration: recordedAudioBuffer.duration
+      },
+      signalCheck: {
+        method: "normalized_autocorrelation_near_20ms_chirp_period",
+        chirpPeriodEstimate
+      },
+      limitations: [
+        "Browser APIs report the stream visible to JavaScript, not every conversion inside the OS mixer or hardware driver.",
+        "If device hardware runs at a different native rate, the browser or OS may resample before JavaScript receives audio.",
+        "The chirp-period signal check is empirical evidence from the exported recording, not direct access to hardware clocks."
+      ]
+    };
+  }
+
+  function downloadAudioDiagnostics(diagnostics, timestamp) {
+    const diagnosticsUrl = URL.createObjectURL(new Blob([JSON.stringify(diagnostics, null, 2)], {
+      type: "application/json"
+    }));
+    triggerDownload(diagnosticsUrl, `${recordingFilePrefix}_diagnostics_${timestamp}.json`);
+    window.setTimeout(() => URL.revokeObjectURL(diagnosticsUrl), 1000);
+  }
+
+  function downloadGeneratedFigures(result) {
+    if (!result || !Array.isArray(result.figures)) {
+      return 0;
+    }
+
+    for (const figure of result.figures) {
+      if (!figure || !figure.url || !figure.name) {
+        continue;
+      }
+      triggerDownload(figure.url, figure.name);
+    }
+
+    return result.figures.length;
+  }
+
+  async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp) {
+    if (!trackingArtifacts || !trackingArtifacts.osEventLog) {
+      return null;
+    }
+
+    const formData = new FormData();
+    formData.append("recording", wavBlob, `${recordingFilePrefix}_${timestamp}.wav`);
+    formData.append(
+      "events",
+      new Blob([trackingArtifacts.osEventLog], { type: "text/plain" }),
+      `os_event_log_${timestamp}.txt`
+    );
+    formData.append(
+      "diagnostics",
+      new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" }),
+      `${recordingFilePrefix}_diagnostics_${timestamp}.json`
+    );
+    formData.append("timestamp", timestamp);
+    formData.append("prefix", recordingFilePrefix);
+
+    const response = await fetch(analysisApiUrl, {
+      method: "POST",
+      body: formData
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = await response.json();
+    return result && result.ok ? result : null;
+  }
+
+  function toMonoFloat32(inputBuffer) {
+    const channelCount = inputBuffer.numberOfChannels;
+    const length = inputBuffer.length;
+    const mono = new Float32Array(length);
+
+    for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+      const channelData = inputBuffer.getChannelData(channelIndex);
+      for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+        mono[sampleIndex] += channelData[sampleIndex];
+      }
+    }
+
+    if (channelCount > 1) {
+      for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+        mono[sampleIndex] /= channelCount;
+      }
+    }
+
+    return mono;
+  }
+
   function buildAudioBufferFromRecording(context) {
     if (!recordedFrameCount || !recordingChannelCount) {
       return null;
     }
 
     const audioBuffer = context.createBuffer(
-      recordingChannelCount,
+      1,
       recordedFrameCount,
       context.sampleRate
     );
-    const channelData = [];
+    const channelData = audioBuffer.getChannelData(0);
     let frameOffset = 0;
 
-    for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-      channelData.push(audioBuffer.getChannelData(channelIndex));
-    }
-
     for (const chunk of recordingBufferChunks) {
-      for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-        channelData[channelIndex].set(chunk[channelIndex], frameOffset);
-      }
-      frameOffset += chunk[0].length;
+      channelData.set(chunk, frameOffset);
+      frameOffset += chunk.length;
     }
 
     return audioBuffer;
   }
 
   function encodeAudioBufferToWav(audioBuffer) {
-    const channelCount = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
     const frameCount = audioBuffer.length;
-    const bytesPerSample = 2;
+    const channelCount = 1;
+    const bytesPerSample = 4;
     const blockAlign = channelCount * bytesPerSample;
     const byteRate = sampleRate * blockAlign;
     const dataSize = frameCount * blockAlign;
     const wavBuffer = new ArrayBuffer(44 + dataSize);
     const view = new DataView(wavBuffer);
-    const channelData = [];
+    const channelData = toMonoChannel(audioBuffer);
     let offset = 0;
-
-    for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-      channelData.push(audioBuffer.getChannelData(channelIndex));
-    }
 
     function writeAscii(text) {
       for (let index = 0; index < text.length; index += 1) {
@@ -199,7 +455,7 @@ document.addEventListener("DOMContentLoaded", () => {
     writeAscii("fmt ");
     view.setUint32(offset, 16, true);
     offset += 4;
-    view.setUint16(offset, 1, true);
+    view.setUint16(offset, 3, true);
     offset += 2;
     view.setUint16(offset, channelCount, true);
     offset += 2;
@@ -216,12 +472,8 @@ document.addEventListener("DOMContentLoaded", () => {
     offset += 4;
 
     for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
-      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-        const sample = clampPcmSample(channelData[channelIndex][frameIndex]);
-        const pcmValue = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-        view.setInt16(offset, Math.round(pcmValue), true);
-        offset += bytesPerSample;
-      }
+      view.setFloat32(offset, clampPcmSample(channelData[frameIndex]), true);
+      offset += bytesPerSample;
     }
 
     return new Blob([wavBuffer], { type: "audio/wav" });
@@ -400,7 +652,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function downloadRecordedAudio(recordedAudioBuffer) {
+  async function downloadRecordedAudio(recordedAudioBuffer, options = {}) {
     if (!recordedAudioBuffer) {
       setSensingStatus("Sensing stopped, but no microphone recording was captured.");
       resetRecordingBuffers();
@@ -408,7 +660,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const timestamp = buildTimestamp();
+      const timestamp = options.timestamp || buildTimestamp();
+      const chirpPeriodEstimate = estimateChirpPeriod(recordedAudioBuffer);
+      const diagnostics = buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate);
       const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
       await renderSpectrogram(wavBlob);
 
@@ -420,7 +674,27 @@ document.addEventListener("DOMContentLoaded", () => {
         spectrogramCanvas.toDataURL("image/png"),
         `${recordingFilePrefix}_spectrogram_${timestamp}.png`
       );
-      setSensingStatus("Sensing is stopped. Recording, spectrogram, and tracking data downloaded.");
+      downloadAudioDiagnostics(diagnostics, timestamp);
+      setSensingStatus("Sensing stopped. Running Python IQ pipeline for input-event amplitude/phase figure...");
+
+      let figureCount = 0;
+      try {
+        const analysisResult = await requestFigureGeneration(
+          wavBlob,
+          diagnostics,
+          options.trackingArtifacts,
+          timestamp
+        );
+        figureCount = downloadGeneratedFigures(analysisResult);
+      } catch (error) {
+        figureCount = 0;
+      }
+
+      if (figureCount > 0) {
+        setSensingStatus(`Sensing is stopped. Recording, spectrogram, diagnostics, tracking data, and ${figureCount} Python IQ input-event figure downloaded.`);
+      } else {
+        setSensingStatus("Sensing is stopped. Recording, spectrogram, diagnostics, and tracking data downloaded. Exact Python figures require serving the app with webagent/server.py.");
+      }
     } catch (error) {
       setSensingStatus("Sensing stopped, but failed to download the recording or spectrogram.");
     } finally {
@@ -475,29 +749,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const microphoneOnlyStream = new MediaStream(liveTracks);
-      const channelCount = Math.max(
-        1,
-        Math.min(2, liveTracks[0].getSettings().channelCount || 1)
-      );
+      const channelCount = 1;
 
       stopSensingCapture();
       resetRecordingBuffers();
       clearSpectrogram();
+      await loadChirpPlaybackBuffer();
       sensingSourceNode = context.createMediaStreamSource(microphoneOnlyStream);
       sensingProcessorNode = context.createScriptProcessor(4096, channelCount, channelCount);
       sensingProcessorNode.onaudioprocess = (event) => {
         const inputBuffer = event.inputBuffer;
 
         if (!recordingChannelCount) {
-          recordingChannelCount = inputBuffer.numberOfChannels;
+          recordingChannelCount = 1;
         }
 
-        const chunk = [];
-        for (let channelIndex = 0; channelIndex < recordingChannelCount; channelIndex += 1) {
-          chunk.push(new Float32Array(inputBuffer.getChannelData(channelIndex)));
-        }
+        const chunk = toMonoFloat32(inputBuffer);
         recordingBufferChunks.push(chunk);
-        recordedFrameCount += inputBuffer.length;
+        recordedFrameCount += chunk.length;
       };
       sensingSourceNode.connect(sensingProcessorNode);
       sensingProcessorNode.connect(context.destination);
@@ -505,7 +774,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sensingAudio.src = chirpAudioUrl;
       sensingAudio.loop = true;
       sensingAudio.currentTime = 0;
-      await sensingAudio.play();
+      startChirpPlayback();
 
       sensingActive = true;
       window.interactionTracker.beginSession();
@@ -514,7 +783,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       sensingActive = false;
       window.interactionTracker.setEnabled(false);
-      sensingAudio.pause();
+      stopChirpPlayback();
       stopSensingCapture();
       resetRecordingBuffers();
       setSensingControls(Boolean(micStream), false);
@@ -527,24 +796,26 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const timestamp = buildTimestamp();
     const shouldDownloadRecording = download && recordedFrameCount > 0;
     const completedRecording = shouldDownloadRecording
       ? buildAudioBufferFromRecording(getAudioContext())
       : null;
 
     sensingActive = false;
+    let trackingArtifacts = null;
     if (download) {
-      window.interactionTracker.downloadTrackingData();
+      trackingArtifacts = window.interactionTracker.downloadTrackingData(timestamp);
     }
     window.interactionTracker.setEnabled(false);
     setSensingControls(Boolean(micStream), false);
-    sensingAudio.pause();
+    stopChirpPlayback();
     sensingAudio.currentTime = 0;
     stopSensingCapture();
 
     if (download) {
       setSensingStatus("Sensing stopped. Preparing recording and spectrogram downloads...");
-      await downloadRecordedAudio(completedRecording);
+      await downloadRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
     } else {
       resetRecordingBuffers();
       setSensingStatus(`Sensing is stopped. ${siteLabel} is not being tracked.`);
@@ -778,8 +1049,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  window.experimentSensing = {
+    isPlaybackActive: () => Boolean(chirpSourceNode),
+    getRecordingChannelCount: () => recordingChannelCount,
+    getTargetSampleRate: () => targetSampleRate
+  };
+
   window.addEventListener("pagehide", () => {
     void stopSensing({ download: false });
+    stopChirpPlayback();
     if (micStream) {
       micStream.getTracks().forEach((track) => track.stop());
       micStream = null;
