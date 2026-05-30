@@ -29,7 +29,7 @@ The current design goal is intentionally simple and functional, with minimal vis
 From the project root:
 
 ```bash
-python3 server.py
+python webagent/server.py
 ```
 
 Then open:
@@ -45,11 +45,26 @@ http://localhost:8000/experiments/
 http://localhost:8000/experiments/travel/
 ```
 
+For real-time amplitude/phase plotting on the main page, start the local
+WebSocket DSP backend in a second terminal:
+
+```bash
+python webagent/realtime_server.py
+```
+
+Then open `http://localhost:8000/` and click `Start sensing`. The browser still
+records and downloads the WAV on Stop, but while sensing is active it also
+streams Float32 microphone frames to `ws://127.0.0.1:8765` and updates the live
+amplitude/phase chart from Python IQ features.
+
 ## Main Site Behavior
 
 - Requests microphone permission on load.
 - Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
 - Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
+- Start sensing streams microphone frames to the optional local real-time Python
+  backend through WebSocket and updates the live amplitude/phase chart when the
+  backend is running.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.
@@ -69,6 +84,22 @@ http://localhost:8000/experiments/travel/
   autocorrelation check around the expected 20 ms / 960-sample chirp period.
 - The spectrogram renderer includes axes and uses the same visual generation style expected by the tests.
 - The main page links to both dummy experiment sites.
+
+## Real-Time Python IQ
+
+Real-time mode is implemented by:
+
+- `audio-frame-worklet.js`: browser `AudioWorkletProcessor` that downmixes mic
+  input and emits fixed-size Float32 frames.
+- `realtime_server.py`: local WebSocket server at `ws://127.0.0.1:8765`.
+- `realtime_iq.py`: streaming IQ processor that performs causal bandpass,
+  chirp alignment, dechirp/range-bank matching, and live amplitude/phase
+  extraction.
+
+The real-time backend intentionally sends feature numbers, not matplotlib
+images. The browser draws the live chart so updates stay responsive. The
+existing Stop-time WAV upload and matplotlib figure generation remain available
+for offline validation.
 
 ## Experiment Site Behavior
 
