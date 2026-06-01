@@ -1,6 +1,13 @@
 .idea/
+.DS_Store
+.env
+.venv/
+venv/
 __pycache__/
+.pytest_cache/
 *.pyc
+*.pyo
 node_modules/
+npm-debug.log*
 playwright-report/
 test-results/

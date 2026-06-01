@@ -247,7 +247,7 @@
         <audio id="receivedAudio" class="audio-player hidden" loop></audio>
         <div id="realtimePanel" class="realtime-panel">
           <h4>Live Python IQ</h4>
-          <p id="realtimeStatus">Start the local real-time backend to see live amplitude and phase.</p>
+          <p id="realtimeStatus">Start the backend server to see live amplitude and phase.</p>
           <div class="realtime-chart-wrap">
             <canvas id="realtimeCanvas" class="realtime-canvas" width="820" height="390"></canvas>
           </div>
@@ -301,16 +301,46 @@
     let realtimeFeaturePoints = [];
     let realtimeEventMarkers = [];
     let realtimeDrawPending = false;
-    let realtimeLastStatusMessage = "Start the local real-time backend to see live amplitude and phase.";
+    let realtimeLastStatusMessage = "Start the backend server to see live amplitude and phase.";
     let realtimeFramesSent = 0;
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
+
+    function getLocalStorageItem(key) {
+      try {
+        return window.localStorage.getItem(key) || "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function getLocalStorageNumber(key, fallbackValue) {
+      const rawValue = getLocalStorageItem(key).trim();
+      if (!rawValue) {
+        return fallbackValue;
+      }
+      const parsedValue = Number(rawValue);
+      return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+    }
+
+    function isLocalRealtimeHost(hostname) {
+      return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "";
+    }
+
+    function getRealtimeWebSocketUrl() {
+      const overrideUrl = getLocalStorageItem("webagentRealtimeWebSocketUrl").trim();
+      if (overrideUrl) {
+        return overrideUrl;
+      }
+      return isLocalRealtimeHost(window.location.hostname) ? "ws://127.0.0.1:8765" : "";
+    }
 
     const appConfig = {
       downloadFileName: "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav",
       uploadApiUrl: "/api/upload-recording",
       analysisApiUrl: "/api/analyze-recording",
-      realtimeWebSocketUrl: "ws://127.0.0.1:8765"
+      realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
+      audioEventOffsetMs: getLocalStorageNumber("webagentAudioEventOffsetMs", 80)
     };
 
     const realtimeConfig = {
@@ -1115,7 +1145,11 @@
         framesReceived: realtimeFramesReceived,
         featuresReceived: realtimeFeaturesReceived,
         points: realtimeFeaturePoints.length,
-        status: realtimeLastStatusMessage
+        status: realtimeLastStatusMessage,
+        realtimeWebSocketUrl: appConfig.realtimeWebSocketUrl || null,
+        audioEventOffsetMs: appConfig.audioEventOffsetMs,
+        latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+        markers: realtimeEventMarkers.slice(-8)
       })
     };
 
@@ -1618,6 +1652,10 @@
       realtimeFeaturesReceived += 1;
       realtimeFeaturePoints.push({
         time: Number(message.time) || 0,
+        timestamp: Number.isFinite(message.timestamp) ? message.timestamp : null,
+        timestamp_source: message.timestamp_source || "",
+        window_start_time: Number.isFinite(message.window_start_time) ? message.window_start_time : null,
+        window_end_time: Number.isFinite(message.window_end_time) ? message.window_end_time : null,
         amplitude_norm: Number.isFinite(message.amplitude_norm) ? message.amplitude_norm : 0,
         phase: Number.isFinite(message.phase) ? message.phase : 0,
         range_cm: Number.isFinite(message.range_cm) ? message.range_cm : 0
@@ -1686,6 +1724,10 @@
       if (!Number.isFinite(eventTime) || eventTime < 0) {
         return;
       }
+      const correctedEventTime = eventTime + appConfig.audioEventOffsetMs / 1000;
+      if (!Number.isFinite(correctedEventTime) || correctedEventTime < 0) {
+        return;
+      }
       const keepNames = new Set([
         "keydown",
         "tap_to_click",
@@ -1706,7 +1748,9 @@
         return;
       }
       realtimeEventMarkers.push({
-        time: eventTime,
+        time: correctedEventTime,
+        rawTime: eventTime,
+        offsetMs: appConfig.audioEventOffsetMs,
         label: getRealtimeMarkerLabel(event),
         color: getRealtimeMarkerColor(event.name)
       });
@@ -1829,9 +1873,12 @@
 
     async function startRealtimeSession() {
       resetRealtimeChart();
-      realtimeSessionStartEpoch = Date.now() / 1000;
       if (!("WebSocket" in window)) {
         setRealtimeStatus("Live Python IQ unavailable: WebSocket is not supported.");
+        return false;
+      }
+      if (!appConfig.realtimeWebSocketUrl) {
+        setRealtimeStatus("Live Python IQ disabled on hosted pages. Set localStorage.webagentRealtimeWebSocketUrl to a public wss:// backend to enable it.");
         return false;
       }
 
@@ -1849,7 +1896,7 @@
           } catch (error) {
             // Ignore close races.
           }
-          setRealtimeStatus("Live Python IQ backend not connected. Run: python webagent/realtime_server.py");
+          setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
           resolve(false);
         }, 1200);
 
@@ -1861,6 +1908,7 @@
           window.clearTimeout(timeout);
           realtimeSocket = socket;
           realtimeStreamingActive = true;
+          realtimeSessionStartEpoch = Date.now() / 1000;
           socket.send(JSON.stringify({
             type: "start",
             timestamp: realtimeSessionStartEpoch,
@@ -1888,7 +1936,7 @@
           if (!settled) {
             settled = true;
             window.clearTimeout(timeout);
-            setRealtimeStatus("Live Python IQ backend not connected. Run: python webagent/realtime_server.py");
+            setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
             resolve(false);
           }
         });
@@ -1902,7 +1950,7 @@
             } catch (error) {
               // Ignore close races.
             }
-            setRealtimeStatus("Live Python IQ backend not connected. Run: python webagent/realtime_server.py");
+            setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
             resolve(false);
           }
         });
@@ -2254,7 +2302,7 @@
         if (figureCount > 0) {
           fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram, diagnostics, and ${figureCount} Python IQ input-event figure.`;
         } else {
-          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram and diagnostics. Exact Python figures require serving the app with webagent/server.py.`;
+          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram and diagnostics. Exact Python figures require serving the app with server.py.`;
         }
       } catch (error) {
         fileStatus.textContent = "Sensing stopped, but failed to download the recording or spectrogram.";

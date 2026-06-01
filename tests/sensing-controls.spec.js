@@ -1,6 +1,44 @@
 const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
+test("keeps realtime IQ local by default and allows hosted override", async ({ page }) => {
+  await page.goto("/");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
+  ))).toBe("ws://127.0.0.1:8765");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
+  ))).toBe(80);
+
+  await page.evaluate(() => {
+    window.localStorage.setItem("webagentAudioEventOffsetMs", "125");
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
+  ))).toBe(125);
+
+  await page.goto("http://hosted.test:8010/");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
+  ))).toBe(null);
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
+  ))).toBe(80);
+
+  await page.evaluate(() => {
+    window.localStorage.setItem("webagentRealtimeWebSocketUrl", "wss://iq.example.test/ws");
+    window.localStorage.setItem("webagentAudioEventOffsetMs", "40");
+  });
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
+  ))).toBe("wss://iq.example.test/ws");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
+  ))).toBe(40);
+});
+
 test("loops the chirp between start and stop sensing", async ({ page }) => {
   await page.goto("/");
 

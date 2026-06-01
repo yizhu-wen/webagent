@@ -68,6 +68,8 @@ class StreamingIqProcessor:
         self.start_epoch = start_epoch
         self.filter_zi = np.zeros((self.sos.shape[0], 2), dtype=np.float64)
         self.buffer = np.empty(0, dtype=np.float64)
+        self.buffer_start_sample = 0
+        self.received_sample_count = 0
         self.aligned = False
         self.alignment = None
         self.chirp_index = 0
@@ -114,6 +116,7 @@ class StreamingIqProcessor:
         baseline = float(np.median(abs_corr))
 
         self.buffer = self.buffer[phase_delta:]
+        self.buffer_start_sample += phase_delta
         self.aligned = True
         self.alignment = {
             "global_delta_samples": global_delta,
@@ -133,7 +136,7 @@ class StreamingIqProcessor:
             self.amp_peak = max(0.995 * self.amp_peak, amp)
         return float((amp - self.amp_floor) / max(self.amp_peak - self.amp_floor, 1e-12))
 
-    def _process_one_chirp(self, samples: np.ndarray) -> dict:
+    def _process_one_chirp(self, samples: np.ndarray, chirp_start_sample: int) -> dict:
         rx_analytic = hilbert(samples)
         if_data = rx_analytic * self.tx_conj
         c_all = np.conj(self.ref_bank) @ if_data
@@ -150,13 +153,22 @@ class StreamingIqProcessor:
             self.phase_unwrapped += delta
         self.prev_phase_angle = phase_angle
 
-        t_rel = self.chirp_index * T_TRI
+        chirp_center_sample = chirp_start_sample + (N_TRI - 1) / 2
+        t_rel = chirp_center_sample / FS
+        window_start_time = chirp_start_sample / FS
+        window_end_time = (chirp_start_sample + N_TRI) / FS
         displacement_mm = self.phase_unwrapped * WAVELENGTH / (4 * np.pi) * 1000
         feature = {
             "type": "feature",
             "time": t_rel,
             "timestamp": (self.start_epoch + t_rel) if self.start_epoch is not None else None,
             "chirp_index": self.chirp_index,
+            "chirp_start_sample": chirp_start_sample,
+            "chirp_center_sample": chirp_center_sample,
+            "window_start_time": window_start_time,
+            "window_end_time": window_end_time,
+            "legacy_time": self.chirp_index * T_TRI,
+            "timestamp_source": "processed_sample_chirp_center",
             "amplitude": amp,
             "amplitude_norm": amp_norm,
             "phase": self.phase_unwrapped,
@@ -173,6 +185,7 @@ class StreamingIqProcessor:
         samples = self._resample_if_needed(samples)
         filtered, self.filter_zi = sosfilt(self.sos, samples, zi=self.filter_zi)
         self.buffer = np.concatenate([self.buffer, filtered])
+        self.received_sample_count += len(filtered)
 
         out = []
         if not self.aligned:
@@ -182,13 +195,17 @@ class StreamingIqProcessor:
             out.append({"type": "alignment", **alignment})
 
         while len(self.buffer) >= N_TRI:
+            chirp_start_sample = self.buffer_start_sample
             chirp = self.buffer[:N_TRI]
             self.buffer = self.buffer[N_TRI:]
-            out.append(self._process_one_chirp(chirp))
+            self.buffer_start_sample += N_TRI
+            out.append(self._process_one_chirp(chirp, chirp_start_sample))
 
         # Bound memory if the browser pauses or changes stream shape.
         max_keep = N_TRI * 8
         if len(self.buffer) > max_keep:
+            trimmed = len(self.buffer) - max_keep
             self.buffer = self.buffer[-max_keep:]
+            self.buffer_start_sample += trimmed
 
         return out

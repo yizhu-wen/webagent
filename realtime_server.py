@@ -3,7 +3,7 @@
 
 Run from the project root or webagent folder:
 
-    python webagent/realtime_server.py
+    python realtime_server.py
 
 The browser streams raw Float32 microphone frames to ws://127.0.0.1:8765.
 This server returns JSON amplitude/phase/range features for live plotting.

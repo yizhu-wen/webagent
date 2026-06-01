@@ -2,11 +2,14 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default as email_default_policy
+import asyncio
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import threading
 import uuid
 from urllib.parse import urlparse
 
@@ -16,8 +19,42 @@ WEBAGENT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = WEBAGENT_DIR.parent
 AUDIO_FILE_PATH = WEBAGENT_DIR / AUDIO_FILE_NAME
 UPLOAD_DIR = WEBAGENT_DIR / "uploads"
-ANALYSIS_SCRIPT = PROJECT_DIR / "analyze_webagent_recording.py"
+ANALYSIS_SCRIPT_NAME = "analyze_webagent_recording.py"
+ANALYSIS_SCRIPT_CANDIDATES = (
+    WEBAGENT_DIR / ANALYSIS_SCRIPT_NAME,
+    PROJECT_DIR / ANALYSIS_SCRIPT_NAME,
+)
 MAX_ANALYSIS_UPLOAD_BYTES = 120 * 1024 * 1024
+
+
+def env_flag(name: str, default: bool = True) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def start_realtime_backend() -> threading.Thread | None:
+    if not env_flag("REALTIME_ENABLED", True):
+        print("Realtime IQ WebSocket backend disabled by REALTIME_ENABLED=0")
+        return None
+
+    host = os.environ.get("REALTIME_HOST", "127.0.0.1")
+    port = int(os.environ.get("REALTIME_PORT", "8765"))
+
+    def run_realtime() -> None:
+        try:
+            from realtime_server import DEFAULT_TX, run_server
+
+            tx_path = Path(os.environ.get("REALTIME_TX", str(DEFAULT_TX)))
+            asyncio.run(run_server(host, port, tx_path))
+        except Exception as exc:
+            print(f"Realtime IQ WebSocket backend failed: {exc}", file=sys.stderr)
+
+    thread = threading.Thread(target=run_realtime, name="realtime-iq-server", daemon=True)
+    thread.start()
+    print(f"Realtime IQ WebSocket backend starting at ws://{host}:{port}")
+    return thread
 
 
 class AppHandler(SimpleHTTPRequestHandler):
@@ -30,10 +67,32 @@ class AppHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(data)
+
+    def _send_health(self, include_body: bool = True) -> None:
+        data = b'{"ok":true}\n'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        if include_body:
+            self.wfile.write(data)
+
+    def do_GET(self) -> None:
+        if urlparse(self.path).path == "/healthz":
+            self._send_health()
+            return
+        super().do_GET()
+
+    def do_HEAD(self) -> None:
+        if urlparse(self.path).path == "/healthz":
+            self._send_health(include_body=False)
+            return
+        super().do_HEAD()
 
     def do_OPTIONS(self) -> None:
         parsed_path = urlparse(self.path).path
@@ -154,8 +213,10 @@ class AppHandler(SimpleHTTPRequestHandler):
         if "multipart/form-data" not in content_type.lower():
             self._send_json(415, {"ok": False, "error": "Expected multipart/form-data"})
             return
-        if not ANALYSIS_SCRIPT.exists():
-            self._send_json(500, {"ok": False, "error": f"Missing analysis script: {ANALYSIS_SCRIPT}"})
+        analysis_script = next((path for path in ANALYSIS_SCRIPT_CANDIDATES if path.exists()), ANALYSIS_SCRIPT_CANDIDATES[0])
+        if not analysis_script.exists():
+            candidates = ", ".join(str(path) for path in ANALYSIS_SCRIPT_CANDIDATES)
+            self._send_json(500, {"ok": False, "error": f"Missing analysis script. Checked: {candidates}"})
             return
 
         body = self.rfile.read(content_length)
@@ -194,7 +255,7 @@ class AppHandler(SimpleHTTPRequestHandler):
 
         cmd = [
             sys.executable,
-            str(ANALYSIS_SCRIPT),
+            str(analysis_script),
             "--wav",
             str(wav_path),
             "--events",
@@ -210,7 +271,7 @@ class AppHandler(SimpleHTTPRequestHandler):
         try:
             completed = subprocess.run(
                 cmd,
-                cwd=str(PROJECT_DIR),
+                cwd=str(analysis_script.parent),
                 text=True,
                 capture_output=True,
                 timeout=180,
@@ -262,8 +323,10 @@ class AppHandler(SimpleHTTPRequestHandler):
 
 
 def main() -> None:
-    server = ThreadingHTTPServer(("0.0.0.0", 8000), AppHandler)
-    print("Server running at http://localhost:8000")
+    port = int(os.environ.get("PORT", "8000"))
+    start_realtime_backend()
+    server = ThreadingHTTPServer(("0.0.0.0", port), AppHandler)
+    print(f"Server running at http://localhost:{port}")
     server.serve_forever()
 
 

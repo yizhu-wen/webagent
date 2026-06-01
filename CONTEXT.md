@@ -29,7 +29,8 @@ The current design goal is intentionally simple and functional, with minimal vis
 From the project root:
 
 ```bash
-python webagent/server.py
+python -m pip install -r requirements.txt
+python server.py
 ```
 
 Then open:
@@ -45,17 +46,58 @@ http://localhost:8000/experiments/
 http://localhost:8000/experiments/travel/
 ```
 
-For real-time amplitude/phase plotting on the main page, start the local
-WebSocket DSP backend in a second terminal:
+The Python HTTP server mostly uses the standard library. The requirements file
+installs the packages needed by the optional real-time IQ backend and
+server-generated analysis figures: NumPy, SciPy, SoundFile, and Matplotlib.
 
-```bash
-python webagent/realtime_server.py
+`python server.py` starts both the website on `http://localhost:8000/` and the
+real-time IQ WebSocket backend on `ws://127.0.0.1:8765` by default. Click
+`Start sensing` to stream Float32 microphone frames to Python and update the live
+amplitude/phase chart. For manual debugging, `python realtime_server.py` can
+still run the WebSocket backend by itself.
+
+Set `REALTIME_ENABLED=0` before running `python server.py` to start only the HTTP
+website server.
+
+Keyboard and mouse markers on the live chart are shifted by
+`webagentAudioEventOffsetMs` to account for audio capture, buffering, and chirp
+window latency. The default is `80` ms and can be changed in the browser console:
+
+```js
+localStorage.setItem("webagentAudioEventOffsetMs", "120");
 ```
 
-Then open `http://localhost:8000/` and click `Start sensing`. The browser still
-records and downloads the WAV on Stop, but while sensing is active it also
-streams Float32 microphone frames to `ws://127.0.0.1:8765` and updates the live
-amplitude/phase chart from Python IQ features.
+Use `localStorage.removeItem("webagentAudioEventOffsetMs")` to return to the
+default. Tune this with repeated key taps or mouse clicks on the target laptop.
+
+On hosted domains the page does not try to connect to each visitor's own
+`127.0.0.1` machine. Real-time IQ is disabled by default unless the browser has
+a public backend override:
+
+```js
+localStorage.setItem("webagentRealtimeWebSocketUrl", "wss://your-backend.example/ws");
+```
+
+Use `localStorage.removeItem("webagentRealtimeWebSocketUrl")` to return to the
+default behavior.
+
+## Render Deployment
+
+`render.yaml` is a Render Blueprint for the web service:
+
+- Build command: `pip install -r requirements.txt`
+- Start command: `python server.py`
+- Health check: `/healthz`
+
+Render provides the `PORT` environment variable automatically. Locally, the
+server defaults to port `8000`; override it with `PORT=8124 python server.py`
+on shells that support inline environment variables.
+
+The upload and analysis outputs under `uploads/` are local instance files. Use a
+Render persistent disk or object storage if uploaded sessions must survive free
+instance restarts or redeploys. The `/api/analyze-recording` route also needs
+`analyze_webagent_recording.py` available with the deployed code before online
+Python figures can be generated.
 
 ## Main Site Behavior
 
@@ -63,15 +105,18 @@ amplitude/phase chart from Python IQ features.
 - Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
 - Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
 - Start sensing streams microphone frames to the optional local real-time Python
-  backend through WebSocket and updates the live amplitude/phase chart when the
-  backend is running.
+  backend through WebSocket and updates the live amplitude/phase chart. The
+  backend starts automatically with `server.py` unless `REALTIME_ENABLED=0`.
+- Live IQ feature timestamps come from the processed audio sample index and the
+  center of each 20 ms chirp window after chirp-boundary alignment, not from the
+  time Python finishes calculating the feature.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.
 - Stop also downloads the sensed microphone audio WAV, rendered spectrogram PNG,
   and recording diagnostics JSON.
 - Stop can generate an input-event analysis PNG from the recorded WAV, keydown
-  events, and touchpad-style events when the app is served by `webagent/server.py`.
+  events, and touchpad-style events when the app is served by `server.py`.
   The browser uploads the recorded WAV, OS-style event log, and diagnostics to
   the Python backend, which runs the full IQ processing chain in
   `analyze_webagent_recording.py`.
@@ -94,7 +139,8 @@ Real-time mode is implemented by:
 - `realtime_server.py`: local WebSocket server at `ws://127.0.0.1:8765`.
 - `realtime_iq.py`: streaming IQ processor that performs causal bandpass,
   chirp alignment, dechirp/range-bank matching, and live amplitude/phase
-  extraction.
+  extraction. Feature messages include chirp-window sample/timing metadata so
+  the browser can place amplitude/phase points on the audio timeline.
 
 The real-time backend intentionally sends feature numbers, not matplotlib
 images. The browser draws the live chart so updates stay responsive. The
@@ -144,7 +190,7 @@ Use these inputs:
 Start the Python backend with:
 
 ```text
-python webagent/server.py
+python server.py
 ```
 
 The endpoint `/api/analyze-recording` saves each uploaded sensing session under
