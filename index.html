@@ -1958,7 +1958,7 @@
       }
       realtimeFrameSequence += 1;
       realtimeFramesSent += 1;
-      if (!realtimeFeaturesReceived && realtimeFramesSent % 25 === 0) {
+      if (!realtimeFeaturesReceived && !realtimeFramesReceived && realtimeFramesSent % 25 === 0) {
         setRealtimeStatus(`Sent ${realtimeFramesSent} mic frames to Python; waiting for live IQ features.`);
       }
       try {

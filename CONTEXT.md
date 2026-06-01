@@ -139,7 +139,9 @@ Real-time mode is implemented by:
 - `realtime_iq.py`: streaming IQ processor that performs causal bandpass,
   chirp alignment, dechirp/range-bank matching, and live amplitude/phase
   extraction. Feature messages include chirp-window sample/timing metadata so
-  the browser can place amplitude/phase points on the audio timeline.
+  the browser can place amplitude/phase points on the audio timeline. The
+  startup alignment intentionally uses a short valid-lag FFT correlation window
+  so Render free instances can start producing live features quickly.
 
 The real-time backend intentionally sends feature numbers, not matplotlib
 images. The browser draws the live chart so updates stay responsive. The

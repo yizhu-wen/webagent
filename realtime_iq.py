@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import butter, correlate, correlation_lags, hilbert, resample_poly, sosfilt
+from scipy.signal import butter, correlate, hilbert, resample_poly, sosfilt
 
 
 FS = 48_000
@@ -17,7 +17,7 @@ N_TRI = int(FS * T_TRI)
 LO_CUT = 19_700
 HI_CUT = 23_300
 FILTER_ORDER = 6
-N_REF_CHIRPS = 20
+N_REF_CHIRPS = 6
 SPEED_OF_SOUND = 343.0
 FC = 21_500
 WAVELENGTH = SPEED_OF_SOUND / FC
@@ -105,12 +105,10 @@ class StreamingIqProcessor:
         n_search = min(int(ALIGN_SEARCH_SECONDS * FS), len(self.buffer))
         rx_search = self.buffer[:n_search].astype(np.float64)
         ref_energy = math.sqrt(float(np.sum(ref ** 2)))
-        corr = correlate(rx_search, ref, mode="full")
-        lags = correlation_lags(len(rx_search), len(ref), mode="full")
+        corr = correlate(rx_search, ref, mode="valid", method="fft")
         abs_corr = np.abs(corr) / (ref_energy + 1e-12)
-        search_corr = np.where(lags >= 0, abs_corr, -np.inf)
-        peak_idx = int(np.argmax(search_corr))
-        global_delta = int(lags[peak_idx])
+        peak_idx = int(np.argmax(abs_corr))
+        global_delta = peak_idx
         phase_delta = global_delta % N_TRI
         peak = float(abs_corr[peak_idx])
         baseline = float(np.median(abs_corr))
