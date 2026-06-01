@@ -323,16 +323,16 @@
       return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
     }
 
-    function isLocalRealtimeHost(hostname) {
-      return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "";
-    }
-
     function getRealtimeWebSocketUrl() {
       const overrideUrl = getLocalStorageItem("webagentRealtimeWebSocketUrl").trim();
       if (overrideUrl) {
         return overrideUrl;
       }
-      return isLocalRealtimeHost(window.location.hostname) ? "ws://127.0.0.1:8765" : "";
+      if (!window.location.host) {
+        return "ws://127.0.0.1:8000/realtime";
+      }
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${window.location.host}/realtime`;
     }
 
     const appConfig = {
@@ -1877,11 +1877,6 @@
         setRealtimeStatus("Live Python IQ unavailable: WebSocket is not supported.");
         return false;
       }
-      if (!appConfig.realtimeWebSocketUrl) {
-        setRealtimeStatus("Live Python IQ disabled on hosted pages. Set localStorage.webagentRealtimeWebSocketUrl to a public wss:// backend to enable it.");
-        return false;
-      }
-
       return await new Promise((resolve) => {
         let settled = false;
         const socket = new WebSocket(appConfig.realtimeWebSocketUrl);

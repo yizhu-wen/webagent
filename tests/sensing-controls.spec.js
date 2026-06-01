@@ -5,7 +5,7 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
-  ))).toBe("ws://127.0.0.1:8765");
+  ))).toBe("ws://127.0.0.1:8010/realtime");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
   ))).toBe(80);
@@ -21,7 +21,7 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
   await page.goto("http://hosted.test:8010/");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
-  ))).toBe(null);
+  ))).toBe("ws://hosted.test:8010/realtime");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
   ))).toBe(80);

@@ -2,14 +2,16 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from datetime import datetime
 from email.parser import BytesParser
 from email.policy import default as email_default_policy
-import asyncio
+import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import struct
 import sys
-import threading
+import time
 import uuid
 from urllib.parse import urlparse
 
@@ -25,36 +27,47 @@ ANALYSIS_SCRIPT_CANDIDATES = (
     PROJECT_DIR / ANALYSIS_SCRIPT_NAME,
 )
 MAX_ANALYSIS_UPLOAD_BYTES = 120 * 1024 * 1024
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
-def env_flag(name: str, default: bool = True) -> bool:
-    raw_value = os.environ.get(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+def websocket_accept_key(client_key: str) -> str:
+    digest = hashlib.sha1((client_key + WS_GUID).encode("ascii")).digest()
+    return base64.b64encode(digest).decode("ascii")
 
 
-def start_realtime_backend() -> threading.Thread | None:
-    if not env_flag("REALTIME_ENABLED", True):
-        print("Realtime IQ WebSocket backend disabled by REALTIME_ENABLED=0")
-        return None
+def read_exact(reader, n_bytes: int) -> bytes:
+    data = reader.read(n_bytes)
+    if len(data) != n_bytes:
+        raise ConnectionError("Unexpected WebSocket EOF")
+    return data
 
-    host = os.environ.get("REALTIME_HOST", "127.0.0.1")
-    port = int(os.environ.get("REALTIME_PORT", "8765"))
 
-    def run_realtime() -> None:
-        try:
-            from realtime_server import DEFAULT_TX, run_server
+def read_ws_frame(reader) -> tuple[int, bytes]:
+    first, second = read_exact(reader, 2)
+    opcode = first & 0x0F
+    masked = bool(second & 0x80)
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", read_exact(reader, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", read_exact(reader, 8))[0]
+    mask = read_exact(reader, 4) if masked else b""
+    payload = read_exact(reader, length) if length else b""
+    if masked:
+        payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return opcode, payload
 
-            tx_path = Path(os.environ.get("REALTIME_TX", str(DEFAULT_TX)))
-            asyncio.run(run_server(host, port, tx_path))
-        except Exception as exc:
-            print(f"Realtime IQ WebSocket backend failed: {exc}", file=sys.stderr)
 
-    thread = threading.Thread(target=run_realtime, name="realtime-iq-server", daemon=True)
-    thread.start()
-    print(f"Realtime IQ WebSocket backend starting at ws://{host}:{port}")
-    return thread
+def encode_ws_frame(payload: bytes, opcode: int = 1) -> bytes:
+    header = bytearray([0x80 | opcode])
+    length = len(payload)
+    if length < 126:
+        header.append(length)
+    elif length < 65536:
+        header.extend([126, *struct.pack("!H", length)])
+    else:
+        header.extend([127, *struct.pack("!Q", length)])
+    return bytes(header) + payload
 
 
 class AppHandler(SimpleHTTPRequestHandler):
@@ -83,8 +96,12 @@ class AppHandler(SimpleHTTPRequestHandler):
             self.wfile.write(data)
 
     def do_GET(self) -> None:
-        if urlparse(self.path).path == "/healthz":
+        parsed_path = urlparse(self.path).path
+        if parsed_path == "/healthz":
             self._send_health()
+            return
+        if parsed_path == "/realtime":
+            self._handle_realtime_websocket()
             return
         super().do_GET()
 
@@ -199,6 +216,80 @@ class AppHandler(SimpleHTTPRequestHandler):
     def _static_url_for(self, path: Path) -> str:
         relative = path.resolve().relative_to(WEBAGENT_DIR.resolve())
         return "/" + relative.as_posix()
+
+    def _send_ws_json(self, payload: dict) -> None:
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        self.wfile.write(encode_ws_frame(data, opcode=1))
+        self.wfile.flush()
+
+    def _handle_realtime_websocket(self) -> None:
+        if self.headers.get("Upgrade", "").lower() != "websocket":
+            self.send_error(426, "WebSocket Upgrade Required")
+            return
+
+        client_key = self.headers.get("Sec-WebSocket-Key")
+        if not client_key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+
+        response = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {websocket_accept_key(client_key)}\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "\r\n"
+        )
+        self.request.sendall(response.encode("ascii"))
+        self.close_connection = True
+
+        from realtime_iq import FS
+        from realtime_server import DEFAULT_TX, RealtimeSession
+
+        tx_path = Path(os.environ.get("REALTIME_TX", str(DEFAULT_TX)))
+        session = RealtimeSession(tx_path)
+        peer = self.client_address
+        print(f"Realtime WebSocket client connected: {peer}")
+
+        try:
+            self._send_ws_json({"type": "status", "status": "connected", "sample_rate": FS})
+            while True:
+                opcode, payload = read_ws_frame(self.rfile)
+                if opcode == 0x8:
+                    break
+                if opcode == 0x9:
+                    self.wfile.write(encode_ws_frame(payload, opcode=0xA))
+                    self.wfile.flush()
+                    continue
+                if opcode == 0x1:
+                    try:
+                        message = json.loads(payload.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        self._send_ws_json({"type": "error", "message": "Invalid JSON message"})
+                        continue
+                    message_type = message.get("type")
+                    if message_type == "start":
+                        self._send_ws_json(session.start(message))
+                    elif message_type == "stop":
+                        self._send_ws_json(session.stop())
+                    elif message_type == "ping":
+                        self._send_ws_json({"type": "pong", "timestamp": time.time()})
+                    else:
+                        self._send_ws_json({"type": "warning", "message": f"Unknown message type: {message_type}"})
+                    continue
+                if opcode == 0x2:
+                    for result in session.push_audio(payload):
+                        self._send_ws_json(result)
+        except (ConnectionError, OSError):
+            pass
+        except Exception as exc:
+            print(f"Realtime WebSocket error {peer}: {exc}", file=sys.stderr)
+            try:
+                self._send_ws_json({"type": "error", "message": str(exc)})
+            except Exception:
+                pass
+        finally:
+            print(f"Realtime WebSocket client disconnected: {peer}")
 
     def _handle_analyze_recording(self) -> None:
         content_length = int(self.headers.get("Content-Length", "0"))
@@ -324,9 +415,9 @@ class AppHandler(SimpleHTTPRequestHandler):
 
 def main() -> None:
     port = int(os.environ.get("PORT", "8000"))
-    start_realtime_backend()
     server = ThreadingHTTPServer(("0.0.0.0", port), AppHandler)
     print(f"Server running at http://localhost:{port}")
+    print(f"Realtime IQ WebSocket available at ws://localhost:{port}/realtime")
     server.serve_forever()
 
 

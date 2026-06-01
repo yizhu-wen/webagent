@@ -5,8 +5,9 @@ Run from the project root or webagent folder:
 
     python realtime_server.py
 
-The browser streams raw Float32 microphone frames to ws://127.0.0.1:8765.
-This server returns JSON amplitude/phase/range features for live plotting.
+This standalone debug server receives raw Float32 microphone frames at
+ws://127.0.0.1:8765 and returns JSON amplitude/phase/range features for live
+plotting. The deployed app uses server.py's same-origin /realtime endpoint.
 """
 
 from __future__ import annotations

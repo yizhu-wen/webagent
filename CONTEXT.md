@@ -46,18 +46,16 @@ http://localhost:8000/experiments/
 http://localhost:8000/experiments/travel/
 ```
 
-The Python HTTP server mostly uses the standard library. The requirements file
-installs the packages needed by the optional real-time IQ backend and
-server-generated analysis figures: NumPy, SciPy, SoundFile, and Matplotlib.
+The requirements file installs the packages needed by the real-time IQ backend
+and server-generated analysis figures: NumPy, SciPy, SoundFile, and Matplotlib.
 
-`python server.py` starts both the website on `http://localhost:8000/` and the
-real-time IQ WebSocket backend on `ws://127.0.0.1:8765` by default. Click
-`Start sensing` to stream Float32 microphone frames to Python and update the live
-amplitude/phase chart. For manual debugging, `python realtime_server.py` can
-still run the WebSocket backend by itself.
-
-Set `REALTIME_ENABLED=0` before running `python server.py` to start only the HTTP
-website server.
+`python server.py` starts the website on `http://localhost:8000/` and serves the
+real-time IQ WebSocket endpoint on the same public port at
+`ws://localhost:8000/realtime`. On Render, the browser automatically uses
+`wss://<your-service>.onrender.com/realtime`. Click `Start sensing` to stream
+Float32 microphone frames to Python and update the live amplitude/phase chart.
+For manual debugging, `python realtime_server.py` can still run the older
+standalone WebSocket backend by itself.
 
 Keyboard and mouse markers on the live chart are shifted by
 `webagentAudioEventOffsetMs` to account for audio capture, buffering, and chirp
@@ -70,16 +68,15 @@ localStorage.setItem("webagentAudioEventOffsetMs", "120");
 Use `localStorage.removeItem("webagentAudioEventOffsetMs")` to return to the
 default. Tune this with repeated key taps or mouse clicks on the target laptop.
 
-On hosted domains the page does not try to connect to each visitor's own
-`127.0.0.1` machine. Real-time IQ is disabled by default unless the browser has
-a public backend override:
+The browser defaults to the same-origin `/realtime` WebSocket endpoint. To test
+with a different public backend, set an override:
 
 ```js
 localStorage.setItem("webagentRealtimeWebSocketUrl", "wss://your-backend.example/ws");
 ```
 
 Use `localStorage.removeItem("webagentRealtimeWebSocketUrl")` to return to the
-default behavior.
+same-origin default.
 
 ## Render Deployment
 
@@ -104,9 +101,8 @@ Python figures can be generated.
 - Requests microphone permission on load.
 - Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
 - Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
-- Start sensing streams microphone frames to the optional local real-time Python
-  backend through WebSocket and updates the live amplitude/phase chart. The
-  backend starts automatically with `server.py` unless `REALTIME_ENABLED=0`.
+- Start sensing streams microphone frames to the same-origin `/realtime`
+  WebSocket endpoint and updates the live amplitude/phase chart.
 - Live IQ feature timestamps come from the processed audio sample index and the
   center of each 20 ms chirp window after chirp-boundary alignment, not from the
   time Python finishes calculating the feature.
@@ -136,7 +132,10 @@ Real-time mode is implemented by:
 
 - `audio-frame-worklet.js`: browser `AudioWorkletProcessor` that downmixes mic
   input and emits fixed-size Float32 frames.
-- `realtime_server.py`: local WebSocket server at `ws://127.0.0.1:8765`.
+- `server.py`: HTTP static/API server plus the public `/realtime` WebSocket
+  endpoint used locally and on Render.
+- `realtime_server.py`: older standalone local WebSocket server at
+  `ws://127.0.0.1:8765`, kept for manual debugging.
 - `realtime_iq.py`: streaming IQ processor that performs causal bandpass,
   chirp alignment, dechirp/range-bank matching, and live amplitude/phase
   extraction. Feature messages include chirp-window sample/timing metadata so
