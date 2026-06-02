@@ -107,9 +107,11 @@ Python figures can be generated.
   center of each 20 ms chirp window after chirp-boundary alignment, not from the
   time Python finishes calculating the feature.
 - Live IQ uses latest-only transport: browser audio frames include timestamp and
-  sequence metadata, the browser drops frames when the WebSocket send buffer is
-  backed up, and Python drops stale queued frames before realigning on fresh
-  audio. This keeps the chart current on low-CPU deployments.
+  sequence metadata, the browser keeps only one 8192-sample frame in flight,
+  Python acknowledges each accepted/dropped frame, and the browser replaces any
+  queued frame with the newest microphone frame while waiting. Python also drops
+  stale queued frames before realigning on fresh audio. This keeps the chart
+  current on low-CPU deployments.
 - Live Python IQ defaults to 25 Hz feature output, 96 range bins, 4 chirps for
   alignment, and a 0.6 s alignment search window so hosted Render instances can
   keep up. Override with `REALTIME_FEATURE_HZ`, `REALTIME_RANGE_BINS`,
