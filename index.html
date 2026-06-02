@@ -306,8 +306,6 @@
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
     let realtimeFramesDroppedBeforeSend = 0;
-    let realtimeAwaitingFrameAck = false;
-    let realtimePendingAudioFrame = null;
 
     function getLocalStorageItem(key) {
       try {
@@ -347,11 +345,11 @@
     };
 
     const realtimeConfig = {
-      frameSize: 8192,
+      frameSize: 2048,
       windowSeconds: 20,
       maxPoints: 1400,
       maxMarkers: 220,
-      maxSocketBufferedBytes: 64 * 1024,
+      maxSocketBufferedBytes: 512 * 1024,
       audioFrameHeaderBytes: 20
     };
 
@@ -1474,8 +1472,6 @@
       realtimeFramesReceived = 0;
       realtimeFeaturesReceived = 0;
       realtimeFramesDroppedBeforeSend = 0;
-      realtimeAwaitingFrameAck = false;
-      realtimePendingAudioFrame = null;
       realtimeSessionStartEpoch = null;
       drawRealtimeChart();
     }
@@ -1860,10 +1856,6 @@
         appendRealtimeFeature(message);
         return;
       }
-      if (message.type === "ack") {
-        handleRealtimeFrameAck(message);
-        return;
-      }
       if (message.type === "alignment") {
         setRealtimeStatus(`Live Python IQ aligned. Peak/base ${Number(message.peak_over_baseline || 0).toFixed(1)}x.`);
         return;
@@ -1969,8 +1961,6 @@
             realtimeSocket = null;
           }
           realtimeStreamingActive = false;
-          realtimeAwaitingFrameAck = false;
-          realtimePendingAudioFrame = null;
           if (!settled) {
             settled = true;
             window.clearTimeout(timeout);
@@ -1995,18 +1985,12 @@
       });
     }
 
-    function getCaptureFrameStartEpoch(samples) {
-      const sampleRate = getRecordingContext()?.sampleRate || 48000;
-      return Date.now() / 1000 - samples.length / sampleRate;
-    }
-
-    function flushRealtimeAudioFrame(samples) {
+    function sendRealtimeAudioFrame(samples) {
       if (!realtimeStreamingActive || !realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
         return;
       }
       if (realtimeSocket.bufferedAmount > realtimeConfig.maxSocketBufferedBytes) {
         realtimeFramesDroppedBeforeSend += 1;
-        realtimePendingAudioFrame = samples.slice();
         if (!realtimeFeaturesReceived && realtimeFramesDroppedBeforeSend % 25 === 0) {
           setRealtimeStatus(`Dropped ${realtimeFramesDroppedBeforeSend} mic frames before send to keep live IQ current.`);
         }
@@ -2024,49 +2008,18 @@
         view.setUint8(1, 0x41); // A
         view.setUint8(2, 0x49); // I
         view.setUint8(3, 0x51); // Q
-        view.setFloat64(4, getCaptureFrameStartEpoch(samples), true);
+        view.setFloat64(4, Date.now() / 1000, true);
         view.setUint32(12, realtimeFrameSequence, true);
         view.setUint32(16, samples.length, true);
         new Float32Array(payload, realtimeConfig.audioFrameHeaderBytes).set(samples);
-        realtimeAwaitingFrameAck = true;
         realtimeSocket.send(payload);
       } catch (error) {
-        realtimeAwaitingFrameAck = false;
         setRealtimeStatus("Live Python IQ stream paused after a socket send error.");
-      }
-    }
-
-    function sendRealtimeAudioFrame(samples) {
-      if (!realtimeStreamingActive || !realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      if (realtimeAwaitingFrameAck) {
-        realtimePendingAudioFrame = samples.slice();
-        realtimeFramesDroppedBeforeSend += 1;
-        if (!realtimeFeaturesReceived && realtimeFramesDroppedBeforeSend % 25 === 0) {
-          setRealtimeStatus(`Kept latest mic frame and skipped ${realtimeFramesDroppedBeforeSend} queued frames while Python caught up.`);
-        }
-        return;
-      }
-      flushRealtimeAudioFrame(samples);
-    }
-
-    function handleRealtimeFrameAck(message) {
-      realtimeAwaitingFrameAck = false;
-      if (Number.isFinite(message.frames_received)) {
-        realtimeFramesReceived = Number(message.frames_received);
-      }
-      const pendingFrame = realtimePendingAudioFrame;
-      realtimePendingAudioFrame = null;
-      if (pendingFrame && realtimeStreamingActive && realtimeSocket && realtimeSocket.readyState === WebSocket.OPEN) {
-        flushRealtimeAudioFrame(pendingFrame);
       }
     }
 
     function stopRealtimeSession() {
       realtimeStreamingActive = false;
-      realtimeAwaitingFrameAck = false;
-      realtimePendingAudioFrame = null;
       if (!realtimeSocket) {
         return;
       }

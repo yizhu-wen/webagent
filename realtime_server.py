@@ -208,11 +208,7 @@ class RealtimeSession:
             magic, timestamp, sequence, sample_count = AUDIO_FRAME_HEADER.unpack_from(payload)
             expected_length = AUDIO_FRAME_HEADER.size + sample_count * 4
             if magic != AUDIO_FRAME_MAGIC or len(payload) != expected_length:
-                return None, {
-                    "warning": "Dropped malformed framed audio payload",
-                    "framed": True,
-                    "sequence": int(sequence),
-                }
+                return None, {"warning": "Dropped malformed framed audio payload"}
             samples = np.frombuffer(payload, dtype="<f4", offset=AUDIO_FRAME_HEADER.size, count=sample_count)
             return samples, {
                 "framed": True,
@@ -244,10 +240,7 @@ class RealtimeSession:
         self.frame_count += 1
         samples, frame_info = self._parse_audio_payload(payload)
         if samples is None:
-            results = [{"type": "warning", "message": frame_info["warning"]}]
-            if frame_info.get("framed"):
-                results.insert(0, self._frame_ack(frame_info.get("sequence"), processed=False, dropped=True))
-            return results
+            return [{"type": "warning", "message": frame_info["warning"]}]
 
         frame_timestamp = frame_info.get("timestamp")
         frame_sequence = frame_info.get("sequence")
@@ -259,10 +252,9 @@ class RealtimeSession:
                 self.dropped_stale_frames += 1
                 self.needs_realign = True
                 self.last_sequence = frame_sequence
-                ack = self._frame_ack(frame_sequence, processed=False, dropped=True)
                 if self.frame_count == 1 or self.dropped_stale_frames % 25 == 0:
-                    return [ack, self._frame_status(aligned=False)]
-                return [ack]
+                    return [self._frame_status(aligned=False)]
+                return []
 
             if self.processor.received_sample_count == 0 or self.needs_realign:
                 self._reset_processor(frame_timestamp)
@@ -275,27 +267,9 @@ class RealtimeSession:
         self.processed_frame_count += 1
         results = self.processor.push_samples(samples)
         self.feature_count += sum(1 for result in results if result.get("type") == "feature")
-        results.insert(0, self._frame_ack(frame_sequence, processed=True, dropped=False))
         if self.frame_count == 1 or self.frame_count % 25 == 0:
             results.insert(0, self._frame_status(aligned=bool(self.processor and self.processor.aligned)))
         return results
-
-    def _frame_ack(self, sequence: int | None, processed: bool, dropped: bool) -> dict[str, Any]:
-        return {
-            "type": "ack",
-            "sequence": sequence,
-            "processed": processed,
-            "dropped": dropped,
-            "frames_received": self.frame_count,
-            "frames_processed": self.processed_frame_count,
-            "features_emitted": self.feature_count,
-            "dropped_stale_frames": self.dropped_stale_frames,
-            "latest_frame_age_ms": (
-                round(self.latest_frame_age_seconds * 1000, 1)
-                if self.latest_frame_age_seconds is not None
-                else None
-            ),
-        }
 
     def _frame_status(self, aligned: bool) -> dict[str, Any]:
         chirps = self.processor.chirp_index if self.processor else 0
