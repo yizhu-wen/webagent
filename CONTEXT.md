@@ -110,11 +110,6 @@ Python figures can be generated.
   sequence metadata, the browser drops frames when the WebSocket send buffer is
   backed up, and Python drops stale queued frames before realigning on fresh
   audio. This keeps the chart current on low-CPU deployments.
-- Live Python IQ defaults to 25 Hz feature output, 96 range bins, 4 chirps for
-  alignment, and a 0.6 s alignment search window so hosted Render instances can
-  keep up. Override with `REALTIME_FEATURE_HZ`, `REALTIME_RANGE_BINS`,
-  `REALTIME_REF_CHIRPS`, and `REALTIME_ALIGN_SEARCH_SECONDS` when using a larger
-  machine.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.

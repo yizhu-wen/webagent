@@ -4,27 +4,11 @@
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 from scipy.signal import butter, correlate, hilbert, resample_poly, sosfilt
-
-
-def _env_int(name: str, default: int) -> int:
-    try:
-        return max(1, int(os.environ.get(name, default)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        value = float(os.environ.get(name, default))
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
 
 
 FS = 48_000
@@ -33,17 +17,14 @@ N_TRI = int(FS * T_TRI)
 LO_CUT = 19_700
 HI_CUT = 23_300
 FILTER_ORDER = 6
-N_REF_CHIRPS = _env_int("REALTIME_REF_CHIRPS", 4)
+N_REF_CHIRPS = 6
 SPEED_OF_SOUND = 343.0
 FC = 21_500
 WAVELENGTH = SPEED_OF_SOUND / FC
 R_MIN = 0.0
 R_MAX = 1.20
-N_RANGE = _env_int("REALTIME_RANGE_BINS", 96)
-ALIGN_SEARCH_SECONDS = _env_float("REALTIME_ALIGN_SEARCH_SECONDS", 0.60)
-TARGET_FEATURE_HZ = _env_float("REALTIME_FEATURE_HZ", 25.0)
-CHIRPS_PER_SECOND = FS / N_TRI
-FEATURE_STRIDE_CHIRPS = max(1, int(math.ceil(CHIRPS_PER_SECOND / TARGET_FEATURE_HZ)))
+N_RANGE = 320
+ALIGN_SEARCH_SECONDS = 1.50
 
 
 def load_mono_wav(path: Path) -> tuple[np.ndarray, int]:
@@ -81,8 +62,6 @@ class StreamingIqProcessor:
         self.tx_conj = np.conj(self.tx)
         self.sos = butter(FILTER_ORDER, [LO_CUT, HI_CUT], btype="band", fs=FS, output="sos")
         self.r_grid, self.ref_bank = self._build_range_bank()
-        self.feature_stride_chirps = FEATURE_STRIDE_CHIRPS
-        self.feature_rate_hz = CHIRPS_PER_SECOND / self.feature_stride_chirps
         self.reset()
 
     def reset(self, start_epoch: float | None = None) -> None:
@@ -188,8 +167,6 @@ class StreamingIqProcessor:
             "window_end_time": window_end_time,
             "legacy_time": self.chirp_index * T_TRI,
             "timestamp_source": "processed_sample_chirp_center",
-            "feature_stride_chirps": self.feature_stride_chirps,
-            "feature_rate_hz": self.feature_rate_hz,
             "amplitude": amp,
             "amplitude_norm": amp_norm,
             "phase": self.phase_unwrapped,
@@ -220,10 +197,7 @@ class StreamingIqProcessor:
             chirp = self.buffer[:N_TRI]
             self.buffer = self.buffer[N_TRI:]
             self.buffer_start_sample += N_TRI
-            if self.chirp_index % self.feature_stride_chirps == 0:
-                out.append(self._process_one_chirp(chirp, chirp_start_sample))
-            else:
-                self.chirp_index += 1
+            out.append(self._process_one_chirp(chirp, chirp_start_sample))
 
         # Bound memory if the browser pauses or changes stream shape.
         max_keep = N_TRI * 8
