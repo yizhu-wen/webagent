@@ -305,6 +305,7 @@
     let realtimeFramesSent = 0;
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
+    let realtimeFramesDroppedBeforeSend = 0;
 
     function getLocalStorageItem(key) {
       try {
@@ -347,7 +348,9 @@
       frameSize: 2048,
       windowSeconds: 20,
       maxPoints: 1400,
-      maxMarkers: 220
+      maxMarkers: 220,
+      maxSocketBufferedBytes: 512 * 1024,
+      audioFrameHeaderBytes: 20
     };
 
     const trackingConfig = {
@@ -1144,6 +1147,7 @@
         framesSent: realtimeFramesSent,
         framesReceived: realtimeFramesReceived,
         featuresReceived: realtimeFeaturesReceived,
+        framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
         points: realtimeFeaturePoints.length,
         status: realtimeLastStatusMessage,
         realtimeWebSocketUrl: appConfig.realtimeWebSocketUrl || null,
@@ -1467,6 +1471,7 @@
       realtimeFramesSent = 0;
       realtimeFramesReceived = 0;
       realtimeFeaturesReceived = 0;
+      realtimeFramesDroppedBeforeSend = 0;
       realtimeSessionStartEpoch = null;
       drawRealtimeChart();
     }
@@ -1650,9 +1655,17 @@
 
     function appendRealtimeFeature(message) {
       realtimeFeaturesReceived += 1;
+      const featureTimestamp = Number(message.timestamp);
+      let featureTime = Number(message.time) || 0;
+      if (Number.isFinite(featureTimestamp) && Number.isFinite(realtimeSessionStartEpoch)) {
+        featureTime = featureTimestamp - realtimeSessionStartEpoch;
+      }
+      if (!Number.isFinite(featureTime) || featureTime < 0) {
+        featureTime = Number(message.time) || 0;
+      }
       realtimeFeaturePoints.push({
-        time: Number(message.time) || 0,
-        timestamp: Number.isFinite(message.timestamp) ? message.timestamp : null,
+        time: featureTime,
+        timestamp: Number.isFinite(featureTimestamp) ? featureTimestamp : null,
         timestamp_source: message.timestamp_source || "",
         window_start_time: Number.isFinite(message.window_start_time) ? message.window_start_time : null,
         window_end_time: Number.isFinite(message.window_end_time) ? message.window_end_time : null,
@@ -1859,7 +1872,16 @@
           realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
           if (!realtimeFeaturesReceived) {
             const alignedText = message.aligned ? "aligned, waiting for feature points" : "waiting for chirp alignment";
-            setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames; ${alignedText}.`);
+            const processedText = Number.isFinite(message.frames_processed)
+              ? ` processed ${message.frames_processed};`
+              : "";
+            const dropText = message.dropped_stale_frames
+              ? ` dropped ${message.dropped_stale_frames} stale frames to stay live;`
+              : "";
+            const ageText = Number.isFinite(message.latest_frame_age_ms)
+              ? ` latest age ${message.latest_frame_age_ms} ms;`
+              : "";
+            setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
           }
         } else if (message.status === "stopped") {
           setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);
@@ -1956,13 +1978,30 @@
       if (!realtimeStreamingActive || !realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
         return;
       }
+      if (realtimeSocket.bufferedAmount > realtimeConfig.maxSocketBufferedBytes) {
+        realtimeFramesDroppedBeforeSend += 1;
+        if (!realtimeFeaturesReceived && realtimeFramesDroppedBeforeSend % 25 === 0) {
+          setRealtimeStatus(`Dropped ${realtimeFramesDroppedBeforeSend} mic frames before send to keep live IQ current.`);
+        }
+        return;
+      }
       realtimeFrameSequence += 1;
       realtimeFramesSent += 1;
       if (!realtimeFeaturesReceived && !realtimeFramesReceived && realtimeFramesSent % 25 === 0) {
         setRealtimeStatus(`Sent ${realtimeFramesSent} mic frames to Python; waiting for live IQ features.`);
       }
       try {
-        realtimeSocket.send(samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength));
+        const payload = new ArrayBuffer(realtimeConfig.audioFrameHeaderBytes + samples.byteLength);
+        const view = new DataView(payload);
+        view.setUint8(0, 0x57); // W
+        view.setUint8(1, 0x41); // A
+        view.setUint8(2, 0x49); // I
+        view.setUint8(3, 0x51); // Q
+        view.setFloat64(4, Date.now() / 1000, true);
+        view.setUint32(12, realtimeFrameSequence, true);
+        view.setUint32(16, samples.length, true);
+        new Float32Array(payload, realtimeConfig.audioFrameHeaderBytes).set(samples);
+        realtimeSocket.send(payload);
       } catch (error) {
         setRealtimeStatus("Live Python IQ stream paused after a socket send error.");
       }

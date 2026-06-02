@@ -17,6 +17,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import struct
 import time
 from pathlib import Path
@@ -30,6 +31,9 @@ from realtime_iq import FS, StreamingIqProcessor
 WEBAGENT_DIR = Path(__file__).resolve().parent
 DEFAULT_TX = WEBAGENT_DIR / "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+AUDIO_FRAME_MAGIC = b"WAIQ"
+AUDIO_FRAME_HEADER = struct.Struct("<4sdII")
+DEFAULT_MAX_FRAME_AGE_SECONDS = float(os.environ.get("REALTIME_MAX_FRAME_AGE_SECONDS", "1.0"))
 
 
 async def read_exact(reader: asyncio.StreamReader, n_bytes: int) -> bytes:
@@ -112,6 +116,13 @@ class RealtimeSession:
         self.processor: StreamingIqProcessor | None = None
         self.sample_rate = FS
         self.frame_count = 0
+        self.processed_frame_count = 0
+        self.dropped_stale_frames = 0
+        self.dropped_gap_frames = 0
+        self.last_sequence: int | None = None
+        self.client_clock_offset = 0.0
+        self.needs_realign = False
+        self.latest_frame_age_seconds: float | None = None
         self.started_at = time.time()
 
     def start(self, metadata: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +131,13 @@ class RealtimeSession:
         self.processor = StreamingIqProcessor(self.tx_path, sample_rate=self.sample_rate)
         self.processor.reset(start_epoch=start_epoch)
         self.frame_count = 0
+        self.processed_frame_count = 0
+        self.dropped_stale_frames = 0
+        self.dropped_gap_frames = 0
+        self.last_sequence = None
+        self.client_clock_offset = time.time() - start_epoch
+        self.needs_realign = False
+        self.latest_frame_age_seconds = None
         self.started_at = start_epoch
         return {
             "type": "status",
@@ -137,28 +155,98 @@ class RealtimeSession:
             "type": "status",
             "status": "stopped",
             "frames_received": self.frame_count,
+            "frames_processed": self.processed_frame_count,
+            "dropped_stale_frames": self.dropped_stale_frames,
+            "dropped_gap_frames": self.dropped_gap_frames,
             "chirps_processed": chirps,
         }
+
+    def _parse_audio_payload(self, payload: bytes) -> tuple[np.ndarray | None, dict[str, Any]]:
+        if payload.startswith(AUDIO_FRAME_MAGIC):
+            if len(payload) < AUDIO_FRAME_HEADER.size:
+                return None, {"warning": "Dropped short framed audio payload"}
+            magic, timestamp, sequence, sample_count = AUDIO_FRAME_HEADER.unpack_from(payload)
+            expected_length = AUDIO_FRAME_HEADER.size + sample_count * 4
+            if magic != AUDIO_FRAME_MAGIC or len(payload) != expected_length:
+                return None, {"warning": "Dropped malformed framed audio payload"}
+            samples = np.frombuffer(payload, dtype="<f4", offset=AUDIO_FRAME_HEADER.size, count=sample_count)
+            return samples, {
+                "framed": True,
+                "timestamp": float(timestamp),
+                "sequence": int(sequence),
+                "sample_count": int(sample_count),
+            }
+
+        if len(payload) % 4 != 0:
+            return None, {"warning": "Dropped non-Float32-aligned audio frame"}
+        return np.frombuffer(payload, dtype="<f4"), {"framed": False}
+
+    def _reset_processor(self, start_epoch: float) -> None:
+        if self.processor is None:
+            self.processor = StreamingIqProcessor(self.tx_path, sample_rate=self.sample_rate)
+        self.processor.reset(start_epoch=start_epoch)
+        self.started_at = start_epoch
+        self.needs_realign = False
+
+    def _frame_age_seconds(self, frame_timestamp: float) -> float:
+        estimated_server_frame_time = frame_timestamp + self.client_clock_offset
+        return time.time() - estimated_server_frame_time
 
     def push_audio(self, payload: bytes) -> list[dict[str, Any]]:
         if self.processor is None:
             self.processor = StreamingIqProcessor(self.tx_path, sample_rate=self.sample_rate)
             self.processor.reset(start_epoch=self.started_at)
-        if len(payload) % 4 != 0:
-            return [{"type": "warning", "message": "Dropped non-Float32-aligned audio frame"}]
-        samples = np.frombuffer(payload, dtype="<f4")
+
         self.frame_count += 1
+        samples, frame_info = self._parse_audio_payload(payload)
+        if samples is None:
+            return [{"type": "warning", "message": frame_info["warning"]}]
+
+        frame_timestamp = frame_info.get("timestamp")
+        frame_sequence = frame_info.get("sequence")
+        frame_age_seconds = None
+        if frame_info.get("framed") and isinstance(frame_timestamp, float):
+            frame_age_seconds = self._frame_age_seconds(frame_timestamp)
+            self.latest_frame_age_seconds = frame_age_seconds
+            if frame_age_seconds > DEFAULT_MAX_FRAME_AGE_SECONDS:
+                self.dropped_stale_frames += 1
+                self.needs_realign = True
+                self.last_sequence = frame_sequence
+                if self.frame_count == 1 or self.dropped_stale_frames % 25 == 0:
+                    return [self._frame_status(aligned=False)]
+                return []
+
+            if self.processor.received_sample_count == 0 or self.needs_realign:
+                self._reset_processor(frame_timestamp)
+            elif isinstance(frame_sequence, int) and self.last_sequence is not None and frame_sequence > self.last_sequence + 1:
+                self.dropped_gap_frames += frame_sequence - self.last_sequence - 1
+                self._reset_processor(frame_timestamp)
+
+            self.last_sequence = frame_sequence
+
+        self.processed_frame_count += 1
         results = self.processor.push_samples(samples)
         if self.frame_count == 1 or self.frame_count % 25 == 0:
-            chirps = self.processor.chirp_index if self.processor else 0
-            results.insert(0, {
-                "type": "status",
-                "status": "frames",
-                "frames_received": self.frame_count,
-                "chirps_processed": chirps,
-                "aligned": bool(self.processor and self.processor.aligned),
-            })
+            results.insert(0, self._frame_status(aligned=bool(self.processor and self.processor.aligned)))
         return results
+
+    def _frame_status(self, aligned: bool) -> dict[str, Any]:
+        chirps = self.processor.chirp_index if self.processor else 0
+        return {
+            "type": "status",
+            "status": "frames",
+            "frames_received": self.frame_count,
+            "frames_processed": self.processed_frame_count,
+            "dropped_stale_frames": self.dropped_stale_frames,
+            "dropped_gap_frames": self.dropped_gap_frames,
+            "latest_frame_age_ms": (
+                round(self.latest_frame_age_seconds * 1000, 1)
+                if self.latest_frame_age_seconds is not None
+                else None
+            ),
+            "chirps_processed": chirps,
+            "aligned": aligned,
+        }
 
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, tx_path: Path) -> None:

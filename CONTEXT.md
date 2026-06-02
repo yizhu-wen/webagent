@@ -106,6 +106,10 @@ Python figures can be generated.
 - Live IQ feature timestamps come from the processed audio sample index and the
   center of each 20 ms chirp window after chirp-boundary alignment, not from the
   time Python finishes calculating the feature.
+- Live IQ uses latest-only transport: browser audio frames include timestamp and
+  sequence metadata, the browser drops frames when the WebSocket send buffer is
+  backed up, and Python drops stale queued frames before realigning on fresh
+  audio. This keeps the chart current on low-CPU deployments.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.
