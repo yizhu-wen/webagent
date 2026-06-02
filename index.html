@@ -1867,21 +1867,32 @@
           const resampleText = message.resampling
             ? ` Resampling ${message.sample_rate} Hz to ${message.processing_sample_rate} Hz.`
             : "";
-          setRealtimeStatus(`Live Python IQ running.${resampleText}`);
+          const featureRateText = Number.isFinite(message.feature_rate_hz)
+            ? ` Feature stream ${Number(message.feature_rate_hz).toFixed(0)} Hz.`
+            : "";
+          const rangeText = Number.isFinite(message.range_bins)
+            ? ` Range bins ${message.range_bins}.`
+            : "";
+          setRealtimeStatus(`Live Python IQ running.${resampleText}${featureRateText}${rangeText}`);
         } else if (message.status === "frames") {
           realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
+          const processedText = Number.isFinite(message.frames_processed)
+            ? ` processed ${message.frames_processed};`
+            : "";
+          const featureText = Number.isFinite(message.features_emitted)
+            ? ` features ${message.features_emitted};`
+            : "";
+          const dropText = message.dropped_stale_frames
+            ? ` dropped ${message.dropped_stale_frames} stale frames;`
+            : "";
+          const ageText = Number.isFinite(message.latest_frame_age_ms)
+            ? ` latest age ${message.latest_frame_age_ms} ms;`
+            : "";
           if (!realtimeFeaturesReceived) {
             const alignedText = message.aligned ? "aligned, waiting for feature points" : "waiting for chirp alignment";
-            const processedText = Number.isFinite(message.frames_processed)
-              ? ` processed ${message.frames_processed};`
-              : "";
-            const dropText = message.dropped_stale_frames
-              ? ` dropped ${message.dropped_stale_frames} stale frames to stay live;`
-              : "";
-            const ageText = Number.isFinite(message.latest_frame_age_ms)
-              ? ` latest age ${message.latest_frame_age_ms} ms;`
-              : "";
             setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
+          } else {
+            setRealtimeStatus(`Live Python IQ live;${featureText}${processedText}${dropText}${ageText}`);
           }
         } else if (message.status === "stopped") {
           setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);

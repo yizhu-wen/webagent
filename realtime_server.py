@@ -151,6 +151,7 @@ class RealtimeSession:
         self.sample_rate = FS
         self.frame_count = 0
         self.processed_frame_count = 0
+        self.feature_count = 0
         self.dropped_stale_frames = 0
         self.dropped_gap_frames = 0
         self.last_sequence: int | None = None
@@ -166,6 +167,7 @@ class RealtimeSession:
         self.processor.reset(start_epoch=start_epoch)
         self.frame_count = 0
         self.processed_frame_count = 0
+        self.feature_count = 0
         self.dropped_stale_frames = 0
         self.dropped_gap_frames = 0
         self.last_sequence = None
@@ -179,6 +181,9 @@ class RealtimeSession:
             "sample_rate": self.sample_rate,
             "processing_sample_rate": FS,
             "resampling": self.sample_rate != FS,
+            "feature_rate_hz": self.processor.feature_rate_hz,
+            "feature_stride_chirps": self.processor.feature_stride_chirps,
+            "range_bins": len(self.processor.r_grid),
             "tx": str(self.tx_path),
         }
 
@@ -190,6 +195,7 @@ class RealtimeSession:
             "status": "stopped",
             "frames_received": self.frame_count,
             "frames_processed": self.processed_frame_count,
+            "features_emitted": self.feature_count,
             "dropped_stale_frames": self.dropped_stale_frames,
             "dropped_gap_frames": self.dropped_gap_frames,
             "chirps_processed": chirps,
@@ -260,6 +266,7 @@ class RealtimeSession:
 
         self.processed_frame_count += 1
         results = self.processor.push_samples(samples)
+        self.feature_count += sum(1 for result in results if result.get("type") == "feature")
         if self.frame_count == 1 or self.frame_count % 25 == 0:
             results.insert(0, self._frame_status(aligned=bool(self.processor and self.processor.aligned)))
         return results
@@ -271,6 +278,7 @@ class RealtimeSession:
             "status": "frames",
             "frames_received": self.frame_count,
             "frames_processed": self.processed_frame_count,
+            "features_emitted": self.feature_count,
             "dropped_stale_frames": self.dropped_stale_frames,
             "dropped_gap_frames": self.dropped_gap_frames,
             "latest_frame_age_ms": (
