@@ -42,8 +42,9 @@ def read_exact(reader, n_bytes: int) -> bytes:
     return data
 
 
-def read_ws_frame(reader) -> tuple[int, bytes]:
+def read_ws_frame(reader) -> tuple[bool, int, bytes]:
     first, second = read_exact(reader, 2)
+    fin = bool(first & 0x80)
     opcode = first & 0x0F
     masked = bool(second & 0x80)
     length = second & 0x7F
@@ -55,7 +56,40 @@ def read_ws_frame(reader) -> tuple[int, bytes]:
     payload = read_exact(reader, length) if length else b""
     if masked:
         payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
-    return opcode, payload
+    return fin, opcode, payload
+
+
+class WebSocketMessageReader:
+    def __init__(self, reader) -> None:
+        self.reader = reader
+        self.pending_opcode: int | None = None
+        self.pending_chunks: list[bytes] = []
+
+    def read_message(self) -> tuple[int, bytes]:
+        while True:
+            fin, opcode, payload = read_ws_frame(self.reader)
+            if opcode in {0x8, 0x9, 0xA}:
+                return opcode, payload
+            if opcode in {0x1, 0x2}:
+                if self.pending_opcode is not None:
+                    raise ConnectionError("Unexpected new WebSocket message before continuation completed")
+                self.pending_opcode = opcode
+                self.pending_chunks = [payload]
+            elif opcode == 0x0:
+                if self.pending_opcode is None:
+                    raise ConnectionError("Unexpected WebSocket continuation frame")
+                self.pending_chunks.append(payload)
+            else:
+                raise ConnectionError(f"Unsupported WebSocket opcode: {opcode}")
+
+            if fin:
+                complete_opcode = self.pending_opcode
+                complete_payload = b"".join(self.pending_chunks)
+                self.pending_opcode = None
+                self.pending_chunks = []
+                if complete_opcode is None:
+                    raise ConnectionError("Missing WebSocket message opcode")
+                return complete_opcode, complete_payload
 
 
 def encode_ws_frame(payload: bytes, opcode: int = 1) -> bytes:
@@ -248,13 +282,14 @@ class AppHandler(SimpleHTTPRequestHandler):
 
         tx_path = Path(os.environ.get("REALTIME_TX", str(DEFAULT_TX)))
         session = RealtimeSession(tx_path)
+        message_reader = WebSocketMessageReader(self.rfile)
         peer = self.client_address
         print(f"Realtime WebSocket client connected: {peer}")
 
         try:
             self._send_ws_json({"type": "status", "status": "connected", "sample_rate": FS})
             while True:
-                opcode, payload = read_ws_frame(self.rfile)
+                opcode, payload = message_reader.read_message()
                 if opcode == 0x8:
                     break
                 if opcode == 0x9:

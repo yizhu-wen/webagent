@@ -77,8 +77,9 @@ async def send_handshake(writer: asyncio.StreamWriter, headers: dict[str, str]) 
     await writer.drain()
 
 
-async def read_ws_frame(reader: asyncio.StreamReader) -> tuple[int, bytes]:
+async def read_ws_frame(reader: asyncio.StreamReader) -> tuple[bool, int, bytes]:
     first, second = await read_exact(reader, 2)
+    fin = bool(first & 0x80)
     opcode = first & 0x0F
     masked = bool(second & 0x80)
     length = second & 0x7F
@@ -90,7 +91,40 @@ async def read_ws_frame(reader: asyncio.StreamReader) -> tuple[int, bytes]:
     payload = await read_exact(reader, length) if length else b""
     if masked:
         payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
-    return opcode, payload
+    return fin, opcode, payload
+
+
+class AsyncWebSocketMessageReader:
+    def __init__(self, reader: asyncio.StreamReader) -> None:
+        self.reader = reader
+        self.pending_opcode: int | None = None
+        self.pending_chunks: list[bytes] = []
+
+    async def read_message(self) -> tuple[int, bytes]:
+        while True:
+            fin, opcode, payload = await read_ws_frame(self.reader)
+            if opcode in {0x8, 0x9, 0xA}:
+                return opcode, payload
+            if opcode in {0x1, 0x2}:
+                if self.pending_opcode is not None:
+                    raise ConnectionError("Unexpected new WebSocket message before continuation completed")
+                self.pending_opcode = opcode
+                self.pending_chunks = [payload]
+            elif opcode == 0x0:
+                if self.pending_opcode is None:
+                    raise ConnectionError("Unexpected WebSocket continuation frame")
+                self.pending_chunks.append(payload)
+            else:
+                raise ConnectionError(f"Unsupported WebSocket opcode: {opcode}")
+
+            if fin:
+                complete_opcode = self.pending_opcode
+                complete_payload = b"".join(self.pending_chunks)
+                self.pending_opcode = None
+                self.pending_chunks = []
+                if complete_opcode is None:
+                    raise ConnectionError("Missing WebSocket message opcode")
+                return complete_opcode, complete_payload
 
 
 def encode_ws_frame(payload: bytes, opcode: int = 1) -> bytes:
@@ -257,9 +291,10 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
         await send_handshake(writer, headers)
         await send_json(writer, {"type": "status", "status": "connected", "sample_rate": FS})
         print(f"Realtime client connected: {peer}")
+        message_reader = AsyncWebSocketMessageReader(reader)
 
         while True:
-            opcode, payload = await read_ws_frame(reader)
+            opcode, payload = await message_reader.read_message()
             if opcode == 0x8:
                 break
             if opcode == 0x9:
