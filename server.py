@@ -16,7 +16,7 @@ import uuid
 from urllib.parse import urlparse
 
 
-AUDIO_FILE_NAME = "triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav"
+AUDIO_FILE_NAME = "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav"
 WEBAGENT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = WEBAGENT_DIR.parent
 AUDIO_FILE_PATH = WEBAGENT_DIR / AUDIO_FILE_NAME

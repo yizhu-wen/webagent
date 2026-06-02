@@ -15,7 +15,7 @@ The current design goal is intentionally simple and functional, with minimal vis
 
 - `index.html`: Main sensing page. Contains UI, microphone capture, chirp playback, event tracking, WAV export, and spectrogram rendering.
 - `server.py`: Lightweight Python HTTP server for local static serving and legacy audio endpoints.
-- `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`: Ultrasound chirp file used for sensing playback.
+- `triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav`: One-chirp ultrasound loop file used for sensing playback and Python IQ reference.
 - `experiments/index.html`: Simple shopping dummy website.
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
 - `experiments/site.js`: Shared experiment-site behavior for sensing, microphone recording, spectrogram generation, filtering, selection buttons, forms, and downloads.
@@ -99,8 +99,8 @@ Python figures can be generated.
 ## Main Site Behavior
 
 - Requests microphone permission on load.
-- Loads `triangle_fmcw_20-23kHz_20ms_48kHz_600s.wav`.
-- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
+- Loads `triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav`, a 20 ms one-chirp asset instead of the old 600 s WAV.
+- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context, producing the same repeated chirp sequence with much less network loading.
 - Start sensing streams microphone frames to the same-origin `/realtime`
   WebSocket endpoint and updates the live amplitude/phase chart.
 - Live IQ feature timestamps come from the processed audio sample index and the
