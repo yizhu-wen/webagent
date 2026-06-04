@@ -252,7 +252,7 @@
     }
 
     const eventDate = new Date();
-    eventLog.push({
+    const trackedEvent = {
       id: createTrackingId(),
       sessionId,
       name,
@@ -261,7 +261,11 @@
       page: getPageInfo(),
       viewport: getViewportInfo(),
       properties
-    });
+    };
+    eventLog.push(trackedEvent);
+    window.dispatchEvent(new CustomEvent("webagent:track-event", {
+      detail: trackedEvent
+    }));
   }
 
   function getPointProperties(event) {

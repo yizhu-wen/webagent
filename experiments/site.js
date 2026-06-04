@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const spectrogramPanel = document.querySelector("[data-spectrogram-panel]") || document.getElementById("shoppingSpectrogramPanel");
   const spectrogramStatus = document.querySelector("[data-spectrogram-status]") || document.getElementById("shoppingSpectrogramStatus");
   const spectrogramCanvas = document.querySelector("[data-spectrogram-canvas]") || document.getElementById("shoppingSpectrogramCanvas");
+  const realtimePanel = document.querySelector("[data-realtime-panel]");
+  const realtimeStatus = document.querySelector("[data-realtime-status]");
+  const realtimeCanvas = document.querySelector("[data-realtime-canvas]");
   const chirpAudioFileName = "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav";
   const chirpAudioUrl = resolveChirpAudioUrl();
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
@@ -19,6 +22,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
   const analysisApiUrl = "/api/analyze-recording";
   const targetSampleRate = 48000;
+  const realtimeFrameSize = 2048;
+  const realtimeWindowSeconds = 20;
+  const realtimeMaxPoints = 1400;
+  const realtimeMaxWaveformPoints = 6000;
+  const realtimeMaxMarkers = 220;
+  const realtimeWaveformPlotHz = 240;
+  const realtimeMaxSocketBufferedBytes = 512 * 1024;
+  const realtimeAudioFrameHeaderBytes = 20;
   let micStream = null;
   let audioContext = null;
   let chirpPlaybackBuffer = null;
@@ -30,6 +41,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let recordedFrameCount = 0;
   let sensingActive = false;
   let selectedDetailTrip = null;
+  let realtimeSocket = null;
+  let realtimeStreamingActive = false;
+  let realtimeSessionStartEpoch = null;
+  let realtimeFrameSequence = 0;
+  let realtimeFeaturePoints = [];
+  let realtimeWaveformPoints = [];
+  let realtimeEventMarkers = [];
+  let realtimeDrawPending = false;
+  let realtimeLastStatusMessage = "Start sensing to see live raw audio, amplitude, and phase.";
+  let realtimeFramesSent = 0;
+  let realtimeFramesReceived = 0;
+  let realtimeFeaturesReceived = 0;
+  let realtimeFramesDroppedBeforeSend = 0;
 
   function resolveChirpAudioUrl() {
     if (document.body.dataset.chirpAudio) {
@@ -42,6 +66,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const siteScriptUrl = siteScript ? siteScript.src : window.location.href;
     return new URL(`../${chirpAudioFileName}`, siteScriptUrl).href;
+  }
+
+  function getLocalStorageItem(key) {
+    try {
+      return window.localStorage.getItem(key) || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function getLocalStorageNumber(key, fallbackValue) {
+    const rawValue = getLocalStorageItem(key);
+    if (!rawValue) {
+      return fallbackValue;
+    }
+    const parsedValue = Number(rawValue);
+    return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+  }
+
+  function getRealtimeWebSocketUrl() {
+    const overrideUrl = getLocalStorageItem("webagentRealtimeWebSocketUrl").trim();
+    if (overrideUrl) {
+      return overrideUrl;
+    }
+    if (!window.location.host) {
+      return "ws://127.0.0.1:8000/realtime";
+    }
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/realtime`;
   }
 
   function setActivity(message) {
@@ -407,6 +460,547 @@ document.addEventListener("DOMContentLoaded", () => {
     return mono;
   }
 
+  function setRealtimeStatus(message) {
+    realtimeLastStatusMessage = message;
+    if (realtimeStatus) {
+      realtimeStatus.textContent = message;
+    }
+    queueRealtimeChartDraw();
+  }
+
+  function resetRealtimeChart() {
+    realtimeFeaturePoints = [];
+    realtimeWaveformPoints = [];
+    realtimeEventMarkers = [];
+    realtimeFrameSequence = 0;
+    realtimeFramesSent = 0;
+    realtimeFramesReceived = 0;
+    realtimeFeaturesReceived = 0;
+    realtimeFramesDroppedBeforeSend = 0;
+    realtimeSessionStartEpoch = null;
+    drawRealtimeChart();
+  }
+
+  function queueRealtimeChartDraw() {
+    if (realtimeDrawPending) {
+      return;
+    }
+    realtimeDrawPending = true;
+    window.requestAnimationFrame(() => {
+      realtimeDrawPending = false;
+      drawRealtimeChart();
+    });
+  }
+
+  function drawRealtimeChart() {
+    if (!realtimeCanvas) {
+      return;
+    }
+    const ctx = realtimeCanvas.getContext("2d");
+    const width = realtimeCanvas.width;
+    const height = realtimeCanvas.height;
+    const margin = { top: 28, right: 18, bottom: 42, left: 74 };
+    const gap = 32;
+    const plotWidth = width - margin.left - margin.right;
+    const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 2) / 3);
+    const rawArea = {
+      left: margin.left,
+      top: margin.top,
+      right: margin.left + plotWidth,
+      bottom: margin.top + panelHeight,
+      width: plotWidth,
+      height: panelHeight
+    };
+    const ampArea = {
+      left: margin.left,
+      top: margin.top + panelHeight + gap,
+      right: margin.left + plotWidth,
+      bottom: margin.top + panelHeight + gap + panelHeight,
+      width: plotWidth,
+      height: panelHeight
+    };
+    const phaseArea = {
+      left: margin.left,
+      top: margin.top + (panelHeight + gap) * 2,
+      right: margin.left + plotWidth,
+      bottom: margin.top + (panelHeight + gap) * 2 + panelHeight,
+      width: plotWidth,
+      height: panelHeight
+    };
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#fffdfa";
+    ctx.fillRect(0, 0, width, height);
+
+    const latestFeatureTime = realtimeFeaturePoints.length
+      ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1].time
+      : 0;
+    const latestWaveformTime = realtimeWaveformPoints.length
+      ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1].time
+      : 0;
+    const latestMarkerTime = realtimeEventMarkers.length
+      ? realtimeEventMarkers[realtimeEventMarkers.length - 1].time
+      : 0;
+    const latestTime = Math.max(latestFeatureTime, latestWaveformTime, latestMarkerTime, realtimeWindowSeconds);
+    const xMax = Math.max(realtimeWindowSeconds, latestTime);
+    const xMin = Math.max(0, xMax - realtimeWindowSeconds);
+    const visiblePoints = realtimeFeaturePoints.filter((point) => point.time >= xMin && point.time <= xMax);
+    const visibleWaveformPoints = realtimeWaveformPoints.filter((point) => point.time >= xMin && point.time <= xMax);
+    const visibleMarkers = realtimeEventMarkers.filter((marker) => marker.time >= xMin && marker.time <= xMax);
+
+    function xToPx(timeValue) {
+      return ampArea.left + ((timeValue - xMin) / Math.max(1e-6, xMax - xMin)) * ampArea.width;
+    }
+
+    function drawPanel(area, title, ylabel, color, points, valueKey, fixedMin, fixedMax) {
+      let yMin = fixedMin;
+      let yMax = fixedMax;
+      if (yMin === null || yMax === null) {
+        const values = points.map((point) => point[valueKey]).filter(Number.isFinite);
+        if (values.length) {
+          yMin = Math.min(...values);
+          yMax = Math.max(...values);
+          const pad = Math.max(0.25, (yMax - yMin) * 0.18);
+          yMin -= pad;
+          yMax += pad;
+        } else {
+          yMin = -1;
+          yMax = 1;
+        }
+      }
+      if (Math.abs(yMax - yMin) < 1e-9) {
+        yMax += 1;
+        yMin -= 1;
+      }
+
+      function yToPx(value) {
+        return area.bottom - ((value - yMin) / (yMax - yMin)) * area.height;
+      }
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(31, 41, 51, 0.18)";
+      ctx.fillStyle = "#1f2933";
+      ctx.lineWidth = 1;
+      ctx.font = "16px Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(title, area.left, area.top - 6);
+
+      ctx.beginPath();
+      ctx.moveTo(area.left, area.top);
+      ctx.lineTo(area.left, area.bottom);
+      ctx.lineTo(area.right, area.bottom);
+      ctx.stroke();
+
+      ctx.font = "12px Arial, sans-serif";
+      ctx.fillStyle = "rgba(31, 41, 51, 0.76)";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let tick = 0; tick <= 3; tick += 1) {
+        const ratio = tick / 3;
+        const value = yMin + ratio * (yMax - yMin);
+        const y = area.bottom - ratio * area.height;
+        ctx.strokeStyle = "rgba(31, 41, 51, 0.08)";
+        ctx.beginPath();
+        ctx.moveTo(area.left, y);
+        ctx.lineTo(area.right, y);
+        ctx.stroke();
+        ctx.fillText(value.toFixed(valueKey === "amplitude_norm" ? 2 : 1), area.left - 8, y);
+      }
+
+      ctx.save();
+      ctx.translate(18, area.top + area.height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = "center";
+      ctx.fillText(ylabel, 0, 0);
+      ctx.restore();
+
+      for (const marker of visibleMarkers) {
+        const x = xToPx(marker.time);
+        ctx.strokeStyle = marker.color;
+        ctx.globalAlpha = 0.28;
+        ctx.beginPath();
+        ctx.moveTo(x, area.top);
+        ctx.lineTo(x, area.bottom);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.save();
+        ctx.translate(x + 2, area.top + 4);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = marker.color;
+        ctx.font = "11px Arial, sans-serif";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.fillText(marker.label, 0, 0);
+        ctx.restore();
+      }
+
+      if (points.length > 1) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          const x = xToPx(point.time);
+          const y = yToPx(point[valueKey]);
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    drawPanel(rawArea, "Raw audio", "PCM", "#4f83cc", visibleWaveformPoints, "value", -1, 1);
+    drawPanel(ampArea, "Amplitude", "normalized", "#ff9d42", visiblePoints, "amplitude_norm", 0, 1.1);
+    drawPanel(phaseArea, "Phase", "rad", "#5dae70", visiblePoints, "phase", null, null);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(31, 41, 51, 0.76)";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let tick = 0; tick <= 5; tick += 1) {
+      const ratio = tick / 5;
+      const timeValue = xMin + ratio * (xMax - xMin);
+      const x = ampArea.left + ratio * ampArea.width;
+      ctx.fillText(`${timeValue.toFixed(1)}s`, x, phaseArea.bottom + 12);
+    }
+    if (!visiblePoints.length && !visibleWaveformPoints.length) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "15px Arial, sans-serif";
+      ctx.fillText(realtimeLastStatusMessage, width / 2, height / 2);
+    }
+    ctx.restore();
+  }
+
+  function appendRealtimeFeature(message) {
+    realtimeFeaturesReceived += 1;
+    const featureTimestamp = Number(message.timestamp);
+    let featureTime = Number(message.time) || 0;
+    if (Number.isFinite(featureTimestamp) && Number.isFinite(realtimeSessionStartEpoch)) {
+      featureTime = featureTimestamp - realtimeSessionStartEpoch;
+    }
+    if (!Number.isFinite(featureTime) || featureTime < 0) {
+      featureTime = Number(message.time) || 0;
+    }
+    realtimeFeaturePoints.push({
+      time: featureTime,
+      timestamp: Number.isFinite(featureTimestamp) ? featureTimestamp : null,
+      timestamp_source: message.timestamp_source || "",
+      window_start_time: Number.isFinite(message.window_start_time) ? message.window_start_time : null,
+      window_end_time: Number.isFinite(message.window_end_time) ? message.window_end_time : null,
+      amplitude_norm: Number.isFinite(message.amplitude_norm) ? message.amplitude_norm : 0,
+      phase: Number.isFinite(message.phase) ? message.phase : 0,
+      range_cm: Number.isFinite(message.range_cm) ? message.range_cm : 0
+    });
+    if (realtimeFeaturePoints.length > realtimeMaxPoints) {
+      realtimeFeaturePoints.splice(0, realtimeFeaturePoints.length - realtimeMaxPoints);
+    }
+    queueRealtimeChartDraw();
+  }
+
+  function appendRealtimeWaveform(samples) {
+    if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch) || !samples || !samples.length) {
+      return;
+    }
+    const context = getAudioContext();
+    const sampleRate = context.sampleRate || targetSampleRate;
+    const frameEndTime = Date.now() / 1000 - realtimeSessionStartEpoch;
+    const frameStartTime = frameEndTime - samples.length / sampleRate;
+    const stride = Math.max(1, Math.floor(sampleRate / realtimeWaveformPlotHz));
+    for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += stride) {
+      const time = frameStartTime + sampleIndex / sampleRate;
+      if (Number.isFinite(time) && time >= 0) {
+        realtimeWaveformPoints.push({
+          time,
+          value: Math.max(-1, Math.min(1, Number(samples[sampleIndex]) || 0))
+        });
+      }
+    }
+    if (realtimeWaveformPoints.length > realtimeMaxWaveformPoints) {
+      realtimeWaveformPoints.splice(0, realtimeWaveformPoints.length - realtimeMaxWaveformPoints);
+    }
+    queueRealtimeChartDraw();
+  }
+
+  function getRealtimeMarkerColor(name) {
+    if (name === "keydown") {
+      return "#d62728";
+    }
+    if (name.includes("press") || name.includes("hold")) {
+      return "#ff7f0e";
+    }
+    if (name.includes("drag")) {
+      return "#2ca02c";
+    }
+    if (name.includes("swipe") || name.includes("pinch") || name.includes("wheel")) {
+      return "#17becf";
+    }
+    return "#9467bd";
+  }
+
+  function getRealtimeMarkerLabel(event) {
+    const name = event.name || "";
+    const props = event.properties || {};
+    if (name === "keydown") {
+      if (props.code && props.code.startsWith("Key") && props.code.length === 4) {
+        return props.code.slice(3);
+      }
+      return props.key || "key";
+    }
+    const labels = {
+      tap_to_click: "tap-click",
+      press_to_click: "press-click",
+      long_press_to_click: "hold-click",
+      double_tap_to_click: "2tap-click",
+      double_press_to_click: "2press-click",
+      tap: "tap",
+      press: "press",
+      long_press: "hold",
+      double_tap: "2tap",
+      double_press: "2press",
+      click: "click",
+      double_click: "2click",
+      drag_start: "drag>",
+      drag_end: "<drag",
+      swipe: "swipe",
+      two_finger_swipe: "2swipe",
+      wheel_pinch: "pinch",
+      wheel_swipe: "wheel",
+      pinch_start: "pinch>",
+      pinch_end: "<pinch"
+    };
+    return labels[name] || name;
+  }
+
+  function recordRealtimeEventMarker(event) {
+    if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch) || !event) {
+      return;
+    }
+    const eventTime = Number(event.epochSeconds) - realtimeSessionStartEpoch;
+    if (!Number.isFinite(eventTime) || eventTime < 0) {
+      return;
+    }
+    const correctedEventTime = eventTime + getLocalStorageNumber("webagentAudioEventOffsetMs", 80) / 1000;
+    if (!Number.isFinite(correctedEventTime) || correctedEventTime < 0) {
+      return;
+    }
+    const keepNames = new Set([
+      "keydown",
+      "tap_to_click",
+      "press_to_click",
+      "long_press_to_click",
+      "double_tap_to_click",
+      "double_press_to_click",
+      "drag_start",
+      "drag_end",
+      "swipe",
+      "two_finger_swipe",
+      "wheel_pinch",
+      "wheel_swipe",
+      "pinch_start",
+      "pinch_end"
+    ]);
+    if (!keepNames.has(event.name)) {
+      return;
+    }
+    realtimeEventMarkers.push({
+      time: correctedEventTime,
+      rawTime: eventTime,
+      label: getRealtimeMarkerLabel(event),
+      color: getRealtimeMarkerColor(event.name)
+    });
+    if (realtimeEventMarkers.length > realtimeMaxMarkers) {
+      realtimeEventMarkers.splice(0, realtimeEventMarkers.length - realtimeMaxMarkers);
+    }
+    queueRealtimeChartDraw();
+  }
+
+  function handleRealtimeMessage(rawData) {
+    let message = null;
+    try {
+      message = JSON.parse(rawData);
+    } catch (error) {
+      return;
+    }
+
+    if (message.type === "feature") {
+      appendRealtimeFeature(message);
+      return;
+    }
+    if (message.type === "alignment") {
+      setRealtimeStatus(`Live Python IQ aligned. Peak/base ${Number(message.peak_over_baseline || 0).toFixed(1)}x.`);
+      return;
+    }
+    if (message.type === "status") {
+      if (message.status === "connected") {
+        setRealtimeStatus("Live backend connected. Waiting for sensing frames...");
+      } else if (message.status === "started") {
+        const resampleText = message.resampling
+          ? ` Resampling ${message.sample_rate} Hz to ${message.processing_sample_rate} Hz.`
+          : "";
+        setRealtimeStatus(`Live Python IQ running.${resampleText}`);
+      } else if (message.status === "frames") {
+        realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
+        if (!realtimeFeaturesReceived) {
+          const alignedText = message.aligned ? "aligned, waiting for feature points" : "waiting for chirp alignment";
+          const processedText = Number.isFinite(message.frames_processed)
+            ? ` processed ${message.frames_processed};`
+            : "";
+          const dropText = message.dropped_stale_frames
+            ? ` dropped ${message.dropped_stale_frames} stale frames to stay live;`
+            : "";
+          const ageText = Number.isFinite(message.latest_frame_age_ms)
+            ? ` latest age ${message.latest_frame_age_ms} ms;`
+            : "";
+          setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
+        }
+      } else if (message.status === "stopped") {
+        setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);
+      }
+      return;
+    }
+    if (message.type === "warning" || message.type === "error") {
+      setRealtimeStatus(`Live Python IQ: ${message.message || message.type}`);
+    }
+  }
+
+  async function startRealtimeSession() {
+    resetRealtimeChart();
+    if (!realtimeCanvas || !("WebSocket" in window)) {
+      setRealtimeStatus("Live Python IQ unavailable in this browser.");
+      return false;
+    }
+    return await new Promise((resolve) => {
+      let settled = false;
+      const socket = new WebSocket(getRealtimeWebSocketUrl());
+      socket.binaryType = "arraybuffer";
+      const timeout = window.setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        try {
+          socket.close();
+        } catch (error) {
+          // Ignore close races.
+        }
+        setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+        resolve(false);
+      }, 1200);
+
+      socket.addEventListener("open", () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timeout);
+        realtimeSocket = socket;
+        realtimeStreamingActive = true;
+        realtimeSessionStartEpoch = Date.now() / 1000;
+        socket.send(JSON.stringify({
+          type: "start",
+          timestamp: realtimeSessionStartEpoch,
+          sample_rate: getAudioContext().sampleRate,
+          frame_size: realtimeFrameSize,
+          channel_count: 1,
+          source: "browser_microphone",
+          format: "float32"
+        }));
+        setRealtimeStatus("Live Python IQ connected. Aligning chirp...");
+        resolve(true);
+      });
+
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data === "string") {
+          handleRealtimeMessage(event.data);
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        if (realtimeSocket === socket) {
+          realtimeSocket = null;
+        }
+        realtimeStreamingActive = false;
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+          resolve(false);
+        }
+      });
+
+      socket.addEventListener("error", () => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          try {
+            socket.close();
+          } catch (error) {
+            // Ignore close races.
+          }
+          setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+          resolve(false);
+        }
+      });
+    });
+  }
+
+  function sendRealtimeAudioFrame(samples) {
+    if (!realtimeStreamingActive || !realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    if (realtimeSocket.bufferedAmount > realtimeMaxSocketBufferedBytes) {
+      realtimeFramesDroppedBeforeSend += 1;
+      if (!realtimeFeaturesReceived && realtimeFramesDroppedBeforeSend % 25 === 0) {
+        setRealtimeStatus(`Dropped ${realtimeFramesDroppedBeforeSend} mic frames before send to keep live IQ current.`);
+      }
+      return;
+    }
+    realtimeFrameSequence += 1;
+    realtimeFramesSent += 1;
+    if (!realtimeFeaturesReceived && !realtimeFramesReceived && realtimeFramesSent % 25 === 0) {
+      setRealtimeStatus(`Sent ${realtimeFramesSent} mic frames to Python; waiting for live IQ features.`);
+    }
+    try {
+      const payload = new ArrayBuffer(realtimeAudioFrameHeaderBytes + samples.byteLength);
+      const view = new DataView(payload);
+      view.setUint8(0, 0x57);
+      view.setUint8(1, 0x41);
+      view.setUint8(2, 0x49);
+      view.setUint8(3, 0x51);
+      view.setFloat64(4, Date.now() / 1000, true);
+      view.setUint32(12, realtimeFrameSequence, true);
+      view.setUint32(16, samples.length, true);
+      new Float32Array(payload, realtimeAudioFrameHeaderBytes).set(samples);
+      realtimeSocket.send(payload);
+    } catch (error) {
+      setRealtimeStatus("Live Python IQ stream paused after a socket send error.");
+    }
+  }
+
+  function stopRealtimeSession() {
+    realtimeStreamingActive = false;
+    if (!realtimeSocket) {
+      return;
+    }
+    const socket = realtimeSocket;
+    realtimeSocket = null;
+    try {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "stop" }));
+      }
+      socket.close();
+    } catch (error) {
+      // Ignore close races.
+    }
+  }
+
   function buildAudioBufferFromRecording(context) {
     if (!recordedFrameCount || !recordingChannelCount) {
       return null;
@@ -755,8 +1349,9 @@ document.addEventListener("DOMContentLoaded", () => {
       resetRecordingBuffers();
       clearSpectrogram();
       await loadChirpPlaybackBuffer();
+      await startRealtimeSession();
       sensingSourceNode = context.createMediaStreamSource(microphoneOnlyStream);
-      sensingProcessorNode = context.createScriptProcessor(4096, channelCount, channelCount);
+      sensingProcessorNode = context.createScriptProcessor(realtimeFrameSize, channelCount, channelCount);
       sensingProcessorNode.onaudioprocess = (event) => {
         const inputBuffer = event.inputBuffer;
 
@@ -767,6 +1362,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const chunk = toMonoFloat32(inputBuffer);
         recordingBufferChunks.push(chunk);
         recordedFrameCount += chunk.length;
+        appendRealtimeWaveform(chunk);
+        sendRealtimeAudioFrame(chunk);
       };
       sensingSourceNode.connect(sensingProcessorNode);
       sensingProcessorNode.connect(context.destination);
@@ -783,6 +1380,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) {
       sensingActive = false;
       window.interactionTracker.setEnabled(false);
+      stopRealtimeSession();
       stopChirpPlayback();
       stopSensingCapture();
       resetRecordingBuffers();
@@ -809,6 +1407,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     window.interactionTracker.setEnabled(false);
     setSensingControls(Boolean(micStream), false);
+    stopRealtimeSession();
     stopChirpPlayback();
     sensingAudio.currentTime = 0;
     stopSensingCapture();
@@ -1049,14 +1648,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  window.addEventListener("webagent:track-event", (event) => {
+    recordRealtimeEventMarker(event.detail);
+  });
+
   window.experimentSensing = {
     isPlaybackActive: () => Boolean(chirpSourceNode),
     getRecordingChannelCount: () => recordingChannelCount,
-    getTargetSampleRate: () => targetSampleRate
+    getTargetSampleRate: () => targetSampleRate,
+    getRealtimePointCount: () => realtimeFeaturePoints.length,
+    getRealtimeDebugState: () => ({
+      connected: Boolean(realtimeSocket),
+      streaming: realtimeStreamingActive,
+      framesSent: realtimeFramesSent,
+      framesReceived: realtimeFramesReceived,
+      featuresReceived: realtimeFeaturesReceived,
+      framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
+      points: realtimeFeaturePoints.length,
+      waveformPoints: realtimeWaveformPoints.length,
+      status: realtimeLastStatusMessage,
+      realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
+      latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+      latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
+      markers: realtimeEventMarkers.slice(-8)
+    })
   };
 
   window.addEventListener("pagehide", () => {
     void stopSensing({ download: false });
+    stopRealtimeSession();
     stopChirpPlayback();
     if (micStream) {
       micStream.getTracks().forEach((track) => track.stop());
@@ -1065,5 +1685,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   setSensingControls(false, false);
+  drawRealtimeChart();
   void requestMicrophone();
 });

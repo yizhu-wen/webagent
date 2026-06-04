@@ -247,9 +247,9 @@
         <audio id="receivedAudio" class="audio-player hidden" loop></audio>
         <div id="realtimePanel" class="realtime-panel">
           <h4>Live Python IQ</h4>
-          <p id="realtimeStatus">Start the backend server to see live amplitude and phase.</p>
+          <p id="realtimeStatus">Start the backend server to see live raw audio, amplitude, and phase.</p>
           <div class="realtime-chart-wrap">
-            <canvas id="realtimeCanvas" class="realtime-canvas" width="820" height="390"></canvas>
+            <canvas id="realtimeCanvas" class="realtime-canvas" width="820" height="520"></canvas>
           </div>
         </div>
         <div id="spectrogramPanel" class="spectrogram-panel hidden">
@@ -299,9 +299,10 @@
     let realtimeSessionStartEpoch = null;
     let realtimeFrameSequence = 0;
     let realtimeFeaturePoints = [];
+    let realtimeWaveformPoints = [];
     let realtimeEventMarkers = [];
     let realtimeDrawPending = false;
-    let realtimeLastStatusMessage = "Start the backend server to see live amplitude and phase.";
+    let realtimeLastStatusMessage = "Start the backend server to see live raw audio, amplitude, and phase.";
     let realtimeFramesSent = 0;
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
@@ -348,7 +349,9 @@
       frameSize: 2048,
       windowSeconds: 20,
       maxPoints: 1400,
+      maxWaveformPoints: 6000,
       maxMarkers: 220,
+      waveformPlotHz: 240,
       maxSocketBufferedBytes: 512 * 1024,
       audioFrameHeaderBytes: 20
     };
@@ -1149,10 +1152,12 @@
         featuresReceived: realtimeFeaturesReceived,
         framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
         points: realtimeFeaturePoints.length,
+        waveformPoints: realtimeWaveformPoints.length,
         status: realtimeLastStatusMessage,
         realtimeWebSocketUrl: appConfig.realtimeWebSocketUrl || null,
         audioEventOffsetMs: appConfig.audioEventOffsetMs,
         latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+        latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
         markers: realtimeEventMarkers.slice(-8)
       })
     };
@@ -1466,6 +1471,7 @@
 
     function resetRealtimeChart() {
       realtimeFeaturePoints = [];
+      realtimeWaveformPoints = [];
       realtimeEventMarkers = [];
       realtimeFrameSequence = 0;
       realtimeFramesSent = 0;
@@ -1492,10 +1498,10 @@
       const width = realtimeCanvas.width;
       const height = realtimeCanvas.height;
       const margin = { top: 28, right: 18, bottom: 42, left: 74 };
-      const gap = 42;
+      const gap = 32;
       const plotWidth = width - margin.left - margin.right;
-      const panelHeight = Math.floor((height - margin.top - margin.bottom - gap) / 2);
-      const ampArea = {
+      const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 2) / 3);
+      const rawArea = {
         left: margin.left,
         top: margin.top,
         right: margin.left + plotWidth,
@@ -1503,11 +1509,19 @@
         width: plotWidth,
         height: panelHeight
       };
-      const phaseArea = {
+      const ampArea = {
         left: margin.left,
         top: margin.top + panelHeight + gap,
         right: margin.left + plotWidth,
         bottom: margin.top + panelHeight + gap + panelHeight,
+        width: plotWidth,
+        height: panelHeight
+      };
+      const phaseArea = {
+        left: margin.left,
+        top: margin.top + (panelHeight + gap) * 2,
+        right: margin.left + plotWidth,
+        bottom: margin.top + (panelHeight + gap) * 2 + panelHeight,
         width: plotWidth,
         height: panelHeight
       };
@@ -1516,23 +1530,31 @@
       ctx.fillStyle = "#fffdfa";
       ctx.fillRect(0, 0, width, height);
 
-      const latestTime = realtimeFeaturePoints.length
+      const latestFeatureTime = realtimeFeaturePoints.length
         ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1].time
-        : realtimeConfig.windowSeconds;
+        : 0;
+      const latestWaveformTime = realtimeWaveformPoints.length
+        ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1].time
+        : 0;
+      const latestMarkerTime = realtimeEventMarkers.length
+        ? realtimeEventMarkers[realtimeEventMarkers.length - 1].time
+        : 0;
+      const latestTime = Math.max(latestFeatureTime, latestWaveformTime, latestMarkerTime, realtimeConfig.windowSeconds);
       const xMax = Math.max(realtimeConfig.windowSeconds, latestTime);
       const xMin = Math.max(0, xMax - realtimeConfig.windowSeconds);
       const visiblePoints = realtimeFeaturePoints.filter((point) => point.time >= xMin && point.time <= xMax);
+      const visibleWaveformPoints = realtimeWaveformPoints.filter((point) => point.time >= xMin && point.time <= xMax);
       const visibleMarkers = realtimeEventMarkers.filter((marker) => marker.time >= xMin && marker.time <= xMax);
 
       function xToPx(timeValue) {
         return ampArea.left + ((timeValue - xMin) / Math.max(1e-6, xMax - xMin)) * ampArea.width;
       }
 
-      function drawPanel(area, title, ylabel, color, valueKey, fixedMin, fixedMax) {
+      function drawPanel(area, title, ylabel, color, points, valueKey, fixedMin, fixedMax) {
         let yMin = fixedMin;
         let yMax = fixedMax;
         if (yMin === null || yMax === null) {
-          const values = visiblePoints.map((point) => point[valueKey]).filter(Number.isFinite);
+          const values = points.map((point) => point[valueKey]).filter(Number.isFinite);
           if (values.length) {
             yMin = Math.min(...values);
             yMax = Math.max(...values);
@@ -1611,11 +1633,11 @@
           ctx.restore();
         }
 
-        if (visiblePoints.length > 1) {
+        if (points.length > 1) {
           ctx.strokeStyle = color;
           ctx.lineWidth = 1.7;
           ctx.beginPath();
-          visiblePoints.forEach((point, index) => {
+          points.forEach((point, index) => {
             const x = xToPx(point.time);
             const y = yToPx(point[valueKey]);
             if (index === 0) {
@@ -1630,8 +1652,9 @@
         ctx.restore();
       }
 
-      drawPanel(ampArea, "Amplitude", "normalized", "#ff9d42", "amplitude_norm", 0, 1.1);
-      drawPanel(phaseArea, "Phase", "rad", "#5dae70", "phase", null, null);
+      drawPanel(rawArea, "Raw audio", "PCM", "#4f83cc", visibleWaveformPoints, "value", -1, 1);
+      drawPanel(ampArea, "Amplitude", "normalized", "#ff9d42", visiblePoints, "amplitude_norm", 0, 1.1);
+      drawPanel(phaseArea, "Phase", "rad", "#5dae70", visiblePoints, "phase", null, null);
 
       ctx.save();
       ctx.fillStyle = "rgba(46, 36, 28, 0.76)";
@@ -1644,7 +1667,7 @@
         const x = ampArea.left + ratio * ampArea.width;
         ctx.fillText(`${timeValue.toFixed(1)}s`, x, phaseArea.bottom + 12);
       }
-      if (!visiblePoints.length) {
+      if (!visiblePoints.length && !visibleWaveformPoints.length) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.font = "15px 'Segoe UI', sans-serif";
@@ -1835,12 +1858,37 @@
       recordingSessionActive = false;
     }
 
+    function appendRealtimeWaveform(samples) {
+      if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch) || !samples || !samples.length) {
+        return;
+      }
+      const recordingContext = getRecordingContext();
+      const sampleRate = recordingContext.sampleRate || targetWavSampleRate;
+      const frameEndTime = Date.now() / 1000 - realtimeSessionStartEpoch;
+      const frameStartTime = frameEndTime - samples.length / sampleRate;
+      const stride = Math.max(1, Math.floor(sampleRate / realtimeConfig.waveformPlotHz));
+      for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += stride) {
+        const time = frameStartTime + sampleIndex / sampleRate;
+        if (Number.isFinite(time) && time >= 0) {
+          realtimeWaveformPoints.push({
+            time,
+            value: Math.max(-1, Math.min(1, Number(samples[sampleIndex]) || 0))
+          });
+        }
+      }
+      if (realtimeWaveformPoints.length > realtimeConfig.maxWaveformPoints) {
+        realtimeWaveformPoints.splice(0, realtimeWaveformPoints.length - realtimeConfig.maxWaveformPoints);
+      }
+      queueRealtimeChartDraw();
+    }
+
     function handleRecordedAudioChunk(chunk) {
       if (!recordingChannelCount) {
         recordingChannelCount = 1;
       }
       recordingBufferChunks.push(chunk);
       recordedFrameCount += chunk.length;
+      appendRealtimeWaveform(chunk);
       sendRealtimeAudioFrame(chunk);
     }
 

@@ -12,6 +12,19 @@ test("original page links to the simplified experiment sites", async ({ page }) 
   await expect(page.locator(".product-row")).toHaveCount(5);
 });
 
+test("experiment pages expose live Python IQ panels", async ({ page }) => {
+  for (const path of ["/experiments/", "/experiments/travel/"]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: "Live Python IQ" })).toBeVisible();
+    await expect(page.locator("[data-realtime-canvas]")).toBeVisible();
+    await expect(page.locator("[data-realtime-status]")).toContainText("Start sensing");
+
+    const debugState = await page.evaluate(() => window.experimentSensing.getRealtimeDebugState());
+    expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
+    expect(debugState.points).toBe(0);
+  }
+});
+
 test("simple shopping page captures interaction data", async ({ page }) => {
   await page.goto("/experiments/");
   await expect(page.getByRole("heading", { name: "Simple Shopping Task" })).toBeVisible();
