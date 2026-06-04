@@ -4,10 +4,10 @@ This guide shows how to run the ultrasound realtime sensing website on a local m
 
 ## 1. Open Anaconda Prompt
 
-Open **Anaconda Prompt** on Windows, then go to the project folder:
+Open **Anaconda Prompt** on Windows, then go to the folder where you cloned this repository:
 
 ```bash
-cd C:\Users\yizhu\Documents\webagent
+cd path\to\webagent
 ```
 
 ## 2. Create A Minimal Conda Environment
