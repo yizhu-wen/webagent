@@ -88,6 +88,8 @@ http://localhost:8124/
 - Stopping sensing does not download files automatically. It prepares the
   tracking JSON, OS-style event log, WAV, spectrogram, and diagnostics in the
   browser. Click **Download session files** when you want to save them.
+- While sensing is active, the page tracks only keystrokes (`keydown`), pointer
+  movement, scrolling, and clicks. No gesture or form-event records are derived.
 - The completed WAV, diagnostics, and event log are also sent to the local
   `/api/analyze-recording` endpoint for post-processing. This backend upload is
   separate from the optional browser download.
