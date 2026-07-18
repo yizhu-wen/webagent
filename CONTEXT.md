@@ -18,8 +18,6 @@ The current design goal is intentionally simple and functional, with minimal vis
 ## Primary Files
 
 - `index.html`: Main sensing page. Contains UI, microphone capture, chirp playback, event tracking, WAV export, and spectrogram rendering.
-- `install.sh`: One-command Bash setup and launch script. Creates/reuses
-  `.venv`, installs `requirements.txt`, and executes `realtime.py`.
 - `recording-profile.js`: Shared strict/compatibility microphone profiles,
   supported-constraint construction, track qualification, and AudioContext
   sample-rate qualification.
