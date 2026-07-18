@@ -1,6 +1,21 @@
 const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
+function expectOnlyRequestedTrackingEvents(payload) {
+  const trackedEventNames = ["click", "keydown", "pointer_move", "scroll"];
+  const eventNames = payload.events.map((event) => event.name);
+
+  for (const expectedEvent of trackedEventNames) {
+    expect(eventNames).toContain(expectedEvent);
+  }
+  expect([...new Set(eventNames)].sort()).toEqual(trackedEventNames);
+  expect(Object.keys(payload.trackingConfig).sort()).toEqual([
+    "maxEvents",
+    "pointerMoveThrottleMs",
+    "scrollThrottleMs"
+  ]);
+}
+
 test("original page links to the simplified experiment sites", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("a[href='experiments/']")).toHaveText("Open shopping experiment");
@@ -139,34 +154,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   expect(spectrogramDownload.suggestedFilename()).toMatch(/^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/);
 
   const payload = JSON.parse(fs.readFileSync(await trackingDownload.path(), "utf8"));
-  const eventNames = payload.events.map((event) => event.name);
-
-  for (const expectedEvent of [
-    "click",
-    "tap",
-    "pointer_down",
-    "pointer_move",
-    "pointer_up",
-    "keydown",
-    "wheel_swipe",
-    "form_submit"
-  ]) {
-    expect(eventNames).toContain(expectedEvent);
-  }
-
-  for (const removedEvent of [
-    "page_view",
-    "mousemove",
-    "scroll",
-    "keyup",
-    "page_visibility_change"
-  ]) {
-    expect(eventNames).not.toContain(removedEvent);
-  }
-
-  const formSubmits = payload.events.filter((event) => event.name === "form_submit");
-  expect(formSubmits.length).toBeGreaterThanOrEqual(2);
-  expect(formSubmits.some((event) => event.properties.target.id === "checkout-form")).toBe(true);
+  expectOnlyRequestedTrackingEvents(payload);
 });
 
 test("travel tourism page captures interaction data", async ({ page }) => {
@@ -282,31 +270,5 @@ test("travel tourism page captures interaction data", async ({ page }) => {
 
   const trackingDownload = downloads.find((item) => item.suggestedFilename().includes("travel-tourism"));
   const payload = JSON.parse(fs.readFileSync(await trackingDownload.path(), "utf8"));
-  const eventNames = payload.events.map((event) => event.name);
-
-  for (const expectedEvent of [
-    "click",
-    "tap",
-    "pointer_down",
-    "pointer_move",
-    "pointer_up",
-    "keydown",
-    "wheel_swipe",
-    "form_submit"
-  ]) {
-    expect(eventNames).toContain(expectedEvent);
-  }
-
-  for (const removedEvent of [
-    "page_view",
-    "mousemove",
-    "scroll",
-    "keyup",
-    "page_visibility_change"
-  ]) {
-    expect(eventNames).not.toContain(removedEvent);
-  }
-
-  const formSubmits = payload.events.filter((event) => event.name === "form_submit");
-  expect(formSubmits.some((event) => event.properties.target.id === "booking-form")).toBe(true);
+  expectOnlyRequestedTrackingEvents(payload);
 });

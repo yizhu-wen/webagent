@@ -2,28 +2,17 @@
   const trackingConfig = {
     maxEvents: 10000,
     pointerMoveThrottleMs: 120,
-    doubleTapWindowMs: 320,
-    doublePressWindowMs: 900,
-    tapMaxDurationMs: 300,
-    tapMaxDistancePx: 10,
-    pressMinDurationMs: 300,
-    longPressMinDurationMs: 650,
-    dragMinDistancePx: 8,
-    swipeMinDistancePx: 40,
-    swipeMaxDurationMs: 700,
-    pinchMinScaleDelta: 0.04
+    scrollThrottleMs: 120
   };
+  const trackedEventNames = new Set(["keydown", "pointer_move", "scroll", "click"]);
   const eventLog = [];
   const sessionId = createTrackingId();
   let startedAt = null;
   let startedEpochSeconds = null;
-  const activePointers = new Map();
-  let lastTap = null;
-  let lastPress = null;
   let lastPointerMoveTrackAt = 0;
   let lastPointerMovePoint = null;
-  let pendingClickGesture = null;
-  let pinchSession = null;
+  let lastScrollTrackAt = 0;
+  let lastScrollPoint = null;
   let interactionTrackingEnabled = false;
 
   function createTrackingId() {
@@ -81,16 +70,6 @@
     return descriptor;
   }
 
-  function getFormFields(form) {
-    return Array.from(form.elements)
-      .filter((element) => element.name)
-      .map((element) => ({
-        name: element.name,
-        tag: element.tagName.toLowerCase(),
-        type: element.type || ""
-      }));
-  }
-
   function getSafeKey(event) {
     if (typeof event.key !== "string" || event.key.length === 0) {
       return "Unidentified";
@@ -143,10 +122,6 @@
   function getOsEventValue(event) {
     const props = event.properties || {};
     return sanitizePipeValue([
-      props.gesture ? `gesture=${props.gesture}` : "",
-      props.source ? `source=${props.source}` : "",
-      props.reason ? `reason=${props.reason}` : "",
-      props.note ? `note=${props.note}` : "",
       props.key ? `key=${props.key}` : "",
       props.code ? `code=${props.code}` : "",
       Number.isFinite(props.location) ? `location=${props.location}` : "",
@@ -156,7 +131,6 @@
       props.metaKey ? "metaKey=true" : "",
       props.shiftKey ? "shiftKey=true" : "",
       props.pointerType ? `pointerType=${props.pointerType}` : "",
-      Number.isFinite(props.pointerCount) ? `pointerCount=${props.pointerCount}` : "",
       Number.isFinite(props.button) ? `button=${props.button}` : "",
       Number.isFinite(props.buttons) ? `buttons=${props.buttons}` : "",
       Number.isFinite(props.pressure) ? `pressure=${props.pressure.toFixed(3)}` : "",
@@ -170,15 +144,8 @@
       Number.isFinite(props.movementY) ? `movementY=${props.movementY.toFixed(1)}` : "",
       Number.isFinite(props.deltaX) ? `deltaX=${props.deltaX.toFixed(1)}` : "",
       Number.isFinite(props.deltaY) ? `deltaY=${props.deltaY.toFixed(1)}` : "",
-      Number.isFinite(props.deltaZ) ? `deltaZ=${props.deltaZ.toFixed(1)}` : "",
-      Number.isFinite(props.deltaMode) ? `deltaMode=${props.deltaMode}` : "",
-      Number.isFinite(props.distance) ? `distance=${props.distance.toFixed(1)}` : "",
-      Number.isFinite(props.durationMs) ? `durationMs=${props.durationMs.toFixed(1)}` : "",
-      Number.isFinite(props.scale) ? `scale=${props.scale.toFixed(3)}` : "",
-      props.direction ? `direction=${props.direction}` : "",
-      props.value !== undefined ? `value=${props.value}` : "",
-      props.method ? `method=${props.method}` : "",
-      props.actionPath ? `actionPath=${props.actionPath}` : "",
+      Number.isFinite(props.scrollX) ? `scrollX=${props.scrollX.toFixed(1)}` : "",
+      Number.isFinite(props.scrollY) ? `scrollY=${props.scrollY.toFixed(1)}` : "",
       describeTargetForPipe(props.target)
     ].filter(Boolean).join(" "));
   }
@@ -250,8 +217,8 @@
     }
   }
 
-  function trackEvent(name, properties = {}, options = {}) {
-    if (!interactionTrackingEnabled && !options.force) {
+  function trackEvent(name, properties = {}) {
+    if (!interactionTrackingEnabled || !trackedEventNames.has(name)) {
       return;
     }
 
@@ -276,30 +243,12 @@
     }));
   }
 
-  function getPointProperties(event) {
-    return {
-      pointerId: event.pointerId,
-      pointerType: event.pointerType || "unknown",
-      isPrimary: event.isPrimary,
-      button: event.button,
-      buttons: event.buttons,
-      pressure: Number.isFinite(event.pressure) ? event.pressure : 0,
-      x: event.clientX,
-      y: event.clientY,
-      pageX: event.pageX,
-      pageY: event.pageY,
-      target: getElementDescriptor(event.target)
-    };
-  }
-
   function getPointerMoveProperties(event) {
     const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
     const movementY = Number.isFinite(event.movementY) ? event.movementY : 0;
     const dx = lastPointerMovePoint ? event.clientX - lastPointerMovePoint.x : movementX;
     const dy = lastPointerMovePoint ? event.clientY - lastPointerMovePoint.y : movementY;
-    const distance = Math.hypot(dx, dy);
     return {
-      gesture: "pointer_move",
       pointerId: event.pointerId,
       pointerType: event.pointerType || "mouse",
       isPrimary: event.isPrimary,
@@ -313,19 +262,12 @@
       dy,
       movementX,
       movementY,
-      distance,
-      direction: distance > 0 ? getDirection(dx, dy) : "none",
       target: getElementDescriptor(event.target)
     };
   }
 
   function trackPointerMove(event) {
-    const pointerType = event.pointerType || "mouse";
-    if (
-      !interactionTrackingEnabled ||
-      pointerType !== "mouse" ||
-      event.buttons !== 0
-    ) {
+    if (!interactionTrackingEnabled) {
       return;
     }
 
@@ -337,7 +279,8 @@
     const properties = getPointerMoveProperties(event);
     if (
       lastPointerMovePoint &&
-      properties.distance === 0 &&
+      properties.dx === 0 &&
+      properties.dy === 0 &&
       properties.movementX === 0 &&
       properties.movementY === 0
     ) {
@@ -353,116 +296,6 @@
       time: now
     };
     trackEvent("pointer_move", properties);
-  }
-
-  function getDirection(dx, dy) {
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      return dx >= 0 ? "right" : "left";
-    }
-    return dy >= 0 ? "down" : "up";
-  }
-
-  function getPointerDistance(a, b) {
-    return Math.hypot(a.lastX - b.lastX, a.lastY - b.lastY);
-  }
-
-  function getPointerCenter(a, b) {
-    return {
-      x: (a.lastX + b.lastX) / 2,
-      y: (a.lastY + b.lastY) / 2,
-      pageX: (a.lastPageX + b.lastPageX) / 2,
-      pageY: (a.lastPageY + b.lastPageY) / 2
-    };
-  }
-
-  function getPointerPair() {
-    const pointers = Array.from(activePointers.values());
-    return pointers.length === 2 ? pointers : null;
-  }
-
-  function updatePinchTracking() {
-    const pair = getPointerPair();
-    if (!pair) {
-      return;
-    }
-
-    const [a, b] = pair;
-    const distance = getPointerDistance(a, b);
-    const center = getPointerCenter(a, b);
-
-    if (!pinchSession) {
-      pinchSession = {
-        startDistance: distance,
-        startCenter: center,
-        lastCenter: center,
-        lastScale: 1,
-        startTime: performance.now(),
-        target: a.target || b.target
-      };
-      trackEvent("pinch_start", {
-        gesture: "pinch",
-        pointerCount: 2,
-        distance,
-        scale: 1,
-        ...center,
-        target: pinchSession.target
-      });
-      return;
-    }
-
-    const scale = distance / Math.max(1, pinchSession.startDistance);
-    pinchSession.lastCenter = center;
-    if (Math.abs(scale - pinchSession.lastScale) < trackingConfig.pinchMinScaleDelta) {
-      return;
-    }
-
-    pinchSession.lastScale = scale;
-    trackEvent("pinch_change", {
-      gesture: "pinch",
-      pointerCount: 2,
-      distance,
-      scale,
-      ...center,
-      target: pinchSession.target
-    });
-  }
-
-  function endPinchTracking() {
-    if (!pinchSession) {
-      return;
-    }
-
-    const center = pinchSession.lastCenter || pinchSession.startCenter;
-    const dx = center.x - pinchSession.startCenter.x;
-    const dy = center.y - pinchSession.startCenter.y;
-    const distance = Math.hypot(dx, dy);
-    const durationMs = performance.now() - pinchSession.startTime;
-
-    if (distance >= trackingConfig.swipeMinDistancePx && Math.abs(pinchSession.lastScale - 1) < 0.15) {
-      trackEvent("two_finger_swipe", {
-        gesture: "two_finger_swipe",
-        pointerCount: 2,
-        x: center.x,
-        y: center.y,
-        pageX: center.pageX,
-        pageY: center.pageY,
-        dx,
-        dy,
-        distance,
-        durationMs,
-        direction: getDirection(dx, dy),
-        target: pinchSession.target
-      });
-    }
-
-    trackEvent("pinch_end", {
-      gesture: "pinch",
-      pointerCount: activePointers.size,
-      scale: pinchSession.lastScale,
-      durationMs,
-      target: pinchSession.target
-    });
-    pinchSession = null;
   }
 
   function setInteractionTrackingEnabled(enabled) {
@@ -483,45 +316,11 @@
     const startDate = new Date();
     startedAt = startDate.toISOString();
     startedEpochSeconds = startDate.getTime() / 1000;
-    activePointers.clear();
-    lastTap = null;
-    lastPress = null;
     lastPointerMoveTrackAt = 0;
     lastPointerMovePoint = null;
-    pendingClickGesture = null;
-    pinchSession = null;
+    lastScrollTrackAt = 0;
+    lastScrollPoint = null;
     setInteractionTrackingEnabled(true);
-  }
-
-  function rememberClickGesture(name, properties, time) {
-    pendingClickGesture = {
-      name,
-      time,
-      x: properties.x,
-      y: properties.y,
-      properties: {
-        ...properties,
-        gesture: name,
-        inferredFrom: "pointer_duration"
-      }
-    };
-  }
-
-  function takePendingClickGesture(event) {
-    if (!pendingClickGesture) {
-      return null;
-    }
-
-    const ageMs = performance.now() - pendingClickGesture.time;
-    const distance = Math.hypot(event.clientX - pendingClickGesture.x, event.clientY - pendingClickGesture.y);
-    if (ageMs > 500 || distance > trackingConfig.tapMaxDistancePx * 3) {
-      pendingClickGesture = null;
-      return null;
-    }
-
-    const gesture = pendingClickGesture;
-    pendingClickGesture = null;
-    return gesture;
   }
 
   function buildTrackingFileName(timestampSlug) {
@@ -530,10 +329,6 @@
   }
 
   function prepareTrackingData(timestampSlug = buildDownloadTimestamp()) {
-    trackEvent("tracking_data_prepared", {
-      eventCount: eventLog.length
-    });
-
     const events = eventLog.slice();
     const downloadedAt = new Date();
     const payload = {
@@ -575,300 +370,45 @@
   }
 
   function setupInteractionTracking() {
-    document.addEventListener("pointerdown", (event) => {
-      const pointer = {
-        pointerId: event.pointerId,
-        pointerType: event.pointerType || "unknown",
-        startX: event.clientX,
-        startY: event.clientY,
-        startPageX: event.pageX,
-        startPageY: event.pageY,
-        lastX: event.clientX,
-        lastY: event.clientY,
-        lastPageX: event.pageX,
-        lastPageY: event.pageY,
-        startTime: performance.now(),
-        lastMoveTrackAt: 0,
-        target: getElementDescriptor(event.target),
-        dragging: false
-      };
-      activePointers.set(event.pointerId, pointer);
-      trackEvent("pointer_down", getPointProperties(event));
-    }, true);
-
     document.addEventListener("pointermove", (event) => {
-      const pointer = activePointers.get(event.pointerId);
-      if (!pointer) {
-        trackPointerMove(event);
-        return;
-      }
-
-      pointer.lastX = event.clientX;
-      pointer.lastY = event.clientY;
-      pointer.lastPageX = event.pageX;
-      pointer.lastPageY = event.pageY;
-      const dx = event.clientX - pointer.startX;
-      const dy = event.clientY - pointer.startY;
-      const distance = Math.hypot(dx, dy);
-
-    if (activePointers.size === 2) {
-      updatePinchTracking();
-      return;
-    }
-
-      if (distance < trackingConfig.dragMinDistancePx) {
-        return;
-      }
-
-      const now = performance.now();
-      if (!pointer.dragging) {
-        pointer.dragging = true;
-        trackEvent("drag_start", {
-          gesture: "drag",
-          pointerId: event.pointerId,
-          pointerType: pointer.pointerType,
-          x: pointer.startX,
-          y: pointer.startY,
-          pageX: pointer.startPageX,
-          pageY: pointer.startPageY,
-          target: pointer.target
-        });
-      }
-
-      if (now - pointer.lastMoveTrackAt >= trackingConfig.pointerMoveThrottleMs) {
-        pointer.lastMoveTrackAt = now;
-        trackEvent("drag_move", {
-          gesture: "drag",
-          pointerId: event.pointerId,
-          pointerType: pointer.pointerType,
-          x: event.clientX,
-          y: event.clientY,
-          pageX: event.pageX,
-          pageY: event.pageY,
-          dx,
-          dy,
-          distance,
-          direction: getDirection(dx, dy),
-          target: pointer.target
-        });
-      }
+      trackPointerMove(event);
     }, { passive: true, capture: true });
 
-    document.addEventListener("pointerup", (event) => {
-      const pointer = activePointers.get(event.pointerId);
-      if (!pointer) {
-        return;
-      }
-
-      const now = performance.now();
-      const dx = event.clientX - pointer.startX;
-      const dy = event.clientY - pointer.startY;
-      const distance = Math.hypot(dx, dy);
-      const durationMs = now - pointer.startTime;
-      const direction = getDirection(dx, dy);
-      const base = {
-        pointerId: event.pointerId,
-        pointerType: pointer.pointerType,
+    document.addEventListener("click", (event) => {
+      trackEvent("click", {
         x: event.clientX,
         y: event.clientY,
         pageX: event.pageX,
         pageY: event.pageY,
-        dx,
-        dy,
-        distance,
-        durationMs,
-        direction,
-        target: pointer.target
-      };
-
-      trackEvent("pointer_up", { ...getPointProperties(event), durationMs });
-
-      if (pointer.dragging) {
-        trackEvent("drag_end", { gesture: "drag", ...base });
-      } else if (distance <= trackingConfig.tapMaxDistancePx && durationMs <= trackingConfig.tapMaxDurationMs) {
-        trackEvent("tap", { gesture: "tap", ...base });
-        let clickGestureName = "tap_to_click";
-        if (
-          lastTap &&
-          now - lastTap.time <= trackingConfig.doubleTapWindowMs &&
-          Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= trackingConfig.tapMaxDistancePx * 2
-        ) {
-          trackEvent("double_tap", {
-            gesture: "double_tap",
-            pointerType: pointer.pointerType,
-            x: event.clientX,
-            y: event.clientY,
-            pageX: event.pageX,
-            pageY: event.pageY,
-            intervalMs: now - lastTap.time,
-            target: pointer.target
-          });
-          lastTap = null;
-          clickGestureName = "double_tap_to_click";
-        } else {
-          lastTap = { time: now, x: event.clientX, y: event.clientY };
-        }
-        rememberClickGesture(clickGestureName, base, now);
-      } else if (distance >= trackingConfig.swipeMinDistancePx && durationMs <= trackingConfig.swipeMaxDurationMs) {
-        trackEvent("swipe", { gesture: "swipe", pointerCount: activePointers.size || 1, ...base });
-      } else if (durationMs >= trackingConfig.longPressMinDurationMs) {
-        trackEvent("long_press", { gesture: "long_press", ...base });
-        rememberClickGesture("long_press_to_click", base, now);
-        lastPress = null;
-      } else if (durationMs >= trackingConfig.pressMinDurationMs) {
-        trackEvent("press", { gesture: "press", ...base });
-        let clickGestureName = "press_to_click";
-        if (
-          lastPress &&
-          now - lastPress.time <= trackingConfig.doublePressWindowMs &&
-          Math.hypot(event.clientX - lastPress.x, event.clientY - lastPress.y) <= trackingConfig.tapMaxDistancePx * 2
-        ) {
-          trackEvent("double_press", {
-            gesture: "double_press",
-            pointerType: pointer.pointerType,
-            x: event.clientX,
-            y: event.clientY,
-            pageX: event.pageX,
-            pageY: event.pageY,
-            intervalMs: now - lastPress.time,
-            durationMs,
-            target: pointer.target
-          });
-          lastPress = null;
-          clickGestureName = "double_press_to_click";
-        } else {
-          lastPress = { time: now, x: event.clientX, y: event.clientY };
-        }
-        rememberClickGesture(clickGestureName, base, now);
-      }
-
-      activePointers.delete(event.pointerId);
-      if (activePointers.size < 2) {
-        endPinchTracking();
-      }
-    }, true);
-
-    document.addEventListener("pointercancel", (event) => {
-      const pointer = activePointers.get(event.pointerId);
-      trackEvent("pointer_cancel", {
-        ...getPointProperties(event),
-        target: pointer ? pointer.target : getElementDescriptor(event.target)
-      });
-      activePointers.delete(event.pointerId);
-      if (activePointers.size < 2) {
-        endPinchTracking();
-      }
-    }, true);
-
-    document.addEventListener("click", (event) => {
-      const inferredClickGesture = takePendingClickGesture(event);
-      if (inferredClickGesture) {
-        trackEvent(inferredClickGesture.name, {
-          ...inferredClickGesture.properties,
-          clickX: event.clientX,
-          clickY: event.clientY,
-          button: event.button
-        });
-      }
-      trackEvent("click", {
-        gesture: "click",
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
         button: event.button,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    document.addEventListener("dblclick", (event) => {
-      trackEvent("double_click", {
-        gesture: "double_click",
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
-        button: event.button,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    document.addEventListener("wheel", (event) => {
-      trackEvent(event.ctrlKey ? "wheel_pinch" : "wheel_swipe", {
-        gesture: event.ctrlKey ? "pinch" : "wheel_swipe",
-        deltaX: event.deltaX,
-        deltaY: event.deltaY,
-        deltaZ: event.deltaZ,
-        deltaMode: event.deltaMode,
+        altKey: event.altKey,
         ctrlKey: event.ctrlKey,
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
         target: getElementDescriptor(event.target)
       });
-    }, { passive: true, capture: true });
+    }, true);
 
-    document.addEventListener("input", (event) => {
-      if (!(event.target instanceof HTMLInputElement) || event.target.type !== "range") {
+    window.addEventListener("scroll", (event) => {
+      if (!interactionTrackingEnabled) {
         return;
       }
-      trackEvent("range_input", {
-        gesture: "range_input",
-        value: event.target.value,
-        min: event.target.min,
-        max: event.target.max,
-        step: event.target.step,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    document.addEventListener("change", (event) => {
-      if (!(event.target instanceof HTMLInputElement) || event.target.type !== "range") {
+      const now = performance.now();
+      if (now - lastScrollTrackAt < trackingConfig.scrollThrottleMs) {
         return;
       }
-      trackEvent("range_change", {
-        gesture: "range_change",
-        value: event.target.value,
-        min: event.target.min,
-        max: event.target.max,
-        step: event.target.step,
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      trackEvent("scroll", {
+        scrollX,
+        scrollY,
+        deltaX: lastScrollPoint ? scrollX - lastScrollPoint.x : 0,
+        deltaY: lastScrollPoint ? scrollY - lastScrollPoint.y : 0,
         target: getElementDescriptor(event.target)
       });
-    }, true);
-
-    document.addEventListener("dragstart", (event) => {
-      trackEvent("native_drag_start", {
-        gesture: "native_drag",
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    document.addEventListener("drop", (event) => {
-      trackEvent("native_drop", {
-        gesture: "native_drag",
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    document.addEventListener("dragend", (event) => {
-      trackEvent("native_drag_end", {
-        gesture: "native_drag",
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.clientX + window.scrollX,
-        pageY: event.clientY + window.scrollY,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
+      lastScrollTrackAt = now;
+      lastScrollPoint = { x: scrollX, y: scrollY };
+    }, { passive: true });
 
     document.addEventListener("keydown", (event) => {
       trackEvent("keydown", {
@@ -884,15 +424,6 @@
       });
     }, true);
 
-    document.addEventListener("submit", (event) => {
-      trackEvent("form_submit", {
-        gesture: "form_submit",
-        target: getElementDescriptor(event.target),
-        method: event.target.method || "get",
-        actionPath: event.target.action ? new URL(event.target.action, window.location.href).pathname : "",
-        fields: getFormFields(event.target)
-      });
-    }, true);
   }
 
   window.interactionTracker = {

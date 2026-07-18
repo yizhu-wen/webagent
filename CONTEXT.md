@@ -283,64 +283,34 @@ browser-side artifacts remain available through the download button.
 
 ## Tracked User Events
 
-The behavioral tracker records gesture-focused events plus key-down events:
+The behavioral tracker records exactly four browser-page event types while
+sensing is active:
 
-- `pointer_down`
+- `keydown` for keystrokes
 - `pointer_move`
-- `pointer_up`
-- `pointer_cancel`
-- `keydown`
-- `tap`
-- `tap_to_click`
-- `double_tap`
-- `double_tap_to_click`
+- `scroll`
 - `click`
-- `double_click`
-- `press`
-- `press_to_click`
-- `double_press`
-- `double_press_to_click`
-- `long_press`
-- `long_press_to_click`
-- `drag_start`
-- `drag_move`
-- `drag_end`
-- `swipe`
-- `two_finger_swipe`
-- `wheel_swipe`
-- `wheel_pinch`
-- `pinch_start`
-- `pinch_change`
-- `pinch_end`
-- `range_input`
-- `range_change`
-- `native_drag_start`
-- `native_drop`
-- `native_drag_end`
-- `form_submit`
 
-The downloadable log may also include an internal preparation marker event such
-as `event_log_prepared` on the main page or `tracking_data_prepared` on an
-experiment page.
+Export preparation does not add synthetic events to the log.
 Each JSON event includes both an ISO `timestamp` and numeric `epochSeconds`.
 The extra `os_event_log_*.txt` download uses the same broad shape as the Python capture logs:
 
 ```text
 # start_epoch | 1710000000.000000
 # format | EVENT | VALUE | EPOCH_SECONDS
-TAP | gesture=tap pointerType=mouse x=120 y=80 | 1710000001.234567
-POINTER_MOVE | gesture=pointer_move pointerType=mouse x=180 y=120 dx=20 dy=8 movementX=20.0 movementY=8.0 | 1710000001.250000
+POINTER_MOVE | pointerType=mouse x=180 y=120 dx=20 dy=8 movementX=20.0 movementY=8.0 | 1710000001.250000
 KEYDOWN | key=Tab code=Tab location=0 button#startSensingBtn label=Stop sensing | 1710000001.300000
-DRAG_END | gesture=drag pointerType=mouse dx=90 dy=40 | 1710000001.345678
+SCROLL | deltaX=0.0 deltaY=640.0 scrollX=0.0 scrollY=640.0 | 1710000001.345678
 CLICK | button=0 x=120 y=80 button#startSensingBtn label=Stop sensing | 1710000002.000000
 ```
 
 This is browser-page scoped, not a global OS hook; events outside the page are not visible to the browser.
 
-The tracker intentionally no longer logs generic page views, raw `mousemove`,
-scroll, key-up, or visibility events. Touchpad or mouse cursor movement is
-captured as throttled `pointer_move` events while sensing is active. Printable `keydown` values are logged as
-`key=character`; browser `code` is still included so physical key identity is available.
+The tracker does not derive gestures or log pointer down/up, wheel, input,
+change, form-submit, page-view, key-up, or visibility events. Pointer movement
+and scrolling are throttled while sensing is active. Printable `keydown` values
+are logged as `key=character`; browser `code` is still included so physical key
+identity is available.
 
 ## Signal Event Models
 
@@ -398,7 +368,7 @@ Features:
 - Search input, category select, and checkbox filters.
 - Filters do not apply immediately; they apply only after clicking `Apply search`.
 - Product rows include labels/tags so filtering is visible and testable.
-- Add-to-cart, save, checkout form, pointer/touch gestures, drag-like movement, wheel gestures, and form-submit actions are available for tracking.
+- Add-to-cart, save, and checkout interactions generate only click, keystroke, pointer-move, and scroll tracking events.
 - Download filename prefix: `shopping_recording`.
 - Tracking JSON slug: `simple-shopping`.
 
@@ -418,7 +388,7 @@ Features:
 - Five trip rows with numbered itinerary-style layout.
 - Search input, trip type select, and checkbox filters.
 - Filters apply only after clicking `Apply search`.
-- Select trip, save, details, booking form, pointer/touch gestures, drag-like movement, wheel gestures, and form-submit actions are available for tracking.
+- Select trip, save, details, and booking interactions generate only click, keystroke, pointer-move, and scroll tracking events.
 - Each trip has a `Details` button that expands details inline inside that same trip row, not in a shared bottom panel.
 - Inline trip details show duration, route, included items, note, and price.
 - Inline trip details include `Use this trip`, which adds that trip to the booking count and can prefill booking notes, plus `Close details`.

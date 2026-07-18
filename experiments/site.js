@@ -1088,22 +1088,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getRealtimeMarkerColor(name) {
-    if (name === "keydown") {
-      return "#d62728";
-    }
-    if (name.includes("press") || name.includes("hold")) {
-      return "#ff7f0e";
-    }
-    if (name === "pointer_move") {
-      return "#1f77b4";
-    }
-    if (name.includes("drag")) {
-      return "#2ca02c";
-    }
-    if (name.includes("swipe") || name.includes("pinch") || name.includes("wheel")) {
-      return "#17becf";
-    }
-    return "#9467bd";
+    return {
+      keydown: "#d62728",
+      pointer_move: "#1f77b4",
+      scroll: "#17becf",
+      click: "#9467bd"
+    }[name] || "#9467bd";
   }
 
   function getRealtimeMarkerLabel(event) {
@@ -1116,35 +1106,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return props.key || "key";
     }
     if (name === "pointer_move") {
-      return props.direction && props.direction !== "none" ? `move-${props.direction[0]}` : "move";
+      return "move";
     }
-    if (name === "drag_move") {
-      return props.direction ? `drag-${props.direction[0]}` : "drag";
-    }
-    const labels = {
-      tap_to_click: "tap-click",
-      press_to_click: "press-click",
-      long_press_to_click: "hold-click",
-      double_tap_to_click: "2tap-click",
-      double_press_to_click: "2press-click",
-      tap: "tap",
-      press: "press",
-      long_press: "hold",
-      double_tap: "2tap",
-      double_press: "2press",
-      click: "click",
-      double_click: "2click",
-      drag_start: "drag>",
-      drag_move: "drag",
-      drag_end: "<drag",
-      swipe: "swipe",
-      two_finger_swipe: "2swipe",
-      wheel_pinch: "pinch",
-      wheel_swipe: "wheel",
-      pinch_start: "pinch>",
-      pinch_end: "<pinch"
-    };
-    return labels[name] || name;
+    return name;
   }
 
   function recordRealtimeEventMarker(event) {
@@ -1161,21 +1125,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const keepNames = new Set([
       "keydown",
-      "tap_to_click",
-      "press_to_click",
-      "long_press_to_click",
-      "double_tap_to_click",
-      "double_press_to_click",
       "pointer_move",
-      "drag_start",
-      "drag_move",
-      "drag_end",
-      "swipe",
-      "two_finger_swipe",
-      "wheel_pinch",
-      "wheel_swipe",
-      "pinch_start",
-      "pinch_end"
+      "scroll",
+      "click"
     ]);
     if (!keepNames.has(event.name)) {
       return;
@@ -1189,8 +1141,6 @@ document.addEventListener("DOMContentLoaded", () => {
       y: event.properties && Number.isFinite(event.properties.y) ? event.properties.y : null,
       dx: event.properties && Number.isFinite(event.properties.dx) ? event.properties.dx : null,
       dy: event.properties && Number.isFinite(event.properties.dy) ? event.properties.dy : null,
-      distance: event.properties && Number.isFinite(event.properties.distance) ? event.properties.distance : null,
-      direction: event.properties && event.properties.direction ? event.properties.direction : "",
       label: getRealtimeMarkerLabel(event),
       color: getRealtimeMarkerColor(event.name)
     });
