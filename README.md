@@ -2,8 +2,16 @@
 
 This guide shows how to run the ultrasound realtime sensing website locally.
 The site loops a stereo ultrasonic chirp, captures mono microphone audio, streams
-live IQ features to Python, tracks page interactions during sensing, and prepares
-session files for an explicit user-initiated download.
+raw microphone frames to Python for live IQ processing, tracks page interactions
+during sensing, and prepares session files for an explicit user-initiated download.
+
+Run the commands below from the cloned repository directory:
+
+```bash
+cd /path/to/webagent
+```
+
+On Windows, use the corresponding path, such as `cd C:\path\to\webagent`.
 
 ## 1. Create A Minimal Conda Environment
 
@@ -55,11 +63,17 @@ ws://localhost:8000/realtime
 
 ## Optional: Use Another Local Port
 
-In Anaconda Prompt:
+In Windows Anaconda Prompt:
 
 ```bash
 set PORT=8124
 python realtime.py
+```
+
+On macOS, Linux, or WSL:
+
+```bash
+PORT=8124 python realtime.py
 ```
 
 Then open:
@@ -141,9 +155,9 @@ training therefore expects labels to come from the existing dataset layout and
 its event logs.
 
 ```bash
-python scripts\train_signal_event_model.py --feature-set ultrasound --model-out models\signal_event_model_ultrasound_only.joblib --report-out models\signal_event_report_ultrasound_only.json --manifest-out models\window_manifest_ultrasound_only.csv
-python scripts\train_signal_event_model.py --feature-set audible --model-out models\signal_event_model_audible_only.joblib --report-out models\signal_event_report_audible_only.json --manifest-out models\window_manifest_audible_only.csv
-python scripts\train_signal_event_model.py --feature-set combined --model-out models\signal_event_model_combined.joblib --report-out models\signal_event_report_combined.json --manifest-out models\window_manifest_combined.csv
+python scripts/train_signal_event_model.py --feature-set ultrasound --model-out models/signal_event_model_ultrasound_only.joblib --report-out models/signal_event_report_ultrasound_only.json --manifest-out models/window_manifest_ultrasound_only.csv
+python scripts/train_signal_event_model.py --feature-set audible --model-out models/signal_event_model_audible_only.joblib --report-out models/signal_event_report_audible_only.json --manifest-out models/window_manifest_audible_only.csv
+python scripts/train_signal_event_model.py --feature-set combined --model-out models/signal_event_model_combined.joblib --report-out models/signal_event_report_combined.json --manifest-out models/window_manifest_combined.csv
 ```
 
 The training script crops the first and last `1.0` seconds, builds `0.5` second
@@ -170,23 +184,24 @@ keeps the original seven-class label in each manifest and adds a coarse target:
 `keydown`, `pointer_move`, and `scroll` become `interaction`. For example:
 
 ```bash
-python scripts\train_signal_event_model.py --feature-set audible --label-scheme interaction --model-out models\signal_interaction_model_audible_only.joblib --report-out models\signal_interaction_report_audible_only.json --manifest-out models\window_manifest_interaction_audible_only.csv
-python scripts\train_signal_event_model.py --feature-set ultrasound --label-scheme interaction --model-out models\signal_interaction_model_ultrasound_only.joblib --report-out models\signal_interaction_report_ultrasound_only.json --manifest-out models\window_manifest_interaction_ultrasound_only.csv
-python scripts\train_signal_event_model.py --feature-set combined --label-scheme interaction --model-out models\signal_interaction_model_combined.joblib --report-out models\signal_interaction_report_combined.json --manifest-out models\window_manifest_interaction_combined.csv
+python scripts/train_signal_event_model.py --feature-set audible --label-scheme interaction --model-out models/signal_interaction_model_audible_only.joblib --report-out models/signal_interaction_report_audible_only.json --manifest-out models/window_manifest_interaction_audible_only.csv
+python scripts/train_signal_event_model.py --feature-set ultrasound --label-scheme interaction --model-out models/signal_interaction_model_ultrasound_only.joblib --report-out models/signal_interaction_report_ultrasound_only.json --manifest-out models/window_manifest_interaction_ultrasound_only.csv
+python scripts/train_signal_event_model.py --feature-set combined --label-scheme interaction --model-out models/signal_interaction_model_combined.joblib --report-out models/signal_interaction_report_combined.json --manifest-out models/window_manifest_interaction_combined.csv
 ```
 
 Generate full train/evaluation curves with:
 
 ```bash
-python scripts\plot_training_curves.py --feature-set audible
-python scripts\plot_training_curves.py --feature-set combined
-python scripts\plot_feature_set_comparison.py
+python scripts/plot_training_curves.py --feature-set ultrasound --history-out models/training_curves_ultrasound_only.csv --plot-out models/training_curves_ultrasound_only.png
+python scripts/plot_training_curves.py --feature-set audible --history-out models/training_curves_audible_only.csv --plot-out models/training_curves_audible_only.png
+python scripts/plot_training_curves.py --feature-set combined --history-out models/training_curves_combined.csv --plot-out models/training_curves_combined.png
+python scripts/plot_feature_set_comparison.py
 ```
 
 Run prediction on a new sensed WAV recording with:
 
 ```bash
-python scripts\predict_signal_event.py path\to\recording.wav --model models\signal_event_model_audible_only.joblib --out models\predictions.csv
+python scripts/predict_signal_event.py path/to/recording.wav --model models/signal_event_model_audible_only.joblib --out models/predictions.csv
 ```
 
 ### CNN models
@@ -196,7 +211,7 @@ the same windows and recording-level split:
 
 ```bash
 python -m pip install -r requirements.txt
-python scripts\train_signal_event_cnn.py
+python scripts/train_signal_event_cnn.py
 ```
 
 This preserves the MLP artifacts and writes separate
@@ -207,7 +222,7 @@ ultrasound and audible convolution branches followed by late fusion.
 Run a saved CNN on a recording:
 
 ```bash
-python scripts\predict_signal_event_cnn.py path\to\recording.wav --model models\signal_event_cnn_audible_only.pt --out models\cnn_predictions.csv
+python scripts/predict_signal_event_cnn.py path/to/recording.wav --model models/signal_event_cnn_audible_only.pt --out models/cnn_predictions.csv
 ```
 
 ## Test The Website
