@@ -11,6 +11,9 @@ test("offers strict ultrasonic and compatibility recording profiles", async ({ p
     "Compatibility"
   ]);
   await expect(page.locator("#recordingProfileDescription")).toContainText("AudioWorklet");
+  await expect(page.locator("#recordingProfileHint")).toHaveText(
+    "If Ultrasound (strict) does not work, switch to Compatibility."
+  );
 
   const strictRequest = await page.evaluate(() => (
     window.webAgentRecordingProfiles.createMicrophoneRequest("ultrasonic", 48000)

@@ -39,6 +39,9 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
       "Ultrasound (strict)",
       "Compatibility"
     ]);
+    await expect(page.locator("[data-recording-profile-hint]")).toHaveText(
+      "If Ultrasound (strict) does not work, switch to Compatibility."
+    );
 
     const debugState = await page.evaluate(() => window.experimentSensing.getRealtimeDebugState());
     expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
