@@ -34,26 +34,6 @@ python realtime.py
 `realtime.py` is a small local launcher for `server.py`; running
 `python server.py` starts the same application directly.
 
-### One-command Bash deployment
-
-On Linux, macOS, WSL, or Git Bash, `install.sh` creates or reuses `.venv`,
-updates pip, installs every package in `requirements.txt`, and starts the
-realtime deployment:
-
-```bash
-bash install.sh
-```
-
-The server runs on port `8000` by default. Environment variables can override
-the port, Python executable, or virtual-environment directory:
-
-```bash
-PORT=8124 PYTHON_BIN=python3.12 VENV_DIR=.venv bash install.sh
-```
-
-Stop the deployment with `Ctrl+C`. Future runs reuse the existing environment
-and ensure its dependencies are up to date before starting the server.
-
 Then open:
 
 ```text
