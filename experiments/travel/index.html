@@ -6,6 +6,7 @@
   <title>Simple Travel Task</title>
   <link rel="stylesheet" href="../styles.css">
   <script src="../tracker.js" defer></script>
+  <script src="../../recording-profile.js" defer></script>
   <script src="../site.js" defer></script>
 </head>
 <body
@@ -30,6 +31,11 @@
       <div class="travel-status-grid">
         <p id="travelMicStatus" data-mic-status>Requesting microphone access...</p>
         <p id="travelSensingStatus" data-sensing-status>Sensing is stopped.</p>
+      </div>
+      <div class="recording-profile-control">
+        <label for="travelRecordingProfile">Recording profile</label>
+        <select id="travelRecordingProfile" data-recording-profile aria-describedby="travelRecordingProfileDescription"></select>
+        <p id="travelRecordingProfileDescription" data-recording-profile-description></p>
       </div>
       <div class="actions">
         <button id="travelStartSensingBtn" class="primary-button" type="button" data-start-sensing disabled>Start sensing</button>

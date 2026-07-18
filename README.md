@@ -111,6 +111,48 @@ http://localhost:8124/
 - Use `Ctrl+C` in the terminal to stop the local server.
 - For browser microphone access, `localhost` is the recommended local URL.
 
+## Recording Path And Profiles
+
+The sensing path does not use `MediaRecorder` or an encoded browser format. It
+uses the following raw-PCM flow on the main and experiment pages:
+
+```text
+getUserMedia microphone track
+  -> 48 kHz Web Audio MediaStreamAudioSourceNode
+  -> AudioWorklet (2048-sample mono Float32 frames)
+  -> in-memory WAV buffer + WAIQ WebSocket frames
+  -> Python /realtime IQ processor
+```
+
+The worklet output is connected through a zero-gain node only to keep the Web
+Audio graph active; microphone input is never monitored to the speaker. WAV
+export remains mono 32-bit IEEE-float PCM. Chirp playback is scheduled 50 ms
+ahead on the same AudioContext timeline after capture is ready. The browser also records clipping,
+worklet sequence gaps, WebSocket backpressure drops, actual track settings, and
+the capture method in each diagnostics JSON file.
+
+Use the **Recording profile** selector before sensing:
+
+- **Ultrasound (strict)** is the default. It requires browser controls for echo
+  cancellation, noise suppression, and automatic gain control; requests each
+  as `{ exact: false }`; disables voice isolation when exposed; sets the track
+  content hint to `music`; confirms the reported settings; requires a 48 kHz
+  `AudioContext`; and requires `AudioWorklet` capture.
+- **Compatibility** requests the same settings as preferences, reports anything
+  the browser cannot confirm, permits a non-48-kHz context with a warning, and
+  permits the deprecated `ScriptProcessorNode` only when AudioWorklet cannot be
+  started.
+
+The selected profile is shared across pages through
+`localStorage.webagentRecordingProfile`. Browser settings cannot prove that the
+operating system, driver, or audio hardware performs no additional processing,
+so use the diagnostics and recorded spectrum to qualify each device.
+
+`SharedArrayBuffer`, a browser DSP worker, and ONNX Runtime Web are not part of
+the current path: live IQ and model processing run in the Python backend. Those
+changes require cross-origin isolation and a browser-deployable model and should
+be treated as a separate inference migration rather than a recording fallback.
+
 ## Train The Signal Event Model
 
 After preparing labeled recording sessions under `data/`, select one of the
@@ -201,6 +243,10 @@ npm test
 The tests use a local static test server and a fake browser microphone. Python
 model inference is mocked where needed, so the browser tests do not require a
 trained `models/` artifact.
+
+To use an already-installed Chromium-compatible browser instead of Playwright's
+downloaded runtime, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable
+before running `npm test`.
 
 ## Generated Data
 

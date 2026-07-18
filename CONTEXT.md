@@ -18,6 +18,9 @@ The current design goal is intentionally simple and functional, with minimal vis
 ## Primary Files
 
 - `index.html`: Main sensing page. Contains UI, microphone capture, chirp playback, event tracking, WAV export, and spectrogram rendering.
+- `recording-profile.js`: Shared strict/compatibility microphone profiles,
+  supported-constraint construction, track qualification, and AudioContext
+  sample-rate qualification.
 - `server.py`: Lightweight Python HTTP server for local static serving and legacy audio endpoints.
 - `analyze_webagent_recording.py`: Stop-time feature visualization and MLP
   inference pipeline used by `/api/analyze-recording`.
@@ -122,8 +125,12 @@ Python figures can be generated.
 ## Main Site Behavior
 
 - Requests microphone permission on load.
+- Defaults to the `Ultrasound (strict)` recording profile. The selectable
+  `Compatibility` profile preserves operation on browsers that cannot verify
+  disabled speech processing or start an AudioWorklet.
 - Loads `tx_dual_triangle_chirp_19_205_215_23.wav`, a 30-second phase-continuous stereo dual-band chirp asset with a 12 ms period.
-- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
+- Start sensing decodes the chirp and schedules its loop 50 ms ahead on the same
+  48 kHz Web Audio timeline used by microphone capture.
 - Start sensing streams microphone frames to the same-origin `/realtime`
   WebSocket endpoint and updates the live amplitude/phase chart.
 - Live IQ feature timestamps come from the processed audio sample index and the
@@ -150,12 +157,25 @@ Python figures can be generated.
   start, end, predicted label, and confidence.
 - Full per-class probabilities for every window are saved as
   `window_predictions.json`.
-- Microphone capture is constrained toward 48 kHz mono with browser DSP disabled,
-  buffered as float samples, and exported as mono 32-bit IEEE-float WAV to match
-  the Python `sounddevice`/`soundfile` capture path as closely as browser APIs allow.
+- Strict microphone capture requires browser controls for echo cancellation,
+  noise suppression, and automatic gain control, requests each as
+  `{ exact: false }`, disables voice isolation when exposed, applies the
+  `music` content hint, and rejects capture when the resulting track settings
+  do not confirm processing is off. Compatibility mode treats these as
+  preferences and reports warnings instead.
+- All pages prefer `AudioWorklet` capture. The main page and both experiment
+  pages receive 2048-sample mono Float32 frames through a transferable
+  `ArrayBuffer`; only Compatibility mode may fall back to the deprecated
+  `ScriptProcessorNode`. A zero-gain node keeps the capture graph active without
+  monitoring microphone input to the speaker.
+- Captured float samples are buffered for mono 32-bit IEEE-float WAV export and
+  are simultaneously packaged into the 20-byte `WAIQ` header plus Float32 PCM
+  payload for the `/realtime` WebSocket.
 - The diagnostics JSON records requested microphone constraints, browser-reported
   `MediaStreamTrack` settings/capabilities/constraints, `AudioContext` sample
-  rate/latency, playback buffer rate, exported WAV format, and an empirical
+  rate/latency and qualification, selected recording profile, actual capture
+  method, clipping count/peak, worklet sequence gaps, WebSocket backpressure
+  drops, playback buffer rate, exported WAV format, and an empirical
   autocorrelation check around the expected 12 ms / 576-sample chirp period.
 - The spectrogram renderer includes axes and uses the same visual generation style expected by the tests.
 - The main page links to both dummy experiment sites.
@@ -165,7 +185,8 @@ Python figures can be generated.
 Real-time mode is implemented by:
 
 - `audio-frame-worklet.js`: browser `AudioWorkletProcessor` that downmixes mic
-  input and emits fixed-size Float32 frames.
+  input and emits fixed-size Float32 frames with frame sequence and Web Audio
+  start-frame metadata.
 - `server.py`: HTTP static/API server plus the public `/realtime` WebSocket
   endpoint used locally and on Render.
 - `realtime_server.py`: older standalone local WebSocket server at
@@ -182,18 +203,27 @@ images. The browser draws the live chart so updates stay responsive. The
 existing Stop-time WAV upload and matplotlib figure generation remain available
 for offline validation.
 
+The architecture review's `SharedArrayBuffer`, dedicated browser DSP worker,
+and ONNX Runtime Web path is intentionally deferred. The current application
+performs DSP and inference in Python over WebSocket, is not configured for
+cross-origin isolation, and does not contain a browser-ready ONNX model. Moving
+inference into the browser is a separate migration; it is not required for the
+raw-PCM recording improvements above.
+
 ## Experiment Site Behavior
 
 Both shopping and travel:
 
 - Request microphone permission first.
+- Expose the same strict and compatibility recording profiles as the main page.
 - Have a single sensing toggle button that starts as `Start sensing` and changes
   to `Stop sensing` while sensing is active.
 - Do not include manual data-collection label or marker controls.
 - Track behavior only while sensing is active.
 - Reset tracking data at the start of each sensing session.
 - Decode and loop the chirp through the 48 kHz Web Audio context.
-- Capture mono float microphone samples and export mono 32-bit IEEE-float WAV.
+- Prefer AudioWorklet mono Float32 capture and export mono 32-bit IEEE-float WAV;
+  permit ScriptProcessor only in Compatibility mode.
 - On Stop, prepare the following files without downloading them automatically:
   - Tracking JSON
   - Pipe-delimited OS-style event log

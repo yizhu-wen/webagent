@@ -6,6 +6,7 @@
   <title>Simple Shopping Task</title>
   <link rel="stylesheet" href="styles.css">
   <script src="tracker.js" defer></script>
+  <script src="../recording-profile.js" defer></script>
   <script src="site.js" defer></script>
 </head>
 <body data-site-slug="simple-shopping">
@@ -22,6 +23,11 @@
       <p>Use this plain e-commerce page to collect interaction behavior without visual distractions.</p>
       <p id="shoppingMicStatus">Requesting microphone access...</p>
       <p id="shoppingSensingStatus">Sensing is stopped.</p>
+      <div class="recording-profile-control">
+        <label for="shoppingRecordingProfile">Recording profile</label>
+        <select id="shoppingRecordingProfile" data-recording-profile aria-describedby="shoppingRecordingProfileDescription"></select>
+        <p id="shoppingRecordingProfileDescription" data-recording-profile-description></p>
+      </div>
       <div class="actions">
         <button id="shoppingStartSensingBtn" class="primary-button" type="button" data-start-sensing disabled>Start sensing</button>
         <button id="shoppingStopSensingBtn" class="secondary-button" type="button" data-stop-sensing disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
