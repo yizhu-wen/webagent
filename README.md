@@ -5,15 +5,7 @@ The site loops a stereo ultrasonic chirp, captures mono microphone audio, stream
 live IQ features to Python, tracks page interactions during sensing, and prepares
 session files for an explicit user-initiated download.
 
-## 1. Open Anaconda Prompt
-
-Open **Anaconda Prompt** on Windows, then go to the folder where you cloned this repository:
-
-```bash
-cd path\to\webagent
-```
-
-## 2. Create A Minimal Conda Environment
+## 1. Create A Minimal Conda Environment
 
 Create a small Python environment for the realtime sensing backend:
 
@@ -22,19 +14,7 @@ conda create -n webagent-realtime python=3.12 -y
 conda activate webagent-realtime
 ```
 
-## 3. Install Python Dependencies
-
-The project includes `requirements.txt`:
-
-```text
-numpy
-scipy
-soundfile
-matplotlib
-scikit-learn
-joblib
-torch
-```
+## 2. Install Python Dependencies
 
 Install all required packages:
 
@@ -43,7 +23,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## 4. Run The Realtime Deployment
+## 3. Run The Realtime Deployment
 
 Start the local realtime sensing website:
 
@@ -53,6 +33,26 @@ python realtime.py
 
 `realtime.py` is a small local launcher for `server.py`; running
 `python server.py` starts the same application directly.
+
+### One-command Bash deployment
+
+On Linux, macOS, WSL, or Git Bash, `install.sh` creates or reuses `.venv`,
+updates pip, installs every package in `requirements.txt`, and starts the
+realtime deployment:
+
+```bash
+bash install.sh
+```
+
+The server runs on port `8000` by default. Environment variables can override
+the port, Python executable, or virtual-environment directory:
+
+```bash
+PORT=8124 PYTHON_BIN=python3.12 VENV_DIR=.venv bash install.sh
+```
+
+Stop the deployment with `Ctrl+C`. Future runs reuse the existing environment
+and ensure its dependencies are up to date before starting the server.
 
 Then open:
 
