@@ -15,13 +15,23 @@ The current design goal is intentionally simple and functional, with minimal vis
 
 - `index.html`: Main sensing page. Contains UI, microphone capture, chirp playback, event tracking, WAV export, and spectrogram rendering.
 - `server.py`: Lightweight Python HTTP server for local static serving and legacy audio endpoints.
-- `triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav`: One-chirp ultrasound loop file used for sensing playback and Python IQ reference.
+- `analyze_webagent_recording.py`: Stop-time feature visualization and MLP
+  inference pipeline used by `/api/analyze-recording`.
+- `realtime_iq.py`: Streaming chirp alignment and live IQ feature extraction.
+- `tx_dual_triangle_chirp_19_205_215_23.wav`: Phase-continuous stereo sensing asset. The left channel sweeps 19.0-20.5 kHz and the right channel sweeps 21.5-23.0 kHz with a 12 ms period.
 - `experiments/index.html`: Simple shopping dummy website.
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
 - `experiments/site.js`: Shared experiment-site behavior for sensing, microphone recording, spectrogram generation, filtering, selection buttons, forms, and downloads.
 - `experiments/tracker.js`: Shared gated client-side interaction tracker for experiment sites.
 - `experiments/styles.css`: Shared experiment styles plus travel-specific scoped styles.
 - `tests/*.spec.js`: Playwright tests for tracking, sensing controls, shopping, and travel.
+- `scripts/train_signal_event_model.py`: MLP training for ultrasound, audible,
+  and combined feature sets.
+- `scripts/train_signal_event_cnn.py`: CNN training with modality-specific
+  branches and late fusion.
+- `scripts/predict_signal_event.py`, `scripts/predict_signal_event_cnn.py`:
+  offline prediction helpers.
+- `models/signal_event_model_audible_only.joblib`: Deployed Stop-time MLP.
 - `package.json`, `playwright.config.js`: Playwright test setup.
 
 ## Running The Website
@@ -46,14 +56,16 @@ http://localhost:8000/experiments/
 http://localhost:8000/experiments/travel/
 ```
 
-The requirements file installs the packages needed by the real-time IQ backend
-and server-generated analysis figures: NumPy, SciPy, SoundFile, and Matplotlib.
+The requirements file installs the packages needed by the real-time IQ backend,
+model training, and server-generated analysis figures: NumPy, SciPy, SoundFile,
+Matplotlib, scikit-learn, Joblib, and PyTorch.
 
 `python server.py` starts the website on `http://localhost:8000/` and serves the
 real-time IQ WebSocket endpoint on the same public port at
 `ws://localhost:8000/realtime`. On Render, the browser automatically uses
 `wss://<your-service>.onrender.com/realtime`. Click `Start sensing` to stream
 Float32 microphone frames to Python and update the live amplitude/phase chart.
+The same control changes to `Stop sensing` while sensing is active.
 For manual debugging, `python realtime_server.py` can still run the older
 standalone WebSocket backend by itself.
 
@@ -99,12 +111,12 @@ Python figures can be generated.
 ## Main Site Behavior
 
 - Requests microphone permission on load.
-- Loads `triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav`, a 20 ms one-chirp asset instead of the old 600 s WAV.
-- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context, producing the same repeated chirp sequence with much less network loading.
+- Loads `tx_dual_triangle_chirp_19_205_215_23.wav`, a 30-second phase-continuous stereo dual-band chirp asset with a 12 ms period.
+- Start sensing decodes and loops the chirp through the 48 kHz Web Audio context.
 - Start sensing streams microphone frames to the same-origin `/realtime`
   WebSocket endpoint and updates the live amplitude/phase chart.
 - Live IQ feature timestamps come from the processed audio sample index and the
-  center of each 20 ms chirp window after chirp-boundary alignment, not from the
+  center of each 12 ms chirp window after chirp-boundary alignment, not from the
   time Python finishes calculating the feature.
 - Live IQ uses latest-only transport: browser audio frames include timestamp and
   sequence metadata, the browser drops frames when the WebSocket send buffer is
@@ -115,18 +127,23 @@ Python figures can be generated.
 - Stop automatically downloads the tracking JSON and OS-style event log for that sensing period.
 - Stop also downloads the sensed microphone audio WAV, rendered spectrogram PNG,
   and recording diagnostics JSON.
-- Stop can generate an input-event analysis PNG from the recorded WAV, keydown
-  events, and touchpad-style events when the app is served by `server.py`.
-  The browser uploads the recorded WAV, OS-style event log, and diagnostics to
-  the Python backend, which runs the full IQ processing chain in
-  `analyze_webagent_recording.py`.
+- Stop uploads the recorded WAV, OS-style event log, and diagnostics to the
+  local Python backend for offline processing. The page later displays a
+  Doppler velocity-time map, derived motion/band-energy traces, and an MLP
+  prediction timeline.
+- The deployed audible-only MLP predicts every overlapping `0.5` second signal
+  window with a `0.25` second stride after Stop. The first and final `1.0`
+  second are excluded. A scrollable table shows every window's start, end,
+  predicted label, and confidence.
+- Full per-class probabilities for every window are saved as
+  `window_predictions.json`.
 - Microphone capture is constrained toward 48 kHz mono with browser DSP disabled,
   buffered as float samples, and exported as mono 32-bit IEEE-float WAV to match
   the Python `sounddevice`/`soundfile` capture path as closely as browser APIs allow.
 - The diagnostics JSON records requested microphone constraints, browser-reported
   `MediaStreamTrack` settings/capabilities/constraints, `AudioContext` sample
   rate/latency, playback buffer rate, exported WAV format, and an empirical
-  autocorrelation check around the expected 20 ms / 960-sample chirp period.
+  autocorrelation check around the expected 12 ms / 576-sample chirp period.
 - The spectrogram renderer includes axes and uses the same visual generation style expected by the tests.
 - The main page links to both dummy experiment sites.
 
@@ -157,7 +174,8 @@ for offline validation.
 Both shopping and travel:
 
 - Request microphone permission first.
-- Have Start sensing and Stop buttons.
+- Have a single sensing toggle button that starts as `Start sensing` and changes
+  to `Stop sensing` while sensing is active.
 - Track behavior only while sensing is active.
 - Reset tracking data at the start of each sensing session.
 - Decode and loop the chirp through the 48 kHz Web Audio context.
@@ -168,23 +186,33 @@ Both shopping and travel:
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
   - Recording diagnostics JSON
-  - Input-event amplitude/phase analysis PNG, when the Python server endpoint is available
+  - Doppler, derived-feature, and MLP prediction figures when the Python server endpoint is available
 - Show the recorded spectrogram on the page after Stop.
+- Show every MLP prediction window in a time-aligned table after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.
 
 ## Figure Generation
 
-The exact Python pipeline generates only the input-event amplitude/phase figure on
-Stop when the app is served by the Python backend:
+The Stop-time Python pipeline currently generates three full-width figures:
 
-- `input_events_amplitude_phase.png`
+- `02_doppler_velocity.png`: slow-time Doppler energy versus recording time
+  and radial velocity.
+- `05_derived_motion_traces.png`: dominant reflection range, phase-derived
+  radial velocity, phase motion energy, and audible-band RMS energy.
+- `06_mlp_prediction_timeline.png`: audible-only MLP label and confidence for
+  every overlapping `0.5` second analysis window.
 
-This figure has two panels:
+The analysis also writes:
 
-- Normalized matched-filter amplitude from the full IQ chain with `keydown`
-  and touchpad-style markers and labels.
-- Unwrapped matched-filter phase from the full IQ chain with the same
-  `keydown` and touchpad-style markers and labels.
+- `pipeline_features.npz`: reusable correlation, phase-change, range, and time
+  arrays.
+- `window_predictions.json`: one record per window with start/end/center time,
+  predicted label, confidence, and every class probability.
+- `analysis_summary.json`: processing configuration and session summary.
+
+Positive and negative Doppler velocity indicate opposite radial directions.
+The sign is not called toward/away until the phase convention is calibrated for
+the specific speaker/microphone geometry.
 
 Use these inputs:
 
@@ -199,28 +227,17 @@ python server.py
 ```
 
 The endpoint `/api/analyze-recording` saves each uploaded sensing session under
-`webagent/uploads/`, runs `analyze_webagent_recording.py --figure-set
-input-amplitude-phase`, and returns a link to the generated figure. If a
-plain static server is used, the regular WAV, browser spectrogram, diagnostics,
-and tracking downloads still work, but the exact Python figure cannot be
-generated.
-
-For manual analysis without using the website backend, run the local GUI from
-the project root:
-
-```text
-python webagent_analysis_gui.py
-```
-
-Choose the recorded WAV and matching `os_event_log_*.txt`. The diagnostics JSON
-is optional. The GUI runs the same analyzer and writes `input_events_amplitude_phase.png`
-to `analysis_outputs/<recording-name>/` unless another output folder is selected.
+`uploads/`, runs `analyze_webagent_recording.py`, and returns figure URLs,
+descriptions, the reusable feature archive, and all per-window predictions. A
+plain static server can still capture and download the browser artifacts, but
+cannot run Python feature extraction or model inference.
 
 ## Tracked User Events
 
 The behavioral tracker records gesture-focused events plus key-down events:
 
 - `pointer_down`
+- `pointer_move`
 - `pointer_up`
 - `pointer_cancel`
 - `keydown`
@@ -253,7 +270,7 @@ The behavioral tracker records gesture-focused events plus key-down events:
 - `native_drag_end`
 - `form_submit`
 
-The downloadable log may also include an internal download marker event such as `tracking_data_downloaded`.
+The downloadable log may also include an internal preparation marker event such as `tracking_data_prepared`.
 Each JSON event includes both an ISO `timestamp` and numeric `epochSeconds`.
 The extra `os_event_log_*.txt` download uses the same broad shape as the Python capture logs:
 
@@ -261,6 +278,7 @@ The extra `os_event_log_*.txt` download uses the same broad shape as the Python 
 # start_epoch | 1710000000.000000
 # format | EVENT | VALUE | EPOCH_SECONDS
 TAP | gesture=tap pointerType=mouse x=120 y=80 | 1710000001.234567
+POINTER_MOVE | gesture=pointer_move pointerType=mouse x=180 y=120 dx=20 dy=8 movementX=20.0 movementY=8.0 | 1710000001.250000
 KEYDOWN | key=Tab code=Tab location=0 button#stopSensingBtn label=Stop | 1710000001.300000
 DRAG_END | gesture=drag pointerType=mouse dx=90 dy=40 | 1710000001.345678
 CLICK | button=0 x=120 y=80 button#stopSensingBtn label=Stop | 1710000002.000000
@@ -268,9 +286,49 @@ CLICK | button=0 x=120 y=80 button#stopSensingBtn label=Stop | 1710000002.000000
 
 This is browser-page scoped, not a global OS hook; events outside the page are not visible to the browser.
 
-The tracker intentionally no longer logs generic page views, raw mousemove,
-scroll, key-up, or visibility events. Printable `keydown` values are logged as
+The tracker intentionally no longer logs generic page views, raw `mousemove`,
+scroll, key-up, or visibility events. Touchpad or mouse cursor movement is
+captured as throttled `pointer_move` events while sensing is active. Printable `keydown` values are logged as
 `key=character`; browser `code` is still included so physical key identity is available.
+
+## Signal Event Models
+
+Data processing rule: when extracting training windows, ignore or crop the first
+`1.0` second after the start time and the final `1.0` second before the stop
+time. This avoids contaminating the recording with start/stop-button or touchpad
+events that often happen at the edges of a recording. The current model
+uses `0.5` second detection windows with `0.25` second stride.
+
+The signal-event dataset currently contains `2,767` overlapping windows:
+`2,218` in the recording-session training split and `549` in the untouched
+recording-session test split. All models use `0.5` second windows and `0.25`
+second stride.
+
+The checked-in model artifacts were trained from recordings made with the
+previous 20 ms mono chirp. Ultrasound-only and combined artifacts must be
+retrained for the current 12 ms stereo dual-band signal. Audible-only artifacts
+remain loadable but require validation on newly collected recordings because
+the playback signal changes the audible-noise distribution.
+
+`scripts/train_signal_event_model.py` trains PCA + MLP models:
+
+- Ultrasound only: pooled matched-filter log-amplitude and phase-change maps,
+  `35.5%` test accuracy.
+- Audible only: pooled `50 Hz` to `18 kHz` log spectrogram, `83.2%` test
+  accuracy. This is the model deployed by the website.
+- Audible + ultrasound: concatenated features, `76.3%` test accuracy.
+
+`scripts/train_signal_event_cnn.py` trains regularized 2D CNN models with
+modality-specific branches. The combined model uses late fusion:
+
+- Ultrasound only CNN: `50.1%` test accuracy.
+- Audible only CNN: `87.6%` test accuracy.
+- Audible + ultrasound CNN: `86.9%` test accuracy.
+
+CNN best-epoch selection uses a stratified validation subset of the training
+windows. The `549` session-held-out test windows are not used for model
+selection. Training curves, classification reports, confusion matrices, and
+prediction helpers are stored under `models/` and `scripts/`.
 
 ## Shopping Experiment
 
@@ -325,10 +383,11 @@ Run:
 npm test
 ```
 
-Latest known result after moving travel details inline:
+Latest known result after adding Stop-time feature figures and every-window MLP
+predictions:
 
 ```text
-5 passed
+9 passed
 ```
 
 Additional syntax checks used during development:
@@ -350,4 +409,6 @@ awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html | node --check 
 - Travel trip details should stay inline inside the corresponding trip item.
 - Avoid adding image-heavy or visually distracting content to dummy sites unless the task explicitly changes direction.
 - Browser microphone APIs require a secure context, but `localhost` is allowed by modern browsers.
-- Avoid committing generated recordings, spectrograms, large datasets, or model artifacts unless intentionally part of the project.
+- Do not commit `data/`, new `uploads/` sessions, spectrograms, or generated
+  training outputs. The deployed audible-only MLP artifact is the intentional
+  exception because Stop-time inference depends on it.

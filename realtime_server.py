@@ -29,7 +29,7 @@ from realtime_iq import FS, StreamingIqProcessor
 
 
 WEBAGENT_DIR = Path(__file__).resolve().parent
-DEFAULT_TX = WEBAGENT_DIR / "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav"
+DEFAULT_TX = WEBAGENT_DIR / "tx_dual_triangle_chirp_19_205_215_23.wav"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 AUDIO_FRAME_MAGIC = b"WAIQ"
 AUDIO_FRAME_HEADER = struct.Struct("<4sdII")

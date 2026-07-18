@@ -33,7 +33,8 @@
       </div>
       <div class="actions">
         <button id="travelStartSensingBtn" class="primary-button" type="button" data-start-sensing disabled>Start sensing</button>
-        <button id="travelStopSensingBtn" class="secondary-button" type="button" data-stop-sensing disabled>Stop</button>
+        <button id="travelStopSensingBtn" class="secondary-button" type="button" data-stop-sensing disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
+        <button id="travelDownloadSessionBtn" class="secondary-button" type="button" data-download-session disabled hidden>Download session files</button>
       </div>
       <audio id="travelSensingAudio" data-sensing-audio loop></audio>
       <div id="travelSpectrogramPanel" class="spectrogram-panel" data-spectrogram-panel hidden>
@@ -45,6 +46,29 @@
         <h2>Live Python IQ</h2>
         <p data-realtime-status>Start sensing to see live raw audio, amplitude, and phase.</p>
         <canvas class="realtime-canvas" width="820" height="520" data-realtime-canvas></canvas>
+      </div>
+      <div class="feature-visualization-panel" data-feature-visualization-panel hidden>
+        <h2>Processed feature visualizations</h2>
+        <p data-feature-visualization-status>Calculated after sensing stops.</p>
+        <div class="feature-visualization-grid" data-feature-visualization-grid></div>
+        <div class="window-prediction-section" data-window-prediction-section hidden>
+          <h3>Prediction for every signal window</h3>
+          <p data-window-prediction-status></p>
+          <div class="window-prediction-table-wrap">
+            <table class="window-prediction-table">
+              <thead>
+                <tr>
+                  <th scope="col">Window</th>
+                  <th scope="col">Start</th>
+                  <th scope="col">End</th>
+                  <th scope="col">Predicted label</th>
+                  <th scope="col">Confidence</th>
+                </tr>
+              </thead>
+              <tbody data-window-prediction-body></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 

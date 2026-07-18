@@ -16,7 +16,7 @@ import uuid
 from urllib.parse import urlparse
 
 
-AUDIO_FILE_NAME = "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav"
+AUDIO_FILE_NAME = "tx_dual_triangle_chirp_19_205_215_23.wav"
 WEBAGENT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = WEBAGENT_DIR.parent
 AUDIO_FILE_PATH = WEBAGENT_DIR / AUDIO_FILE_NAME
@@ -391,7 +391,7 @@ class AppHandler(SimpleHTTPRequestHandler):
             "--out-dir",
             str(figures_dir),
             "--figure-set",
-            "input-amplitude-phase",
+            "feature-visualizations",
         ]
 
         try:
@@ -419,15 +419,30 @@ class AppHandler(SimpleHTTPRequestHandler):
             )
             return
 
+        summary_path = figures_dir / "analysis_summary.json"
+        summary_payload = {}
+        if summary_path.exists():
+            try:
+                summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                summary_payload = {}
+        figure_descriptions = summary_payload.get("figures") or {}
         figures = [
             {
                 "name": path.name,
                 "url": self._static_url_for(path),
+                "description": str(figure_descriptions.get(path.name) or ""),
             }
             for path in sorted(figures_dir.glob("*.png"))
         ]
-        summary_path = figures_dir / "analysis_summary.json"
         features_path = figures_dir / "pipeline_features.npz"
+        predictions_path = figures_dir / "window_predictions.json"
+        predictions_payload = None
+        if predictions_path.exists():
+            try:
+                predictions_payload = json.loads(predictions_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                predictions_payload = None
 
         self._send_json(
             200,
@@ -443,6 +458,11 @@ class AppHandler(SimpleHTTPRequestHandler):
                     "name": features_path.name,
                     "url": self._static_url_for(features_path),
                 } if features_path.exists() else None,
+                "predictions": {
+                    "name": predictions_path.name,
+                    "url": self._static_url_for(predictions_path),
+                    **predictions_payload,
+                } if predictions_payload else None,
                 "stdout": completed.stdout[-4000:],
             },
         )

@@ -4,13 +4,26 @@ const { test, expect } = require("@playwright/test");
 test("records requested interaction events in downloadable log", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#downloadEventLogBtn")).toHaveCount(0);
+  await expect(page.locator("#downloadSessionBtn")).toBeHidden();
   await expect(page.locator("#startSensingBtn")).toBeEnabled();
+  await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
 
   await page.evaluate(() => {
     const spacer = document.createElement("div");
     spacer.id = "tracking-scroll-spacer";
     spacer.style.height = "1600px";
     document.body.appendChild(spacer);
+
+    const pointerTarget = document.createElement("div");
+    pointerTarget.id = "tracking-pointer-target";
+    pointerTarget.style.position = "fixed";
+    pointerTarget.style.left = "16px";
+    pointerTarget.style.top = "16px";
+    pointerTarget.style.width = "360px";
+    pointerTarget.style.height = "320px";
+    pointerTarget.style.zIndex = "10";
+    pointerTarget.style.background = "rgba(255, 255, 255, 0)";
+    document.body.appendChild(pointerTarget);
 
     const range = document.createElement("input");
     range.id = "tracking-range";
@@ -33,9 +46,15 @@ test("records requested interaction events in downloadable log", async ({ page }
   await expect.poll(() => page.evaluate(() => window.interactionTracker.getEvents().length)).toBe(0);
 
   await page.locator("#startSensingBtn").click();
-  await expect(page.locator("#stopSensingBtn")).toBeEnabled();
+  await expect(page.locator("#startSensingBtn")).toHaveText("Stop sensing");
+  await expect(page.locator("#stopSensingBtn")).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
 
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
   await page.keyboard.press("Tab");
   await page.mouse.move(120, 120);
   await page.mouse.click(120, 120);
@@ -81,7 +100,12 @@ test("records requested interaction events in downloadable log", async ({ page }
     downloads.push(download);
   });
 
-  await page.locator("#stopSensingBtn").click();
+  await page.locator("#startSensingBtn").click();
+  await expect(page.locator("#downloadSessionBtn")).toBeVisible({ timeout: 20000 });
+  await expect(page.locator("#downloadSessionBtn")).toBeEnabled();
+  expect(downloads).toHaveLength(0);
+
+  await page.locator("#downloadSessionBtn").click();
   await expect.poll(() => (
     downloads.find((download) => download.suggestedFilename().startsWith("tracking_data_"))
       ? "ready"
@@ -102,11 +126,13 @@ test("records requested interaction events in downloadable log", async ({ page }
   expect(payload.trackingConfig.maxEvents).toBeGreaterThan(0);
   expect(payload.trackingConfig.pointerMoveThrottleMs).toBeGreaterThan(0);
   expect(payload.trackingConfig.doublePressWindowMs).toBeGreaterThan(0);
+  expect(payload.dataCollection).toBeUndefined();
   expect(payload.startEpochSeconds).toBeGreaterThan(0);
   expect(payload.events.every((event) => event.epochSeconds > 0)).toBe(true);
 
   for (const expectedEvent of [
     "pointer_down",
+    "pointer_move",
     "pointer_up",
     "tap",
     "tap_to_click",
@@ -149,6 +175,7 @@ test("records requested interaction events in downloadable log", async ({ page }
   expect(osLog).toContain("# start_epoch | ");
   expect(osLog).toContain("# format | EVENT | VALUE | EPOCH_SECONDS");
   expect(osLog).toContain("KEYDOWN | key=Tab code=Tab");
+  expect(osLog).toContain("POINTER_MOVE | gesture=pointer_move");
   expect(osLog).toContain("TAP | ");
   expect(osLog).toContain("TAP_TO_CLICK | ");
   expect(osLog).toContain("PRESS_TO_CLICK | ");
@@ -162,7 +189,8 @@ test("records requested interaction events in downloadable log", async ({ page }
   const stopClick = payload.events.find((event) => (
     event.name === "click" &&
     event.properties.target &&
-    event.properties.target.id === "stopSensingBtn"
+    event.properties.target.id === "startSensingBtn" &&
+    event.properties.target.label === "Stop sensing"
   ));
   expect(stopClick).toBeTruthy();
 });

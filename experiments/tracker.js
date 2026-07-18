@@ -20,6 +20,8 @@
   const activePointers = new Map();
   let lastTap = null;
   let lastPress = null;
+  let lastPointerMoveTrackAt = 0;
+  let lastPointerMovePoint = null;
   let pendingClickGesture = null;
   let pinchSession = null;
   let interactionTrackingEnabled = false;
@@ -142,6 +144,9 @@
     const props = event.properties || {};
     return sanitizePipeValue([
       props.gesture ? `gesture=${props.gesture}` : "",
+      props.source ? `source=${props.source}` : "",
+      props.reason ? `reason=${props.reason}` : "",
+      props.note ? `note=${props.note}` : "",
       props.key ? `key=${props.key}` : "",
       props.code ? `code=${props.code}` : "",
       Number.isFinite(props.location) ? `location=${props.location}` : "",
@@ -161,6 +166,8 @@
       Number.isFinite(props.pageY) ? `pageY=${props.pageY}` : "",
       Number.isFinite(props.dx) ? `dx=${props.dx}` : "",
       Number.isFinite(props.dy) ? `dy=${props.dy}` : "",
+      Number.isFinite(props.movementX) ? `movementX=${props.movementX.toFixed(1)}` : "",
+      Number.isFinite(props.movementY) ? `movementY=${props.movementY.toFixed(1)}` : "",
       Number.isFinite(props.deltaX) ? `deltaX=${props.deltaX.toFixed(1)}` : "",
       Number.isFinite(props.deltaY) ? `deltaY=${props.deltaY.toFixed(1)}` : "",
       Number.isFinite(props.deltaZ) ? `deltaZ=${props.deltaZ.toFixed(1)}` : "",
@@ -227,19 +234,20 @@
     return `${lines.join("\n")}\n`;
   }
 
-  function downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug) {
-    const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
-    const downloadUrl = URL.createObjectURL(new Blob([osEventLog], {
-      type: "text/plain"
-    }));
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `os_event_log_${timestampSlug}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-    return osEventLog;
+  function downloadPreparedArtifacts(files) {
+    for (const file of Array.isArray(files) ? files : []) {
+      if (!file || !file.name || !file.blob) {
+        continue;
+      }
+      const downloadUrl = URL.createObjectURL(file.blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    }
   }
 
   function trackEvent(name, properties = {}, options = {}) {
@@ -282,6 +290,69 @@
       pageY: event.pageY,
       target: getElementDescriptor(event.target)
     };
+  }
+
+  function getPointerMoveProperties(event) {
+    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
+    const movementY = Number.isFinite(event.movementY) ? event.movementY : 0;
+    const dx = lastPointerMovePoint ? event.clientX - lastPointerMovePoint.x : movementX;
+    const dy = lastPointerMovePoint ? event.clientY - lastPointerMovePoint.y : movementY;
+    const distance = Math.hypot(dx, dy);
+    return {
+      gesture: "pointer_move",
+      pointerId: event.pointerId,
+      pointerType: event.pointerType || "mouse",
+      isPrimary: event.isPrimary,
+      buttons: event.buttons,
+      pressure: Number.isFinite(event.pressure) ? event.pressure : 0,
+      x: event.clientX,
+      y: event.clientY,
+      pageX: event.pageX,
+      pageY: event.pageY,
+      dx,
+      dy,
+      movementX,
+      movementY,
+      distance,
+      direction: distance > 0 ? getDirection(dx, dy) : "none",
+      target: getElementDescriptor(event.target)
+    };
+  }
+
+  function trackPointerMove(event) {
+    const pointerType = event.pointerType || "mouse";
+    if (
+      !interactionTrackingEnabled ||
+      pointerType !== "mouse" ||
+      event.buttons !== 0
+    ) {
+      return;
+    }
+
+    const now = performance.now();
+    if (now - lastPointerMoveTrackAt < trackingConfig.pointerMoveThrottleMs) {
+      return;
+    }
+
+    const properties = getPointerMoveProperties(event);
+    if (
+      lastPointerMovePoint &&
+      properties.distance === 0 &&
+      properties.movementX === 0 &&
+      properties.movementY === 0
+    ) {
+      return;
+    }
+
+    lastPointerMoveTrackAt = now;
+    lastPointerMovePoint = {
+      x: event.clientX,
+      y: event.clientY,
+      pageX: event.pageX,
+      pageY: event.pageY,
+      time: now
+    };
+    trackEvent("pointer_move", properties);
   }
 
   function getDirection(dx, dy) {
@@ -415,6 +486,8 @@
     activePointers.clear();
     lastTap = null;
     lastPress = null;
+    lastPointerMoveTrackAt = 0;
+    lastPointerMovePoint = null;
     pendingClickGesture = null;
     pinchSession = null;
     setInteractionTrackingEnabled(true);
@@ -456,8 +529,8 @@
     return `tracking_data_${slug}_${timestampSlug}.json`;
   }
 
-  function downloadTrackingData(timestampSlug = buildDownloadTimestamp()) {
-    trackEvent("tracking_data_downloaded", {
+  function prepareTrackingData(timestampSlug = buildDownloadTimestamp()) {
+    trackEvent("tracking_data_prepared", {
       eventCount: eventLog.length
     });
 
@@ -475,24 +548,30 @@
       page: getPageInfo(),
       events
     };
-    const downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {
-      type: "application/json"
-    }));
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = buildTrackingFileName(timestampSlug);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
     const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
-    const osEventLog = downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug);
+    const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
     return {
       payload,
       osEventLog,
       timestampSlug,
-      downloadedEpochSeconds
+      downloadedEpochSeconds,
+      files: [
+        {
+          name: buildTrackingFileName(timestampSlug),
+          blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+        },
+        {
+          name: `os_event_log_${timestampSlug}.txt`,
+          blob: new Blob([osEventLog], { type: "text/plain" })
+        }
+      ]
     };
+  }
+
+  function downloadTrackingData(timestampSlug = buildDownloadTimestamp()) {
+    const artifacts = prepareTrackingData(timestampSlug);
+    downloadPreparedArtifacts(artifacts.files);
+    return artifacts;
   }
 
   function setupInteractionTracking() {
@@ -520,6 +599,7 @@
     document.addEventListener("pointermove", (event) => {
       const pointer = activePointers.get(event.pointerId);
       if (!pointer) {
+        trackPointerMove(event);
         return;
       }
 
@@ -817,9 +897,11 @@
 
   window.interactionTracker = {
     trackEvent,
+    prepareTrackingData,
     downloadTrackingData,
     getEvents: () => eventLog.slice(),
     getSessionId: () => sessionId,
+    createTrackingId,
     isEnabled: () => interactionTrackingEnabled,
     setEnabled: setInteractionTrackingEnabled,
     beginSession: beginTrackingSession

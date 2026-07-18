@@ -106,6 +106,98 @@ textarea {
   background: #fffdfa;
 }
 
+.feature-visualization-panel {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.feature-visualization-panel h2 {
+  margin-bottom: 6px;
+  font-size: 1.05rem;
+}
+
+.feature-visualization-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.feature-visualization-item {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.feature-visualization-item img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.feature-visualization-item figcaption {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.window-prediction-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.window-prediction-section h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.window-prediction-section > p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.window-prediction-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.window-prediction-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.window-prediction-table th,
+.window-prediction-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.window-prediction-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f7f9fb;
+}
+
+.prediction-label {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-weight: 700;
+}
+
 .link-button,
 .primary-button,
 .secondary-button,
@@ -419,6 +511,10 @@ body.travel-site .travel-details-list dd {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .feature-visualization-grid {
     grid-template-columns: 1fr;
   }
 

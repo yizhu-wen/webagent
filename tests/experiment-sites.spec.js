@@ -18,6 +18,7 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Live Python IQ" })).toBeVisible();
     await expect(page.locator("[data-realtime-canvas]")).toBeVisible();
     await expect(page.locator("[data-realtime-status]")).toContainText("Start sensing");
+    await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
 
     const debugState = await page.evaluate(() => window.experimentSensing.getRealtimeDebugState());
     expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
@@ -29,15 +30,16 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await page.goto("/experiments/");
   await expect(page.getByRole("heading", { name: "Simple Shopping Task" })).toBeVisible();
   await expect(page.locator("[data-download-tracking]")).toHaveCount(0);
+  await expect(page.locator("[data-download-session]")).toBeHidden();
   await expect(page.locator("#shoppingStartSensingBtn")).toBeEnabled();
-  await expect(page.locator("#shoppingStopSensingBtn")).toBeDisabled();
+  await expect(page.locator("#shoppingStopSensingBtn")).toBeHidden();
 
   await page.mouse.move(80, 80);
   await page.keyboard.press("Tab");
   await expect.poll(() => page.evaluate(() => window.interactionTracker.getEvents().length)).toBe(0);
 
   await page.locator("#shoppingStartSensingBtn").click();
-  await expect(page.locator("#shoppingStopSensingBtn")).toBeEnabled();
+  await expect(page.locator("#shoppingStartSensingBtn")).toHaveText("Stop sensing");
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
 
@@ -83,9 +85,10 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     downloads.push(download);
   });
 
-  await page.locator("#shoppingStopSensingBtn").click();
+  await page.locator("#shoppingStartSensingBtn").click();
   await expect(page.locator("#shoppingStartSensingBtn")).toBeEnabled();
-  await expect(page.locator("#shoppingStopSensingBtn")).toBeDisabled();
+  await expect(page.locator("#shoppingStartSensingBtn")).toHaveText("Start sensing");
+  await expect(page.locator("#shoppingStopSensingBtn")).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
 
@@ -106,6 +109,11 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     return brightPixels;
   });
   expect(brightSpectrogramPixels).toBeGreaterThan(20);
+
+  await expect(page.locator("[data-download-session]")).toBeVisible({ timeout: 20000 });
+  await expect(page.locator("[data-download-session]")).toBeEnabled();
+  expect(downloads).toHaveLength(0);
+  await page.locator("[data-download-session]").click();
 
   await expect.poll(() => ({
     tracking: downloads.some((download) => download.suggestedFilename().includes("simple-shopping")),
@@ -131,6 +139,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     "click",
     "tap",
     "pointer_down",
+    "pointer_move",
     "pointer_up",
     "keydown",
     "wheel_swipe",
@@ -159,15 +168,17 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Simple Travel Task" })).toBeVisible();
   await expect(page.locator("[data-product-row]")).toHaveCount(5);
   await expect(page.locator("[data-download-tracking]")).toHaveCount(0);
+  await expect(page.locator("[data-download-session]")).toBeHidden();
   await expect(page.locator("#travelStartSensingBtn")).toBeEnabled();
-  await expect(page.locator("#travelStopSensingBtn")).toBeDisabled();
+  await expect(page.locator("#travelStopSensingBtn")).toBeHidden();
 
   await page.mouse.move(80, 80);
   await page.keyboard.press("Tab");
   await expect.poll(() => page.evaluate(() => window.interactionTracker.getEvents().length)).toBe(0);
 
   await page.locator("#travelStartSensingBtn").click();
-  await expect(page.locator("#travelStopSensingBtn")).toBeEnabled();
+  await expect(page.locator("#travelStartSensingBtn")).toHaveText("Stop sensing");
+  await expect(page.locator("[data-manual-label='hand_wave']")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
 
@@ -224,9 +235,10 @@ test("travel tourism page captures interaction data", async ({ page }) => {
     downloads.push(download);
   });
 
-  await page.locator("#travelStopSensingBtn").click();
+  await page.locator("#travelStartSensingBtn").click();
   await expect(page.locator("#travelStartSensingBtn")).toBeEnabled();
-  await expect(page.locator("#travelStopSensingBtn")).toBeDisabled();
+  await expect(page.locator("#travelStartSensingBtn")).toHaveText("Start sensing");
+  await expect(page.locator("#travelStopSensingBtn")).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
 
@@ -248,6 +260,11 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   });
   expect(brightSpectrogramPixels).toBeGreaterThan(20);
 
+  await expect(page.locator("[data-download-session]")).toBeVisible({ timeout: 20000 });
+  await expect(page.locator("[data-download-session]")).toBeEnabled();
+  expect(downloads).toHaveLength(0);
+  await page.locator("[data-download-session]").click();
+
   await expect.poll(() => ({
     tracking: downloads.some((download) => download.suggestedFilename().includes("travel-tourism")),
     audio: downloads.some((download) => /^travel_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
@@ -266,6 +283,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
     "click",
     "tap",
     "pointer_down",
+    "pointer_move",
     "pointer_up",
     "keydown",
     "wheel_swipe",

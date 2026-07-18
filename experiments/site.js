@@ -8,14 +8,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const sensingStatusNode = document.querySelector("[data-sensing-status]") || document.getElementById("shoppingSensingStatus");
   const startSensingBtn = document.querySelector("[data-start-sensing]") || document.getElementById("shoppingStartSensingBtn");
   const stopSensingBtn = document.querySelector("[data-stop-sensing]") || document.getElementById("shoppingStopSensingBtn");
+  const downloadSessionBtn = document.querySelector("[data-download-session]");
   const sensingAudio = document.querySelector("[data-sensing-audio]") || document.getElementById("shoppingSensingAudio");
   const spectrogramPanel = document.querySelector("[data-spectrogram-panel]") || document.getElementById("shoppingSpectrogramPanel");
   const spectrogramStatus = document.querySelector("[data-spectrogram-status]") || document.getElementById("shoppingSpectrogramStatus");
   const spectrogramCanvas = document.querySelector("[data-spectrogram-canvas]") || document.getElementById("shoppingSpectrogramCanvas");
+  const featureVisualizationPanel = document.querySelector("[data-feature-visualization-panel]");
+  const featureVisualizationStatus = document.querySelector("[data-feature-visualization-status]");
+  const featureVisualizationGrid = document.querySelector("[data-feature-visualization-grid]");
+  const windowPredictionSection = document.querySelector("[data-window-prediction-section]");
+  const windowPredictionStatus = document.querySelector("[data-window-prediction-status]");
+  const windowPredictionBody = document.querySelector("[data-window-prediction-body]");
   const realtimePanel = document.querySelector("[data-realtime-panel]");
   const realtimeStatus = document.querySelector("[data-realtime-status]");
   const realtimeCanvas = document.querySelector("[data-realtime-canvas]");
-  const chirpAudioFileName = "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav";
+  const chirpAudioFileName = "tx_dual_triangle_chirp_19_205_215_23.wav";
+  const chirpPeriodSeconds = 0.012;
   const chirpAudioUrl = resolveChirpAudioUrl();
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
@@ -40,6 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let recordingChannelCount = 0;
   let recordedFrameCount = 0;
   let sensingActive = false;
+  let preparedSessionFiles = [];
   let selectedDetailTrip = null;
   let realtimeSocket = null;
   let realtimeStreamingActive = false;
@@ -54,7 +63,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let realtimeFramesReceived = 0;
   let realtimeFeaturesReceived = 0;
   let realtimeFramesDroppedBeforeSend = 0;
-
   function resolveChirpAudioUrl() {
     if (document.body.dataset.chirpAudio) {
       return new URL(document.body.dataset.chirpAudio, window.location.href).href;
@@ -122,10 +130,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setSensingControls(micReady, active) {
     if (startSensingBtn) {
-      startSensingBtn.disabled = !micReady || active;
+      startSensingBtn.disabled = !micReady && !active;
+      startSensingBtn.textContent = active ? "Stop sensing" : "Start sensing";
+      startSensingBtn.setAttribute("aria-pressed", String(active));
     }
     if (stopSensingBtn) {
-      stopSensingBtn.disabled = !active;
+      stopSensingBtn.disabled = true;
+      stopSensingBtn.hidden = true;
+      stopSensingBtn.setAttribute("aria-hidden", "true");
+    }
+    if (downloadSessionBtn) {
+      downloadSessionBtn.disabled = !preparedSessionFiles.length || active;
     }
   }
 
@@ -257,13 +272,55 @@ document.addEventListener("DOMContentLoaded", () => {
     link.remove();
   }
 
+  function downloadFileArtifact(file) {
+    if (!file || !file.name || (!file.blob && !file.url)) {
+      return false;
+    }
+
+    const downloadUrl = file.blob ? URL.createObjectURL(file.blob) : file.url;
+    triggerDownload(downloadUrl, file.name);
+    if (file.blob) {
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    }
+    return true;
+  }
+
+  function downloadFileArtifacts(files) {
+    return (Array.isArray(files) ? files : [])
+      .reduce((count, file) => count + Number(downloadFileArtifact(file)), 0);
+  }
+
+  function setPreparedSessionFiles(files) {
+    preparedSessionFiles = (Array.isArray(files) ? files : [])
+      .filter((file) => file && file.name && (file.blob || file.url));
+    if (!downloadSessionBtn) {
+      return;
+    }
+
+    const hasFiles = preparedSessionFiles.length > 0;
+    downloadSessionBtn.hidden = !hasFiles;
+    downloadSessionBtn.disabled = !hasFiles || sensingActive;
+    downloadSessionBtn.textContent = hasFiles
+      ? `Download session files (${preparedSessionFiles.length})`
+      : "Download session files";
+  }
+
+  function downloadPreparedSessionFiles() {
+    if (!preparedSessionFiles.length || sensingActive) {
+      return;
+    }
+
+    const downloadCount = downloadFileArtifacts(preparedSessionFiles);
+    setSensingStatus(`Download started for ${downloadCount} session files.`);
+  }
+
   function clampPcmSample(sample) {
     return Math.max(-1, Math.min(1, sample));
   }
 
   function estimateChirpPeriod(audioBuffer) {
     const sampleRate = audioBuffer.sampleRate;
-    const expectedPeriodSamples = Math.round(0.020 * sampleRate);
+    const expectedPeriodSamples = Math.round(chirpPeriodSeconds * sampleRate);
     const samples = toMonoChannel(audioBuffer);
     const analysisLength = Math.min(samples.length, Math.round(sampleRate * 1.5));
 
@@ -320,7 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
       estimatedPeriodSamples: bestLag,
       deviationSamples: bestLag - expectedPeriodSamples,
       estimatedPeriodMs: (bestLag / sampleRate) * 1000,
-      expectedPeriodMs: 20,
+      expectedPeriodMs: chirpPeriodSeconds * 1000,
       normalizedCorrelation: bestScore,
       analyzedSamples: analysisLength,
       sampleRate,
@@ -373,7 +430,7 @@ document.addEventListener("DOMContentLoaded", () => {
         duration: recordedAudioBuffer.duration
       },
       signalCheck: {
-        method: "normalized_autocorrelation_near_20ms_chirp_period",
+        method: "normalized_autocorrelation_near_12ms_chirp_period",
         chirpPeriodEstimate
       },
       limitations: [
@@ -384,16 +441,62 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function downloadAudioDiagnostics(diagnostics, timestamp) {
-    const diagnosticsUrl = URL.createObjectURL(new Blob([JSON.stringify(diagnostics, null, 2)], {
-      type: "application/json"
-    }));
-    triggerDownload(diagnosticsUrl, `${recordingFilePrefix}_diagnostics_${timestamp}.json`);
-    window.setTimeout(() => URL.revokeObjectURL(diagnosticsUrl), 1000);
+  function buildAudioDiagnosticsArtifact(diagnostics, timestamp) {
+    return {
+      name: `${recordingFilePrefix}_diagnostics_${timestamp}.json`,
+      blob: new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" })
+    };
   }
 
-  function downloadGeneratedFigures(result) {
+  function buildGeneratedFigureArtifacts(result) {
     if (!result || !Array.isArray(result.figures)) {
+      return [];
+    }
+
+    return result.figures
+      .filter((figure) => figure && figure.url && figure.name)
+      .map((figure) => ({
+        name: figure.name,
+        url: figure.url
+      }));
+  }
+
+  function formatGeneratedFigureTitle(fileName) {
+    return fileName
+      .replace(/^\d+_/, "")
+      .replace(/\.png$/i, "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
+  function clearFeatureVisualizations() {
+    if (!featureVisualizationPanel || !featureVisualizationGrid || !featureVisualizationStatus) {
+      return;
+    }
+    featureVisualizationGrid.replaceChildren();
+    if (windowPredictionBody) {
+      windowPredictionBody.replaceChildren();
+    }
+    if (windowPredictionSection) {
+      windowPredictionSection.hidden = true;
+    }
+    if (windowPredictionStatus) {
+      windowPredictionStatus.textContent = "";
+    }
+    featureVisualizationPanel.hidden = true;
+    featureVisualizationStatus.textContent = "Calculated after sensing stops.";
+  }
+
+  function renderGeneratedFigures(result) {
+    clearFeatureVisualizations();
+    if (
+      !featureVisualizationPanel
+      || !featureVisualizationGrid
+      || !featureVisualizationStatus
+      || !result
+      || !Array.isArray(result.figures)
+      || !result.figures.length
+    ) {
       return 0;
     }
 
@@ -401,10 +504,86 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!figure || !figure.url || !figure.name) {
         continue;
       }
-      triggerDownload(figure.url, figure.name);
+      const item = document.createElement("figure");
+      item.className = "feature-visualization-item";
+      const image = document.createElement("img");
+      image.src = figure.url;
+      image.alt = formatGeneratedFigureTitle(figure.name);
+      image.loading = "lazy";
+      const caption = document.createElement("figcaption");
+      const title = document.createElement("strong");
+      title.textContent = formatGeneratedFigureTitle(figure.name);
+      caption.append(title);
+      if (figure.description) {
+        caption.append(document.createElement("br"), figure.description);
+      }
+      item.append(image, caption);
+      featureVisualizationGrid.append(item);
     }
 
-    return result.figures.length;
+    featureVisualizationStatus.textContent =
+      "Post-processed from the completed recording using the model feature pipeline.";
+    featureVisualizationPanel.hidden = false;
+    return featureVisualizationGrid.childElementCount;
+  }
+
+  function getPredictionLabelColor(label) {
+    const colors = {
+      body_motion: "#277da1",
+      click_tap: "#f9844a",
+      hand_wave: "#43aa8b",
+      keydown: "#b8860b",
+      no_event: "#6c757d",
+      pointer_move: "#9b5de5",
+      scroll: "#577590"
+    };
+    return colors[label] || "#455a64";
+  }
+
+  function renderWindowPredictions(result) {
+    if (!windowPredictionSection || !windowPredictionStatus || !windowPredictionBody) {
+      return 0;
+    }
+    const predictionResult = result && result.predictions;
+    const rows = predictionResult && Array.isArray(predictionResult.predictions)
+      ? predictionResult.predictions
+      : [];
+    windowPredictionBody.replaceChildren();
+    if (!rows.length) {
+      windowPredictionSection.hidden = true;
+      return 0;
+    }
+
+    for (const prediction of rows) {
+      const row = document.createElement("tr");
+      const values = [
+        prediction.windowIndex,
+        `${Number(prediction.startSeconds).toFixed(2)} s`,
+        `${Number(prediction.endSeconds).toFixed(2)} s`
+      ];
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      const labelCell = document.createElement("td");
+      const label = document.createElement("span");
+      label.className = "prediction-label";
+      label.textContent = prediction.predictedLabel;
+      label.style.backgroundColor = getPredictionLabelColor(prediction.predictedLabel);
+      labelCell.append(label);
+      const confidenceCell = document.createElement("td");
+      confidenceCell.textContent = `${(Number(prediction.confidence) * 100).toFixed(1)}%`;
+      row.append(labelCell, confidenceCell);
+      windowPredictionBody.append(row);
+    }
+
+    windowPredictionStatus.textContent =
+      `${rows.length} overlapping ${Number(predictionResult.windowSeconds).toFixed(1)}-second windows, ` +
+      `evaluated every ${Number(predictionResult.strideSeconds).toFixed(2)} seconds.`;
+    windowPredictionSection.hidden = false;
+    featureVisualizationPanel.hidden = false;
+    return rows.length;
   }
 
   async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp) {
@@ -735,6 +914,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (name.includes("press") || name.includes("hold")) {
       return "#ff7f0e";
     }
+    if (name === "pointer_move") {
+      return "#1f77b4";
+    }
     if (name.includes("drag")) {
       return "#2ca02c";
     }
@@ -753,6 +935,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       return props.key || "key";
     }
+    if (name === "pointer_move") {
+      return props.direction && props.direction !== "none" ? `move-${props.direction[0]}` : "move";
+    }
+    if (name === "drag_move") {
+      return props.direction ? `drag-${props.direction[0]}` : "drag";
+    }
     const labels = {
       tap_to_click: "tap-click",
       press_to_click: "press-click",
@@ -767,6 +955,7 @@ document.addEventListener("DOMContentLoaded", () => {
       click: "click",
       double_click: "2click",
       drag_start: "drag>",
+      drag_move: "drag",
       drag_end: "<drag",
       swipe: "swipe",
       two_finger_swipe: "2swipe",
@@ -797,7 +986,9 @@ document.addEventListener("DOMContentLoaded", () => {
       "long_press_to_click",
       "double_tap_to_click",
       "double_press_to_click",
+      "pointer_move",
       "drag_start",
+      "drag_move",
       "drag_end",
       "swipe",
       "two_finger_swipe",
@@ -812,6 +1003,14 @@ document.addEventListener("DOMContentLoaded", () => {
     realtimeEventMarkers.push({
       time: correctedEventTime,
       rawTime: eventTime,
+      name: event.name,
+      pointerType: event.properties && event.properties.pointerType ? event.properties.pointerType : "",
+      x: event.properties && Number.isFinite(event.properties.x) ? event.properties.x : null,
+      y: event.properties && Number.isFinite(event.properties.y) ? event.properties.y : null,
+      dx: event.properties && Number.isFinite(event.properties.dx) ? event.properties.dx : null,
+      dy: event.properties && Number.isFinite(event.properties.dy) ? event.properties.dy : null,
+      distance: event.properties && Number.isFinite(event.properties.distance) ? event.properties.distance : null,
+      direction: event.properties && event.properties.direction ? event.properties.direction : "",
       label: getRealtimeMarkerLabel(event),
       color: getRealtimeMarkerColor(event.name)
     });
@@ -1246,11 +1445,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function downloadRecordedAudio(recordedAudioBuffer, options = {}) {
+  async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
+    const sessionFiles = [
+      ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
+    ];
     if (!recordedAudioBuffer) {
-      setSensingStatus("Sensing stopped, but no microphone recording was captured.");
+      setPreparedSessionFiles(sessionFiles);
+      setSensingStatus(sessionFiles.length
+        ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+        : "Sensing stopped, but no microphone recording was captured.");
       resetRecordingBuffers();
-      return;
+      return sessionFiles;
     }
 
     try {
@@ -1260,18 +1465,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
       await renderSpectrogram(wavBlob);
 
-      const downloadUrl = URL.createObjectURL(wavBlob);
-      triggerDownload(downloadUrl, `${recordingFilePrefix}_${timestamp}.wav`);
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-
-      triggerDownload(
-        spectrogramCanvas.toDataURL("image/png"),
-        `${recordingFilePrefix}_spectrogram_${timestamp}.png`
+      sessionFiles.push(
+        { name: `${recordingFilePrefix}_${timestamp}.wav`, blob: wavBlob },
+        {
+          name: `${recordingFilePrefix}_spectrogram_${timestamp}.png`,
+          url: spectrogramCanvas.toDataURL("image/png")
+        },
+        buildAudioDiagnosticsArtifact(diagnostics, timestamp)
       );
-      downloadAudioDiagnostics(diagnostics, timestamp);
-      setSensingStatus("Sensing stopped. Running Python IQ pipeline for input-event amplitude/phase figure...");
+      setSensingStatus("Sensing stopped. Calculating post-processed signal features...");
 
-      let figureCount = 0;
+      let figureFiles = [];
       try {
         const analysisResult = await requestFigureGeneration(
           wavBlob,
@@ -1279,21 +1483,31 @@ document.addEventListener("DOMContentLoaded", () => {
           options.trackingArtifacts,
           timestamp
         );
-        figureCount = downloadGeneratedFigures(analysisResult);
+        renderGeneratedFigures(analysisResult);
+        renderWindowPredictions(analysisResult);
+        figureFiles = buildGeneratedFigureArtifacts(analysisResult);
       } catch (error) {
-        figureCount = 0;
+        figureFiles = [];
       }
 
-      if (figureCount > 0) {
-        setSensingStatus(`Sensing is stopped. Recording, spectrogram, diagnostics, tracking data, and ${figureCount} Python IQ input-event figure downloaded.`);
+      sessionFiles.push(...figureFiles);
+      setPreparedSessionFiles(sessionFiles);
+
+      if (figureFiles.length > 0) {
+        setSensingStatus(`Sensing is stopped. ${sessionFiles.length} session files are ready, including ${figureFiles.length} processed feature figures. Choose Download session files to save them.`);
       } else {
-        setSensingStatus("Sensing is stopped. Recording, spectrogram, diagnostics, and tracking data downloaded. Exact Python figures require serving the app with webagent/server.py.");
+        setSensingStatus(`Sensing is stopped. ${sessionFiles.length} session files are ready. Choose Download session files to save them. Exact Python figures require serving the app with webagent/server.py.`);
       }
     } catch (error) {
-      setSensingStatus("Sensing stopped, but failed to download the recording or spectrogram.");
+      setPreparedSessionFiles(sessionFiles);
+      setSensingStatus(sessionFiles.length
+        ? "Sensing stopped. The tracking files are ready, but the recording or spectrogram could not be prepared."
+        : "Sensing stopped, but failed to prepare the recording or spectrogram.");
     } finally {
       resetRecordingBuffers();
     }
+
+    return sessionFiles;
   }
 
   async function requestMicrophone() {
@@ -1348,6 +1562,7 @@ document.addEventListener("DOMContentLoaded", () => {
       stopSensingCapture();
       resetRecordingBuffers();
       clearSpectrogram();
+      clearFeatureVisualizations();
       await loadChirpPlaybackBuffer();
       await startRealtimeSession();
       sensingSourceNode = context.createMediaStreamSource(microphoneOnlyStream);
@@ -1389,21 +1604,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function stopSensing({ download = true } = {}) {
+  async function stopSensing({ prepareFiles = true } = {}) {
     if (!sensingActive && !recordedFrameCount) {
       return;
     }
 
     const timestamp = buildTimestamp();
-    const shouldDownloadRecording = download && recordedFrameCount > 0;
-    const completedRecording = shouldDownloadRecording
+    const shouldPrepareRecording = prepareFiles && recordedFrameCount > 0;
+    const completedRecording = shouldPrepareRecording
       ? buildAudioBufferFromRecording(getAudioContext())
       : null;
 
     sensingActive = false;
     let trackingArtifacts = null;
-    if (download) {
-      trackingArtifacts = window.interactionTracker.downloadTrackingData(timestamp);
+    if (prepareFiles) {
+      trackingArtifacts = window.interactionTracker.prepareTrackingData(timestamp);
     }
     window.interactionTracker.setEnabled(false);
     setSensingControls(Boolean(micStream), false);
@@ -1412,9 +1627,12 @@ document.addEventListener("DOMContentLoaded", () => {
     sensingAudio.currentTime = 0;
     stopSensingCapture();
 
-    if (download) {
-      setSensingStatus("Sensing stopped. Preparing recording and spectrogram downloads...");
-      await downloadRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
+    if (prepareFiles) {
+      if (downloadSessionBtn) {
+        downloadSessionBtn.disabled = true;
+      }
+      setSensingStatus("Sensing stopped. Preparing session files...");
+      await prepareRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
     } else {
       resetRecordingBuffers();
       setSensingStatus(`Sensing is stopped. ${siteLabel} is not being tracked.`);
@@ -1638,13 +1856,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (startSensingBtn) {
     startSensingBtn.addEventListener("click", () => {
-      void startSensing();
+      if (sensingActive) {
+        void stopSensing();
+      } else {
+        void startSensing();
+      }
     });
   }
 
   if (stopSensingBtn) {
     stopSensingBtn.addEventListener("click", () => {
       void stopSensing();
+    });
+  }
+
+  if (downloadSessionBtn) {
+    downloadSessionBtn.addEventListener("click", () => {
+      downloadPreparedSessionFiles();
     });
   }
 
@@ -1655,8 +1883,13 @@ document.addEventListener("DOMContentLoaded", () => {
   window.experimentSensing = {
     isPlaybackActive: () => Boolean(chirpSourceNode),
     getRecordingChannelCount: () => recordingChannelCount,
+    getRecordedFrameCount: () => recordedFrameCount,
     getTargetSampleRate: () => targetSampleRate,
+    getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
     getRealtimePointCount: () => realtimeFeaturePoints.length,
+    renderGeneratedFigures,
+    renderWindowPredictions,
+    clearFeatureVisualizations,
     getRealtimeDebugState: () => ({
       connected: Boolean(realtimeSocket),
       streaming: realtimeStreamingActive,
@@ -1664,6 +1897,7 @@ document.addEventListener("DOMContentLoaded", () => {
       framesReceived: realtimeFramesReceived,
       featuresReceived: realtimeFeaturesReceived,
       framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
+      recordedFrameCount,
       points: realtimeFeaturePoints.length,
       waveformPoints: realtimeWaveformPoints.length,
       status: realtimeLastStatusMessage,
@@ -1675,7 +1909,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.addEventListener("pagehide", () => {
-    void stopSensing({ download: false });
+    void stopSensing({ prepareFiles: false });
     stopRealtimeSession();
     stopChirpPlayback();
     if (micStream) {

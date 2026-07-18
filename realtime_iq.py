@@ -12,14 +12,14 @@ from scipy.signal import butter, correlate, hilbert, resample_poly, sosfilt
 
 
 FS = 48_000
-T_TRI = 0.020
+T_TRI = 0.012
 N_TRI = int(FS * T_TRI)
-LO_CUT = 19_700
+LO_CUT = 18_700
 HI_CUT = 23_300
 FILTER_ORDER = 6
 N_REF_CHIRPS = 6
 SPEED_OF_SOUND = 343.0
-FC = 21_500
+FC = 21_000
 WAVELENGTH = SPEED_OF_SOUND / FC
 R_MIN = 0.0
 R_MAX = 1.20
@@ -50,6 +50,10 @@ class StreamingIqProcessor:
         gcd = math.gcd(self.input_sample_rate, FS)
         self.resample_up = FS // gcd
         self.resample_down = self.input_sample_rate // gcd
+        # The transmitted asset is stereo: the left speaker carries the
+        # 19.0-20.5 kHz chirp and the right carries 21.5-23.0 kHz.  A browser
+        # microphone capture is mono, so use the channel average as the
+        # alignment/correlation reference and keep exactly one 12 ms period.
         tx_real, tx_fs = load_mono_wav(tx_wav)
         if tx_fs != FS:
             raise ValueError(f"Expected {FS} Hz TX chirp WAV, got {tx_fs}")

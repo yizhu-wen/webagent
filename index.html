@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -212,6 +212,108 @@
       border: 1px solid rgba(46, 36, 28, 0.12);
     }
 
+    .feature-visualization-panel {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(46, 36, 28, 0.1);
+      text-align: left;
+    }
+
+    .feature-visualization-panel h4 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .feature-visualization-panel > p {
+      margin: 0 0 12px;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .feature-visualization-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .feature-visualization-item {
+      margin: 0;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgba(46, 36, 28, 0.12);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .feature-visualization-item img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .feature-visualization-item figcaption {
+      padding: 10px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .window-prediction-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(46, 36, 28, 0.12);
+    }
+
+    .window-prediction-section h5 {
+      margin: 0 0 6px;
+      font-size: 0.95rem;
+    }
+
+    .window-prediction-section > p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .window-prediction-table-wrap {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid rgba(46, 36, 28, 0.12);
+    }
+
+    .window-prediction-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .window-prediction-table th,
+    .window-prediction-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(46, 36, 28, 0.09);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .window-prediction-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f7f3ed;
+    }
+
+    .prediction-label {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #fff;
+      font-weight: 700;
+    }
+
     @media (max-width: 820px) {
       .panel {
         padding: 32px 24px;
@@ -223,6 +325,10 @@
 
       .realtime-canvas {
         max-width: 100%;
+      }
+
+      .feature-visualization-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -238,7 +344,8 @@
         <p id="fileStatus"></p>
         <div id="filePrompt" class="file-prompt hidden">
           <button id="startSensingBtn" class="prompt-button" type="button">Start sensing</button>
-          <button id="stopSensingBtn" class="prompt-button" type="button" disabled>Stop</button>
+          <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
+          <button id="downloadSessionBtn" class="prompt-button hidden" type="button" disabled hidden>Download session files</button>
         </div>
         <div class="event-log-actions">
           <a class="prompt-button experiment-link" href="experiments/">Open shopping experiment</a>
@@ -259,6 +366,29 @@
             <canvas id="spectrogramCanvas" class="spectrogram-canvas" width="820" height="260"></canvas>
           </div>
         </div>
+        <div id="featureVisualizationPanel" class="feature-visualization-panel hidden">
+          <h4>Processed feature visualizations</h4>
+          <p id="featureVisualizationStatus">Calculated after sensing stops.</p>
+          <div id="featureVisualizationGrid" class="feature-visualization-grid"></div>
+          <div id="windowPredictionSection" class="window-prediction-section hidden">
+            <h5>Prediction for every signal window</h5>
+            <p id="windowPredictionStatus"></p>
+            <div class="window-prediction-table-wrap">
+              <table class="window-prediction-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Window</th>
+                    <th scope="col">Start</th>
+                    <th scope="col">End</th>
+                    <th scope="col">Predicted label</th>
+                    <th scope="col">Confidence</th>
+                  </tr>
+                </thead>
+                <tbody id="windowPredictionBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -269,10 +399,17 @@
     const filePrompt = document.getElementById("filePrompt");
     const startSensingBtn = document.getElementById("startSensingBtn");
     const stopSensingBtn = document.getElementById("stopSensingBtn");
+    const downloadSessionBtn = document.getElementById("downloadSessionBtn");
     const receivedAudio = document.getElementById("receivedAudio");
     const spectrogramPanel = document.getElementById("spectrogramPanel");
     const spectrogramStatus = document.getElementById("spectrogramStatus");
     const spectrogramCanvas = document.getElementById("spectrogramCanvas");
+    const featureVisualizationPanel = document.getElementById("featureVisualizationPanel");
+    const featureVisualizationStatus = document.getElementById("featureVisualizationStatus");
+    const featureVisualizationGrid = document.getElementById("featureVisualizationGrid");
+    const windowPredictionSection = document.getElementById("windowPredictionSection");
+    const windowPredictionStatus = document.getElementById("windowPredictionStatus");
+    const windowPredictionBody = document.getElementById("windowPredictionBody");
     const realtimeStatus = document.getElementById("realtimeStatus");
     const realtimeCanvas = document.getElementById("realtimeCanvas");
     const targetWavSampleRate = 48000;
@@ -294,6 +431,7 @@
     let recordingSessionActive = false;
     let playbackStartInProgress = false;
     let sensingSessionActive = false;
+    let preparedSessionFiles = [];
     let realtimeSocket = null;
     let realtimeStreamingActive = false;
     let realtimeSessionStartEpoch = null;
@@ -338,7 +476,8 @@
     }
 
     const appConfig = {
-      downloadFileName: "triangle_fmcw_20-23kHz_20ms_48kHz_loop.wav",
+      downloadFileName: "tx_dual_triangle_chirp_19_205_215_23.wav",
+      chirpPeriodSeconds: 0.012,
       uploadApiUrl: "/api/upload-recording",
       analysisApiUrl: "/api/analyze-recording",
       realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
@@ -377,10 +516,11 @@
     const activePointers = new Map();
     let lastTap = null;
     let lastPress = null;
+    let lastPointerMoveTrackAt = 0;
+    let lastPointerMovePoint = null;
     let pendingClickGesture = null;
     let pinchSession = null;
     let interactionTrackingEnabled = false;
-
     function createTrackingId() {
       if (window.crypto && typeof window.crypto.randomUUID === "function") {
         return window.crypto.randomUUID();
@@ -478,6 +618,9 @@
       const props = event.properties || {};
       return sanitizePipeValue([
         props.gesture ? `gesture=${props.gesture}` : "",
+        props.source ? `source=${props.source}` : "",
+        props.reason ? `reason=${props.reason}` : "",
+        props.note ? `note=${props.note}` : "",
         props.key ? `key=${props.key}` : "",
         props.code ? `code=${props.code}` : "",
         Number.isFinite(props.location) ? `location=${props.location}` : "",
@@ -497,6 +640,8 @@
         Number.isFinite(props.pageY) ? `pageY=${props.pageY}` : "",
         Number.isFinite(props.dx) ? `dx=${props.dx}` : "",
         Number.isFinite(props.dy) ? `dy=${props.dy}` : "",
+        Number.isFinite(props.movementX) ? `movementX=${props.movementX.toFixed(1)}` : "",
+        Number.isFinite(props.movementY) ? `movementY=${props.movementY.toFixed(1)}` : "",
         Number.isFinite(props.deltaX) ? `deltaX=${props.deltaX.toFixed(1)}` : "",
         Number.isFinite(props.deltaY) ? `deltaY=${props.deltaY.toFixed(1)}` : "",
         Number.isFinite(props.deltaZ) ? `deltaZ=${props.deltaZ.toFixed(1)}` : "",
@@ -531,17 +676,6 @@
       }
 
       return `${lines.join("\n")}\n`;
-    }
-
-    function downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug) {
-      const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
-      const logBlob = new Blob([osEventLog], {
-        type: "text/plain"
-      });
-      const downloadUrl = URL.createObjectURL(logBlob);
-      triggerDownload(downloadUrl, `os_event_log_${timestampSlug}.txt`);
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-      return osEventLog;
     }
 
     function trackEvent(name, properties = {}, options = {}) {
@@ -589,6 +723,69 @@
         pageY: event.pageY,
         target: getElementDescriptor(event.target)
       };
+    }
+
+    function getPointerMoveProperties(event) {
+      const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
+      const movementY = Number.isFinite(event.movementY) ? event.movementY : 0;
+      const dx = lastPointerMovePoint ? event.clientX - lastPointerMovePoint.x : movementX;
+      const dy = lastPointerMovePoint ? event.clientY - lastPointerMovePoint.y : movementY;
+      const distance = Math.hypot(dx, dy);
+      return {
+        gesture: "pointer_move",
+        pointerId: event.pointerId,
+        pointerType: event.pointerType || "mouse",
+        isPrimary: event.isPrimary,
+        buttons: event.buttons,
+        pressure: Number.isFinite(event.pressure) ? event.pressure : 0,
+        x: event.clientX,
+        y: event.clientY,
+        pageX: event.pageX,
+        pageY: event.pageY,
+        dx,
+        dy,
+        movementX,
+        movementY,
+        distance,
+        direction: distance > 0 ? getDirection(dx, dy) : "none",
+        target: getElementDescriptor(event.target)
+      };
+    }
+
+    function trackPointerMove(event) {
+      const pointerType = event.pointerType || "mouse";
+      if (
+        !interactionTrackingEnabled ||
+        pointerType !== "mouse" ||
+        event.buttons !== 0
+      ) {
+        return;
+      }
+
+      const now = performance.now();
+      if (now - lastPointerMoveTrackAt < trackingConfig.pointerMoveThrottleMs) {
+        return;
+      }
+
+      const properties = getPointerMoveProperties(event);
+      if (
+        lastPointerMovePoint &&
+        properties.distance === 0 &&
+        properties.movementX === 0 &&
+        properties.movementY === 0
+      ) {
+        return;
+      }
+
+      lastPointerMoveTrackAt = now;
+      lastPointerMovePoint = {
+        x: event.clientX,
+        y: event.clientY,
+        pageX: event.pageX,
+        pageY: event.pageY,
+        time: now
+      };
+      trackEvent("pointer_move", properties);
     }
 
     function getDirection(dx, dy) {
@@ -722,6 +919,8 @@
       activePointers.clear();
       lastTap = null;
       lastPress = null;
+      lastPointerMoveTrackAt = 0;
+      lastPointerMovePoint = null;
       pendingClickGesture = null;
       pinchSession = null;
       setInteractionTrackingEnabled(true);
@@ -758,8 +957,8 @@
       return gesture;
     }
 
-    function downloadEventLog(timestampSlug = buildRecordingTimestamp()) {
-      trackEvent("event_log_downloaded", {
+    function prepareEventLog(timestampSlug = buildRecordingTimestamp()) {
+      trackEvent("event_log_prepared", {
         eventCount: eventLog.length
       });
 
@@ -793,20 +992,30 @@
         },
         events
       };
-      const logBlob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json"
-      });
-      const downloadUrl = URL.createObjectURL(logBlob);
-      triggerDownload(downloadUrl, `tracking_data_${timestampSlug}.json`);
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
       const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
-      const osEventLog = downloadOsLevelEventLog(events, downloadedEpochSeconds, timestampSlug);
+      const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
       return {
         payload,
         osEventLog,
         timestampSlug,
-        downloadedEpochSeconds
+        downloadedEpochSeconds,
+        files: [
+          {
+            name: `tracking_data_${timestampSlug}.json`,
+            blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+          },
+          {
+            name: `os_event_log_${timestampSlug}.txt`,
+            blob: new Blob([osEventLog], { type: "text/plain" })
+          }
+        ]
       };
+    }
+
+    function downloadEventLog(timestampSlug = buildRecordingTimestamp()) {
+      const artifacts = prepareEventLog(timestampSlug);
+      downloadFileArtifacts(artifacts.files);
+      return artifacts;
     }
 
     function setupInteractionTracking() {
@@ -834,6 +1043,7 @@
       document.addEventListener("pointermove", (event) => {
         const pointer = activePointers.get(event.pointerId);
         if (!pointer) {
+          trackPointerMove(event);
           return;
         }
 
@@ -1130,9 +1340,11 @@
 
     window.interactionTracker = {
       trackEvent,
+      prepareEventLog,
       downloadEventLog,
       getEvents: () => eventLog.slice(),
       getSessionId: () => trackingSessionId,
+      createTrackingId,
       isEnabled: () => interactionTrackingEnabled,
       beginSession: beginInteractionTrackingSession,
       setEnabled: setInteractionTrackingEnabled
@@ -1141,9 +1353,14 @@
     window.webAgentSensing = {
       isPlaybackActive: () => Boolean(chirpSourceNode),
       getRecordingChannelCount: () => recordingChannelCount,
+      getRecordedFrameCount: () => recordedFrameCount,
       getTargetSampleRate: () => targetWavSampleRate,
+      getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
       getRealtimePointCount: () => realtimeFeaturePoints.length,
       isRealtimeConnected: () => Boolean(realtimeSocket),
+      renderGeneratedFigures,
+      renderWindowPredictions,
+      clearFeatureVisualizations,
       getRealtimeDebugState: () => ({
         connected: Boolean(realtimeSocket),
         streaming: realtimeStreamingActive,
@@ -1151,6 +1368,7 @@
         framesReceived: realtimeFramesReceived,
         featuresReceived: realtimeFeaturesReceived,
         framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
+        recordedFrameCount,
         points: realtimeFeaturePoints.length,
         waveformPoints: realtimeWaveformPoints.length,
         status: realtimeLastStatusMessage,
@@ -1201,7 +1419,7 @@
 
     function estimateChirpPeriod(audioBuffer) {
       const sampleRate = audioBuffer.sampleRate;
-      const expectedPeriodSamples = Math.round(0.020 * sampleRate);
+      const expectedPeriodSamples = Math.round(appConfig.chirpPeriodSeconds * sampleRate);
       const samples = toMonoChannel(audioBuffer);
       const analysisLength = Math.min(samples.length, Math.round(sampleRate * 1.5));
 
@@ -1258,7 +1476,7 @@
         estimatedPeriodSamples: bestLag,
         deviationSamples: bestLag - expectedPeriodSamples,
         estimatedPeriodMs: (bestLag / sampleRate) * 1000,
-        expectedPeriodMs: 20,
+        expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
         normalizedCorrelation: bestScore,
         analyzedSamples: analysisLength,
         sampleRate,
@@ -1311,7 +1529,7 @@
           duration: recordedAudioBuffer.duration
         },
         signalCheck: {
-          method: "normalized_autocorrelation_near_20ms_chirp_period",
+          method: "normalized_autocorrelation_near_12ms_chirp_period",
           chirpPeriodEstimate
         },
         limitations: [
@@ -1322,16 +1540,46 @@
       };
     }
 
-    function downloadAudioDiagnostics(diagnostics, timestamp) {
-      const diagnosticsUrl = URL.createObjectURL(new Blob([JSON.stringify(diagnostics, null, 2)], {
-        type: "application/json"
-      }));
-      triggerDownload(diagnosticsUrl, `recording_diagnostics_${timestamp}.json`);
-      window.setTimeout(() => URL.revokeObjectURL(diagnosticsUrl), 1000);
+    function buildAudioDiagnosticsArtifact(diagnostics, timestamp) {
+      return {
+        name: `recording_diagnostics_${timestamp}.json`,
+        blob: new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" })
+      };
     }
 
-    function downloadGeneratedFigures(result) {
+    function buildGeneratedFigureArtifacts(result) {
       if (!result || !Array.isArray(result.figures)) {
+        return [];
+      }
+
+      return result.figures
+        .filter((figure) => figure && figure.url && figure.name)
+        .map((figure) => ({
+          name: figure.name,
+          url: figure.url
+        }));
+    }
+
+    function formatGeneratedFigureTitle(fileName) {
+      return fileName
+        .replace(/^\d+_/, "")
+        .replace(/\.png$/i, "")
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+    }
+
+    function clearFeatureVisualizations() {
+      featureVisualizationGrid.replaceChildren();
+      windowPredictionBody.replaceChildren();
+      windowPredictionSection.classList.add("hidden");
+      windowPredictionStatus.textContent = "";
+      featureVisualizationPanel.classList.add("hidden");
+      featureVisualizationStatus.textContent = "Calculated after sensing stops.";
+    }
+
+    function renderGeneratedFigures(result) {
+      clearFeatureVisualizations();
+      if (!result || !Array.isArray(result.figures) || !result.figures.length) {
         return 0;
       }
 
@@ -1339,10 +1587,83 @@
         if (!figure || !figure.url || !figure.name) {
           continue;
         }
-        triggerDownload(figure.url, figure.name);
+        const item = document.createElement("figure");
+        item.className = "feature-visualization-item";
+        const image = document.createElement("img");
+        image.src = figure.url;
+        image.alt = formatGeneratedFigureTitle(figure.name);
+        image.loading = "lazy";
+        const caption = document.createElement("figcaption");
+        const title = document.createElement("strong");
+        title.textContent = formatGeneratedFigureTitle(figure.name);
+        caption.append(title);
+        if (figure.description) {
+          caption.append(document.createElement("br"), figure.description);
+        }
+        item.append(image, caption);
+        featureVisualizationGrid.append(item);
       }
 
-      return result.figures.length;
+      featureVisualizationStatus.textContent =
+        "Post-processed from the completed recording using the model feature pipeline.";
+      featureVisualizationPanel.classList.remove("hidden");
+      return featureVisualizationGrid.childElementCount;
+    }
+
+    function getPredictionLabelColor(label) {
+      const colors = {
+        body_motion: "#277da1",
+        click_tap: "#f9844a",
+        hand_wave: "#43aa8b",
+        keydown: "#b8860b",
+        no_event: "#6c757d",
+        pointer_move: "#9b5de5",
+        scroll: "#577590"
+      };
+      return colors[label] || "#455a64";
+    }
+
+    function renderWindowPredictions(result) {
+      const predictionResult = result && result.predictions;
+      const rows = predictionResult && Array.isArray(predictionResult.predictions)
+        ? predictionResult.predictions
+        : [];
+      windowPredictionBody.replaceChildren();
+      if (!rows.length) {
+        windowPredictionSection.classList.add("hidden");
+        return 0;
+      }
+
+      for (const prediction of rows) {
+        const row = document.createElement("tr");
+        const values = [
+          prediction.windowIndex,
+          `${Number(prediction.startSeconds).toFixed(2)} s`,
+          `${Number(prediction.endSeconds).toFixed(2)} s`
+        ];
+        for (const value of values) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        }
+        const labelCell = document.createElement("td");
+        const label = document.createElement("span");
+        label.className = "prediction-label";
+        label.textContent = prediction.predictedLabel;
+        label.style.backgroundColor = getPredictionLabelColor(prediction.predictedLabel);
+        labelCell.append(label);
+        const confidenceCell = document.createElement("td");
+        confidenceCell.textContent = `${(Number(prediction.confidence) * 100).toFixed(1)}%`;
+        row.append(labelCell, confidenceCell);
+        windowPredictionBody.append(row);
+      }
+
+      windowPredictionStatus.textContent =
+        `${rows.length} overlapping ${Number(predictionResult.windowSeconds).toFixed(1)}-second windows, ` +
+        `evaluated every ${Number(predictionResult.strideSeconds).toFixed(2)} seconds.`;
+      windowPredictionSection.classList.remove("hidden");
+      featureVisualizationPanel.classList.remove("hidden");
+      return rows.length;
     }
 
     async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp) {
@@ -1417,8 +1738,15 @@
 
     function setSensingControls(fileReady, sensingActive) {
       filePrompt.classList.toggle("hidden", !fileReady && !sensingActive);
-      startSensingBtn.disabled = !fileReady || sensingActive;
-      stopSensingBtn.disabled = !sensingActive;
+      startSensingBtn.disabled = !fileReady && !sensingActive;
+      startSensingBtn.textContent = sensingActive ? "Stop sensing" : "Start sensing";
+      startSensingBtn.setAttribute("aria-pressed", String(sensingActive));
+      downloadSessionBtn.disabled = !preparedSessionFiles.length || sensingActive;
+      if (stopSensingBtn) {
+        stopSensingBtn.disabled = true;
+        stopSensingBtn.hidden = true;
+        stopSensingBtn.setAttribute("aria-hidden", "true");
+      }
     }
 
     function buildRecordingTimestamp() {
@@ -1449,6 +1777,45 @@
       document.body.appendChild(downloadLink);
       downloadLink.click();
       downloadLink.remove();
+    }
+
+    function downloadFileArtifact(file) {
+      if (!file || !file.name || (!file.blob && !file.url)) {
+        return false;
+      }
+
+      const downloadUrl = file.blob ? URL.createObjectURL(file.blob) : file.url;
+      triggerDownload(downloadUrl, file.name);
+      if (file.blob) {
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      }
+      return true;
+    }
+
+    function downloadFileArtifacts(files) {
+      return (Array.isArray(files) ? files : [])
+        .reduce((count, file) => count + Number(downloadFileArtifact(file)), 0);
+    }
+
+    function setPreparedSessionFiles(files) {
+      preparedSessionFiles = (Array.isArray(files) ? files : [])
+        .filter((file) => file && file.name && (file.blob || file.url));
+      const hasFiles = preparedSessionFiles.length > 0;
+      downloadSessionBtn.hidden = !hasFiles;
+      downloadSessionBtn.classList.toggle("hidden", !hasFiles);
+      downloadSessionBtn.disabled = !hasFiles || sensingSessionActive || recordingSessionActive;
+      downloadSessionBtn.textContent = hasFiles
+        ? `Download session files (${preparedSessionFiles.length})`
+        : "Download session files";
+    }
+
+    function downloadPreparedSessionFiles() {
+      if (!preparedSessionFiles.length || sensingSessionActive || recordingSessionActive) {
+        return;
+      }
+
+      const downloadCount = downloadFileArtifacts(preparedSessionFiles);
+      fileStatus.textContent = `Download started for ${downloadCount} session files.`;
     }
 
     function showSpectrogramStatus(message) {
@@ -1709,6 +2076,9 @@
       if (name.includes("press") || name.includes("hold")) {
         return "#ff7f0e";
       }
+      if (name === "pointer_move") {
+        return "#1f77b4";
+      }
       if (name.includes("drag")) {
         return "#2ca02c";
       }
@@ -1727,6 +2097,12 @@
         }
         return props.key || "key";
       }
+      if (name === "pointer_move") {
+        return props.direction && props.direction !== "none" ? `move-${props.direction[0]}` : "move";
+      }
+      if (name === "drag_move") {
+        return props.direction ? `drag-${props.direction[0]}` : "drag";
+      }
       const labels = {
         tap_to_click: "tap-click",
         press_to_click: "press-click",
@@ -1741,6 +2117,7 @@
         click: "click",
         double_click: "2click",
         drag_start: "drag>",
+        drag_move: "drag",
         drag_end: "<drag",
         swipe: "swipe",
         two_finger_swipe: "2swipe",
@@ -1771,7 +2148,9 @@
         "long_press_to_click",
         "double_tap_to_click",
         "double_press_to_click",
+        "pointer_move",
         "drag_start",
+        "drag_move",
         "drag_end",
         "swipe",
         "two_finger_swipe",
@@ -1787,6 +2166,14 @@
         time: correctedEventTime,
         rawTime: eventTime,
         offsetMs: appConfig.audioEventOffsetMs,
+        name: event.name,
+        pointerType: event.properties && event.properties.pointerType ? event.properties.pointerType : "",
+        x: event.properties && Number.isFinite(event.properties.x) ? event.properties.x : null,
+        y: event.properties && Number.isFinite(event.properties.y) ? event.properties.y : null,
+        dx: event.properties && Number.isFinite(event.properties.dx) ? event.properties.dx : null,
+        dy: event.properties && Number.isFinite(event.properties.dy) ? event.properties.dy : null,
+        distance: event.properties && Number.isFinite(event.properties.distance) ? event.properties.distance : null,
+        direction: event.properties && event.properties.direction ? event.properties.direction : "",
         label: getRealtimeMarkerLabel(event),
         color: getRealtimeMarkerColor(event.name)
       });
@@ -2345,10 +2732,16 @@
       }
     }
 
-    async function downloadRecordedAudio(recordedAudioBuffer, options = {}) {
+    async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
+      const sessionFiles = [
+        ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
+      ];
       if (!recordedAudioBuffer) {
-        fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
-        return;
+        setPreparedSessionFiles(sessionFiles);
+        fileStatus.textContent = sessionFiles.length
+          ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+          : "Sensing stopped, but no microphone recording was captured.";
+        return sessionFiles;
       }
 
       try {
@@ -2358,17 +2751,17 @@
         const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
         await renderSpectrogram(wavBlob);
         const fileName = `recording_${timestamp}.wav`;
-        const downloadUrl = URL.createObjectURL(wavBlob);
-        triggerDownload(downloadUrl, fileName);
-        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-
         const spectrogramUrl = spectrogramCanvas.toDataURL("image/png");
         const spectrogramFileName = `recording_spectrogram_${timestamp}.png`;
-        triggerDownload(spectrogramUrl, spectrogramFileName);
-        downloadAudioDiagnostics(diagnostics, timestamp);
 
-        fileStatus.textContent = "Sensing stopped. Running Python IQ pipeline for input-event amplitude/phase figure...";
-        let figureCount = 0;
+        sessionFiles.push(
+          { name: fileName, blob: wavBlob },
+          { name: spectrogramFileName, url: spectrogramUrl },
+          buildAudioDiagnosticsArtifact(diagnostics, timestamp)
+        );
+
+        fileStatus.textContent = "Sensing stopped. Calculating post-processed signal features...";
+        let figureFiles = [];
         try {
           const analysisResult = await requestFigureGeneration(
             wavBlob,
@@ -2376,21 +2769,31 @@
             options.trackingArtifacts,
             timestamp
           );
-          figureCount = downloadGeneratedFigures(analysisResult);
+          renderGeneratedFigures(analysisResult);
+          renderWindowPredictions(analysisResult);
+          figureFiles = buildGeneratedFigureArtifacts(analysisResult);
         } catch (error) {
-          figureCount = 0;
+          figureFiles = [];
         }
 
-        if (figureCount > 0) {
-          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram, diagnostics, and ${figureCount} Python IQ input-event figure.`;
+        sessionFiles.push(...figureFiles);
+        setPreparedSessionFiles(sessionFiles);
+
+        if (figureFiles.length > 0) {
+          fileStatus.textContent = `Sensing stopped. ${sessionFiles.length} session files are ready, including ${figureFiles.length} processed feature figures. Choose Download session files to save them.`;
         } else {
-          fileStatus.textContent = `Sensing stopped. Recording downloaded as ${fileName} at ${recordedAudioBuffer.sampleRate} Hz, with spectrogram and diagnostics. Exact Python figures require serving the app with server.py.`;
+          fileStatus.textContent = `Sensing stopped. ${sessionFiles.length} session files are ready. Choose Download session files to save them. Exact Python figures require serving the app with server.py.`;
         }
       } catch (error) {
-        fileStatus.textContent = "Sensing stopped, but failed to download the recording or spectrogram.";
+        setPreparedSessionFiles(sessionFiles);
+        fileStatus.textContent = sessionFiles.length
+          ? "Sensing stopped. The tracking files are ready, but the recording or spectrogram could not be prepared."
+          : "Sensing stopped, but failed to prepare the recording or spectrogram.";
       } finally {
         resetRecordingBuffers();
       }
+
+      return sessionFiles;
     }
 
     function clearPendingFile() {
@@ -2459,14 +2862,15 @@
 
       const timestamp = buildRecordingTimestamp();
       sensingSessionActive = false;
-      const trackingArtifacts = downloadEventLog(timestamp);
+      const trackingArtifacts = prepareEventLog(timestamp);
       setInteractionTrackingEnabled(false);
       startSensingBtn.disabled = true;
       stopSensingBtn.disabled = true;
+      downloadSessionBtn.disabled = true;
       stopChirpPlayback();
       stopRealtimeSession();
       receivedAudio.currentTime = 0;
-      fileStatus.textContent = "Sensing stopped. Preparing recording download...";
+      fileStatus.textContent = "Sensing stopped. Preparing session files...";
 
       await stopRecordingSession({ timestamp, trackingArtifacts });
       setSensingControls(Boolean(pendingFileUrl), false);
@@ -2476,6 +2880,7 @@
       fileStatus.textContent = "Preparing file...";
       clearPendingFile();
       clearSpectrogram();
+      clearFeatureVisualizations();
 
       try {
         const fileUrl = buildStaticFileUrl(appConfig.downloadFileName);
@@ -2537,10 +2942,13 @@
       stopRecordingNodes();
       resetRecordingBuffers();
       if (completedRecording) {
-        await downloadRecordedAudio(completedRecording, options);
+        await prepareRecordedAudio(completedRecording, options);
         return true;
       } else {
-        fileStatus.textContent = "Sensing stopped, but no microphone recording was captured.";
+        setPreparedSessionFiles((options.trackingArtifacts && options.trackingArtifacts.files) || []);
+        fileStatus.textContent = preparedSessionFiles.length
+          ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+          : "Sensing stopped, but no microphone recording was captured.";
         return false;
       }
     }
@@ -2566,6 +2974,7 @@
         stopRecordingNodes();
         resetRecordingBuffers();
         clearSpectrogram();
+        clearFeatureVisualizations();
 
         recordingSourceNode = recordingContext.createMediaStreamSource(microphoneOnlyStream);
         if (recordingContext.audioWorklet && window.AudioWorkletNode) {
@@ -2633,11 +3042,19 @@
     }
 
     startSensingBtn.addEventListener("click", async () => {
-      await startSensing();
+      if (sensingSessionActive || recordingSessionActive) {
+        await stopSensing();
+      } else {
+        await startSensing();
+      }
     });
 
     stopSensingBtn.addEventListener("click", async () => {
       await stopSensing();
+    });
+
+    downloadSessionBtn.addEventListener("click", () => {
+      downloadPreparedSessionFiles();
     });
 
     receivedAudio.addEventListener("ended", () => {

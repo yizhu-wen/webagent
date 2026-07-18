@@ -44,6 +44,7 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
 
   const startButton = page.locator("#startSensingBtn");
   const stopButton = page.locator("#stopSensingBtn");
+  const downloadButton = page.locator("#downloadSessionBtn");
   const sensingState = () => page.evaluate(() => {
     const audio = document.getElementById("receivedAudio");
     return {
@@ -53,31 +54,40 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   });
 
   await expect(startButton).toHaveText("Start sensing");
-  await expect(stopButton).toHaveText("Stop");
   await expect(startButton).toBeVisible();
   await expect(startButton).toBeEnabled();
-  await expect(stopButton).toBeDisabled();
+  await expect(stopButton).toBeHidden();
+  await expect(downloadButton).toBeHidden();
 
   await startButton.click();
 
-  await expect(stopButton).toBeEnabled();
-  await expect(startButton).toBeDisabled();
+  await expect(startButton).toHaveText("Stop sensing");
+  await expect(startButton).toBeEnabled();
+  await expect(startButton).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await sensingState()).loop).toBe(true);
   await expect.poll(async () => (await sensingState()).playbackActive).toBe(true);
-
-  await page.waitForTimeout(500);
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRecordedFrameCount()
+  )), { timeout: 10000 }).toBeGreaterThan(0);
 
   const downloads = [];
   page.on("download", (download) => {
     downloads.push(download);
   });
 
-  await stopButton.click();
+  await startButton.click();
 
-  await expect.poll(() => downloads.length, { timeout: 20000 }).toBeGreaterThanOrEqual(2);
   await expect.poll(async () => (await sensingState()).playbackActive).toBe(false);
   await expect(startButton).toBeEnabled();
-  await expect(stopButton).toBeDisabled();
+  await expect(startButton).toHaveText("Start sensing");
+  await expect(startButton).toHaveAttribute("aria-pressed", "false");
+  await expect(stopButton).toBeHidden();
+  await expect(downloadButton).toBeVisible({ timeout: 20000 });
+  await expect(downloadButton).toBeEnabled();
+  expect(downloads).toHaveLength(0);
+
+  await downloadButton.click();
+  await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(5);
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
   expect(fileNames.some((name) => /^recording_\d{8}_\d{6}\.wav$/.test(name))).toBe(true);
@@ -108,5 +118,7 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   expect(diagnostics.recordingExport.encoding).toBe("IEEE_FLOAT");
   expect(diagnostics.recordingExport.channels).toBe(1);
   expect(diagnostics.recordingExport.bitsPerSample).toBe(32);
-  expect(diagnostics.signalCheck.method).toBe("normalized_autocorrelation_near_20ms_chirp_period");
+  expect(diagnostics.signalCheck.method).toBe("normalized_autocorrelation_near_12ms_chirp_period");
+  expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodSamples).toBe(576);
+  expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodMs).toBe(12);
 });
