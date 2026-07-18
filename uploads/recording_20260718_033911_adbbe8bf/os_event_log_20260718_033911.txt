@@ -1,0 +1,83 @@
+# start_epoch | 1784381926.717000
+# downloaded_epoch | 1784381951.335000
+# session_id | af89b916-438b-4037-915a-a2036cf4a2cb
+# schema | webagent_os_events_v1
+# format | EVENT | VALUE | EPOCH_SECONDS
+# scope | browser_page_events_not_global_os_hooks
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=879.3333740234375 y=356.3333435058594 pageX=879.3333740234375 pageY=356.3333435058594 dx=1 dy=-1 movementX=1.0 movementY=-1.0 distance=1.4 direction=right div #filePrompt | 1784381926.731000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=356 pageX=882 pageY=356 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #filePrompt | 1784381926.867000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=356 pageX=882 pageY=362 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #filePrompt | 1784381926.886000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=882 y=357 pageX=882 pageY=388.3333339691162 dx=2.6666259765625 dy=0.666656494140625 movementX=0.0 movementY=1.0 distance=2.7 direction=right div #filePrompt | 1784381926.914000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=357 pageX=882 pageY=388.3333339691162 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #filePrompt | 1784381926.914000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=357 pageX=882 pageY=517 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #filePrompt | 1784381926.963000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=357 pageX=882 pageY=705.6666564941406 deltaX=0.0 deltaY=-100.0 deltaZ=0.0 deltaMode=0 canvas #realtimeCanvas | 1784381929.982000
+WHEEL_SWIPE | gesture=wheel_swipe x=882 y=357 pageX=882 pageY=699.6666564941406 deltaX=0.0 deltaY=-100.0 deltaZ=0.0 deltaMode=0 canvas #realtimeCanvas | 1784381929.999000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=881.3333740234375 y=357.66668701171875 pageX=881.3333740234375 pageY=689.6666870117188 dx=-0.6666259765625 dy=0.66668701171875 movementX=-1.0 movementY=0.0 distance=0.9 direction=down canvas #realtimeCanvas | 1784381930.020000
+WHEEL_SWIPE | gesture=wheel_swipe x=881 y=357 pageX=881 pageY=671 deltaX=0.0 deltaY=-100.0 deltaZ=0.0 deltaMode=0 canvas #realtimeCanvas | 1784381930.030000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=878.6666870117188 y=363 pageX=878.6666870117188 pageY=411.6666679382324 dx=-2.66668701171875 dy=5.33331298828125 movementX=-1.0 movementY=3.0 distance=6.0 direction=down a label=Open travel experiment | 1784381930.152000
+WHEEL_SWIPE | gesture=wheel_swipe x=866 y=405 pageX=866 pageY=453.6666679382324 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #appView | 1784381930.414000
+WHEEL_SWIPE | gesture=wheel_swipe x=866 y=405 pageX=866 pageY=468.3333320617676 deltaX=0.0 deltaY=100.0 deltaZ=0.0 deltaMode=0 div #appView | 1784381930.446000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=867.3333740234375 y=405.66668701171875 pageX=867.3333740234375 pageY=531.6666870117188 dx=-11.33331298828125 dy=42.66668701171875 movementX=1.0 movementY=0.0 distance=44.1 direction=down p #realtimeStatus | 1784381930.503000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=868 y=405.66668701171875 pageX=868 pageY=654.3333587646484 dx=0.6666259765625 dy=0 movementX=1.0 movementY=0.0 distance=0.7 direction=right canvas #realtimeCanvas | 1784381932.446000
+WHEEL_SWIPE | gesture=wheel_swipe x=868 y=405 pageX=868 pageY=652.3333282470703 deltaX=0.0 deltaY=-100.0 deltaZ=0.0 deltaMode=0 canvas #realtimeCanvas | 1784381933.653000
+WHEEL_SWIPE | gesture=wheel_swipe x=868 y=405 pageX=868 pageY=614.3333282470703 deltaX=0.0 deltaY=-100.0 deltaZ=0.0 deltaMode=0 canvas #realtimeCanvas | 1784381933.713000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=868.6666870117188 y=407 pageX=868.6666870117188 pageY=527 dx=0.66668701171875 dy=1.33331298828125 movementX=0.0 movementY=2.0 distance=1.5 direction=down p #realtimeStatus | 1784381933.785000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=871.3333740234375 y=410.3333740234375 pageX=871.3333740234375 pageY=459.0000419616699 dx=2.66668701171875 dy=3.3333740234375 movementX=1.0 movementY=0.0 distance=4.3 direction=down div #appView | 1784381934.350000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=944 y=437.66668701171875 pageX=944 pageY=486.3333549499512 dx=72.6666259765625 dy=27.33331298828125 movementX=1.0 movementY=0.0 distance=77.6 direction=right div #realtimePanel | 1784381934.480000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=947.3333740234375 y=439 pageX=947.3333740234375 pageY=487.6666679382324 dx=3.3333740234375 dy=1.33331298828125 movementX=1.0 movementY=0.0 distance=3.6 direction=right h4 | 1784381935.763000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 body | 1784381948.306000
+KEYDOWN | key=character code=Digit6 location=0 body | 1784381948.321000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 body | 1784381948.449000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381948.949000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381948.979000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.008000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.038000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.069000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.099000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.128000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.158000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.188000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.218000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.249000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.278000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.307000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.337000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.368000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.400000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.428000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.458000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.488000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.517000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.548000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.577000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.608000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.637000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.667000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.698000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.728000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.757000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.787000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.817000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.849000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.877000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.907000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.937000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381949.968000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.002000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.027000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.057000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.087000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.117000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.148000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.178000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.207000
+KEYDOWN | key=AudioVolumeUp code=AudioVolumeUp location=0 repeat=true body | 1784381950.237000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=944.6666870117188 y=438.3333740234375 pageX=944.6666870117188 pageY=487.0000419616699 dx=-2.66668701171875 dy=-0.6666259765625 movementX=-4.0 movementY=0.0 distance=2.7 direction=left div #realtimePanel | 1784381950.846000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=731.3333740234375 y=335.66668701171875 pageX=731.3333740234375 pageY=384.3333549499512 dx=-213.33331298828125 dy=-102.66668701171875 movementX=0.0 movementY=-6.0 distance=236.8 direction=left button #startSensingBtn type=button label=Stop sensing | 1784381950.979000
+POINTER_MOVE | gesture=pointer_move pointerType=mouse buttons=0 pressure=0.000 x=694.6666870117188 y=323.66668701171875 pageX=694.6666870117188 pageY=372.3333549499512 dx=-36.66668701171875 dy=-12 movementX=-2.0 movementY=-2.0 distance=38.6 direction=left button #startSensingBtn type=button label=Stop sensing | 1784381951.112000
+POINTER_DOWN | pointerType=mouse button=0 buttons=1 pressure=0.500 x=694.6666870117188 y=319.66668701171875 pageX=694.6666870117188 pageY=368.3333549499512 button #startSensingBtn type=button label=Stop sensing | 1784381951.233000
+POINTER_UP | pointerType=mouse button=0 buttons=0 pressure=0.000 x=694.6666870117188 y=319.66668701171875 pageX=694.6666870117188 pageY=368.3333549499512 durationMs=102.1 button #startSensingBtn type=button label=Stop sensing | 1784381951.335000
+TAP | gesture=tap pointerType=mouse x=694.6666870117188 y=319.66668701171875 pageX=694.6666870117188 pageY=368.3333549499512 dx=0 dy=0 distance=0.0 durationMs=102.1 direction=right button #startSensingBtn type=button label=Stop sensing | 1784381951.335000
+TAP_TO_CLICK | gesture=tap_to_click pointerType=mouse button=0 x=694.6666870117188 y=319.66668701171875 pageX=694.6666870117188 pageY=368.3333549499512 dx=0 dy=0 distance=0.0 durationMs=102.1 direction=right button #startSensingBtn type=button label=Stop sensing | 1784381951.335000
+CLICK | gesture=click button=0 x=694 y=319 pageX=694 pageY=367.6666679382324 button #startSensingBtn type=button label=Stop sensing | 1784381951.335000
+EVENT_LOG_PREPARED |  | 1784381951.335000
