@@ -1,6 +1,9 @@
 # WebAgent Realtime Sensing Local Deployment
 
-This guide shows how to run the ultrasound realtime sensing website on a local machine with a minimal Anaconda environment.
+This guide shows how to run the ultrasound realtime sensing website locally.
+The site loops a stereo ultrasonic chirp, captures mono microphone audio, streams
+live IQ features to Python, tracks page interactions during sensing, and prepares
+session files for an explicit user-initiated download.
 
 ## 1. Open Anaconda Prompt
 
@@ -30,6 +33,7 @@ soundfile
 matplotlib
 scikit-learn
 joblib
+torch
 ```
 
 Install all required packages:
@@ -46,6 +50,9 @@ Start the local realtime sensing website:
 ```bash
 python realtime.py
 ```
+
+`realtime.py` is a small local launcher for `server.py`; running
+`python server.py` starts the same application directly.
 
 Then open:
 
@@ -84,25 +91,37 @@ http://localhost:8124/
 ## Notes
 
 - Click **Start sensing** to play the ultrasound chirp, capture microphone audio, and stream live mic frames to Python. The same button changes to **Stop sensing** while sensing is active.
-- After sensing stops, the local Python analysis pipeline calculates and displays
+- Stopping sensing does not download files automatically. It prepares the
+  tracking JSON, OS-style event log, WAV, spectrogram, and diagnostics in the
+  browser. Click **Download session files** when you want to save them.
+- The completed WAV, diagnostics, and event log are also sent to the local
+  `/api/analyze-recording` endpoint for post-processing. This backend upload is
+  separate from the optional browser download.
+- When a compatible MLP model is available, the Python analysis pipeline calculates and displays
   two full-width feature views: a Doppler velocity-time map and derived
   motion/band-energy traces. It also runs the saved audible-only MLP on
   overlapping 0.5-second windows and displays its predicted event labels and
   confidence along the recording timeline. These figures are intentionally
   post-processed rather than real-time.
+- This checkout does not currently contain `models/`. Train or provide
+  `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
+  figures and prediction table. Without it, browser-side recording,
+  spectrogram, diagnostics, tracking, and explicit downloads still work.
 - The main page, shopping experiment, and travel experiment all use the same realtime `/realtime` backend.
 - Use `Ctrl+C` in the terminal to stop the local server.
 - For browser microphone access, `localhost` is the recommended local URL.
 
 ## Train The Signal Event Model
 
-After collecting labeled recordings under `data/`, select one of the three
-feature sets:
+After preparing labeled recording sessions under `data/`, select one of the
+three feature sets. The current website no longer includes manual label buttons;
+training therefore expects labels to come from the existing dataset layout and
+its event logs.
 
 ```bash
-python scripts\train_signal_event_model.py --feature-set ultrasound
-python scripts\train_signal_event_model.py --feature-set audible
-python scripts\train_signal_event_model.py --feature-set combined
+python scripts\train_signal_event_model.py --feature-set ultrasound --model-out models\signal_event_model_ultrasound_only.joblib --report-out models\signal_event_report_ultrasound_only.json --manifest-out models\window_manifest_ultrasound_only.csv
+python scripts\train_signal_event_model.py --feature-set audible --model-out models\signal_event_model_audible_only.joblib --report-out models\signal_event_report_audible_only.json --manifest-out models\window_manifest_audible_only.csv
+python scripts\train_signal_event_model.py --feature-set combined --model-out models\signal_event_model_combined.joblib --report-out models\signal_event_report_combined.json --manifest-out models\window_manifest_combined.csv
 ```
 
 The training script crops the first and last `1.0` seconds, builds `0.5` second
@@ -119,8 +138,9 @@ mono chirp are not signal-compatible and must be retrained before prediction.
 The audible-only checkpoints can still be loaded, but should be revalidated on
 recordings collected with the new playback signal.
 
-Use explicit `--model-out`, `--report-out`, and `--manifest-out` paths when
-keeping multiple trained variants.
+The explicit output paths prevent one feature-set run from overwriting another.
+The audible-only path above is also the default model location expected by the
+Stop-time web analysis pipeline.
 
 To train binary interaction models, use `--label-scheme interaction`. This
 keeps the original seven-class label in each manifest and adds a coarse target:
@@ -144,13 +164,13 @@ python scripts\plot_feature_set_comparison.py
 Run prediction on a new sensed WAV recording with:
 
 ```bash
-python scripts\predict_signal_event.py path\to\recording.wav --out models\predictions.csv
+python scripts\predict_signal_event.py path\to\recording.wav --model models\signal_event_model_audible_only.joblib --out models\predictions.csv
 ```
 
 ### CNN models
 
-Install the PyTorch dependency and train all three 2D CNN variants with the
-same windows and recording-level split:
+PyTorch is included in `requirements.txt`. Train all three 2D CNN variants with
+the same windows and recording-level split:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -167,3 +187,25 @@ Run a saved CNN on a recording:
 ```bash
 python scripts\predict_signal_event_cnn.py path\to\recording.wav --model models\signal_event_cnn_audible_only.pt --out models\cnn_predictions.csv
 ```
+
+## Test The Website
+
+Install the JavaScript test dependency and Playwright's Chromium runtime:
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
+The tests use a local static test server and a fake browser microphone. Python
+model inference is mocked where needed, so the browser tests do not require a
+trained `models/` artifact.
+
+## Generated Data
+
+The Python analysis endpoint stores server-side session inputs and generated
+outputs under `uploads/`. These files are local runtime data and are not a
+replacement for the user-controlled **Download session files** action. Avoid
+committing new recordings or generated model outputs unless they are deliberate
+fixtures.
