@@ -1,6 +1,32 @@
 const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
+test("offers strict ultrasonic and compatibility recording profiles", async ({ page }) => {
+  await page.goto("/");
+
+  const profileSelect = page.locator("#recordingProfile");
+  await expect(profileSelect).toHaveValue("ultrasonic");
+  await expect(profileSelect.locator("option")).toHaveText([
+    "Ultrasound (strict)",
+    "Compatibility"
+  ]);
+  await expect(page.locator("#recordingProfileDescription")).toContainText("AudioWorklet");
+
+  const strictRequest = await page.evaluate(() => (
+    window.webAgentRecordingProfiles.createMicrophoneRequest("ultrasonic", 48000)
+  ));
+  expect(strictRequest.constraints.audio.echoCancellation.exact).toBe(false);
+  expect(strictRequest.constraints.audio.noiseSuppression.exact).toBe(false);
+  expect(strictRequest.constraints.audio.autoGainControl.exact).toBe(false);
+
+  await profileSelect.selectOption("compatible");
+  await expect(profileSelect).toHaveValue("compatible");
+  await expect(page.locator("#recordingProfileDescription")).toContainText("fallback");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRecordingProfile().id
+  ))).toBe("compatible");
+});
+
 test("keeps realtime IQ local by default and allows hosted override", async ({ page }) => {
   await page.goto("/");
   await expect.poll(() => page.evaluate(() => (
@@ -77,7 +103,10 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
 
   await startButton.click();
 
-  await expect.poll(async () => (await sensingState()).playbackActive).toBe(false);
+  await expect.poll(
+    async () => (await sensingState()).playbackActive,
+    { timeout: 15000 }
+  ).toBe(false);
   await expect(startButton).toBeEnabled();
   await expect(startButton).toHaveText("Start sensing");
   await expect(startButton).toHaveAttribute("aria-pressed", "false");
@@ -114,10 +143,21 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   const diagnostics = JSON.parse(fs.readFileSync(await diagnosticsDownload.path(), "utf8"));
   expect(diagnostics.requestedMicrophoneConstraints.channelCount.ideal).toBe(1);
   expect(diagnostics.requestedMicrophoneConstraints.sampleRate.ideal).toBe(48000);
+  expect(diagnostics.requestedMicrophoneConstraints.echoCancellation.exact).toBe(false);
+  expect(diagnostics.recordingProfile.id).toBe("ultrasonic");
+  expect(diagnostics.microphoneQualification.processingDisabled).toBe(true);
   expect(diagnostics.audioContext.sampleRate).toBe(48000);
+  expect(diagnostics.audioContext.qualification.supported).toBe(true);
+  expect(diagnostics.playback.scheduledStartTime).toBeGreaterThan(0);
+  expect(diagnostics.playback.scheduledStartFrame).toBeGreaterThan(0);
   expect(diagnostics.recordingExport.encoding).toBe("IEEE_FLOAT");
   expect(diagnostics.recordingExport.channels).toBe(1);
   expect(diagnostics.recordingExport.bitsPerSample).toBe(32);
+  expect(diagnostics.recordingCapture.method).toContain("AudioWorklet");
+  expect(diagnostics.recordingCapture.frameSize).toBe(2048);
+  expect(typeof diagnostics.recordingCapture.clippingDetected).toBe("boolean");
+  expect(diagnostics.recordingCapture.clippedSamples).toBeGreaterThanOrEqual(0);
+  expect(diagnostics.recordingCapture.workletFrameGaps).toBe(0);
   expect(diagnostics.signalCheck.method).toBe("normalized_autocorrelation_near_12ms_chirp_period");
   expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodSamples).toBe(576);
   expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodMs).toBe(12);

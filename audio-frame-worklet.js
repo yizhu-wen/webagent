@@ -5,6 +5,8 @@ class AudioFrameProcessor extends AudioWorkletProcessor {
     this.frameSize = Math.max(128, processorOptions.frameSize || 2048);
     this.buffer = new Float32Array(this.frameSize);
     this.writeIndex = 0;
+    this.frameSequence = 0;
+    this.frameStart = currentFrame;
   }
 
   pushSample(sample) {
@@ -13,12 +15,16 @@ class AudioFrameProcessor extends AudioWorkletProcessor {
 
     if (this.writeIndex >= this.frameSize) {
       const frame = this.buffer;
+      this.frameSequence += 1;
       this.port.postMessage({
         type: "audio-frame",
+        sequence: this.frameSequence,
+        startFrame: this.frameStart,
         samples: frame
       }, [frame.buffer]);
       this.buffer = new Float32Array(this.frameSize);
       this.writeIndex = 0;
+      this.frameStart += this.frameSize;
     }
   }
 
@@ -30,6 +36,10 @@ class AudioFrameProcessor extends AudioWorkletProcessor {
 
     const channelCount = input.length;
     const frameLength = input[0].length;
+
+    if (this.writeIndex === 0) {
+      this.frameStart = currentFrame;
+    }
 
     for (let sampleIndex = 0; sampleIndex < frameLength; sampleIndex += 1) {
       let monoSample = 0;

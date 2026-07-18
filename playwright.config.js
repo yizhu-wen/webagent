@@ -1,5 +1,7 @@
 const { defineConfig, devices } = require("@playwright/test");
 
+const browserExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+
 module.exports = defineConfig({
   testDir: "./tests",
   timeout: 30000,
@@ -17,6 +19,7 @@ module.exports = defineConfig({
     baseURL: "http://127.0.0.1:8010/",
     acceptDownloads: true,
     launchOptions: {
+      ...(browserExecutablePath ? { executablePath: browserExecutablePath } : {}),
       args: [
         "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream",

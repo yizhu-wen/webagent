@@ -120,6 +120,37 @@
       color: #ffffff;
     }
 
+    .recording-profile-control {
+      width: min(440px, 100%);
+      margin: 16px auto 0;
+      padding: 12px 14px;
+      border: 1px solid rgba(46, 36, 28, 0.12);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      text-align: left;
+    }
+
+    .recording-profile-control label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .recording-profile-control select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid rgba(46, 36, 28, 0.2);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .recording-profile-control p {
+      margin-top: 8px;
+      font-size: 0.86rem;
+    }
+
     .experiment-link {
       display: inline-flex;
       align-items: center;
@@ -342,6 +373,11 @@
         <p id="welcomeMessage">Start sensing to loop the ultrasound chirp while capturing microphone audio.</p>
         <p id="micStatus">Requesting microphone access...</p>
         <p id="fileStatus"></p>
+        <div class="recording-profile-control">
+          <label for="recordingProfile">Recording profile</label>
+          <select id="recordingProfile" aria-describedby="recordingProfileDescription"></select>
+          <p id="recordingProfileDescription"></p>
+        </div>
         <div id="filePrompt" class="file-prompt hidden">
           <button id="startSensingBtn" class="prompt-button" type="button">Start sensing</button>
           <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
@@ -393,6 +429,7 @@
     </section>
   </main>
 
+  <script src="recording-profile.js"></script>
   <script>
     const micStatus = document.getElementById("micStatus");
     const fileStatus = document.getElementById("fileStatus");
@@ -412,6 +449,9 @@
     const windowPredictionBody = document.getElementById("windowPredictionBody");
     const realtimeStatus = document.getElementById("realtimeStatus");
     const realtimeCanvas = document.getElementById("realtimeCanvas");
+    const recordingProfileSelect = document.getElementById("recordingProfile");
+    const recordingProfileDescription = document.getElementById("recordingProfileDescription");
+    const recordingProfiles = window.webAgentRecordingProfiles;
     const targetWavSampleRate = 48000;
     let micStream = null;
     let pendingFileUrl = "";
@@ -445,6 +485,20 @@
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
     let realtimeFramesDroppedBeforeSend = 0;
+    let activeRecordingProfileId = recordingProfiles.normalizeProfileId(getLocalStorageItem("webagentRecordingProfile"));
+    let microphoneQualification = null;
+    let audioContextQualification = null;
+    let recordingCaptureMethod = "not-started";
+    let recordingCaptureFrameSize = 0;
+    let recordingChunksCaptured = 0;
+    let recordingClippedSamples = 0;
+    let recordingPeakAmplitude = 0;
+    let recordingWorkletFrameGaps = 0;
+    let recordingLastWorkletSequence = 0;
+    let microphoneRequestDetails = null;
+    let completedCaptureDiagnostics = null;
+    let chirpScheduledStartTime = null;
+    let chirpScheduledStartFrame = null;
 
     function getLocalStorageItem(key) {
       try {
@@ -461,6 +515,63 @@
       }
       const parsedValue = Number(rawValue);
       return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+    }
+
+    function setLocalStorageItem(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch (error) {
+        // Storage may be unavailable in private or restricted browser contexts.
+      }
+    }
+
+    function updateRecordingProfileControl() {
+      const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+      recordingProfileSelect.value = profile.id;
+      recordingProfileDescription.textContent = profile.description;
+    }
+
+    function initializeRecordingProfileControl() {
+      recordingProfileSelect.replaceChildren();
+      for (const profile of recordingProfiles.list()) {
+        const option = document.createElement("option");
+        option.value = profile.id;
+        option.textContent = profile.label;
+        recordingProfileSelect.appendChild(option);
+      }
+      updateRecordingProfileControl();
+
+      recordingProfileSelect.addEventListener("change", async () => {
+        if (sensingSessionActive || recordingSessionActive || playbackStartInProgress) {
+          updateRecordingProfileControl();
+          return;
+        }
+
+        activeRecordingProfileId = recordingProfiles.normalizeProfileId(recordingProfileSelect.value);
+        setLocalStorageItem("webagentRecordingProfile", activeRecordingProfileId);
+        updateRecordingProfileControl();
+        microphoneQualification = null;
+        microphoneRequestDetails = null;
+        stopMicrophoneStream();
+
+        if (audioContext) {
+          stopRecordingNodes();
+          stopChirpPlayback();
+          try {
+            await audioContext.close();
+          } catch (error) {
+            // The context may already be closed.
+          }
+          audioContext = null;
+          audioContextQualification = null;
+          audioWorkletModuleReady = false;
+          chirpPlaybackBuffer = null;
+        }
+
+        micStatus.textContent = "Applying recording profile...";
+        setSensingControls(false, false);
+        await requestMicrophone();
+      });
     }
 
     function getRealtimeWebSocketUrl() {
@@ -1355,6 +1466,9 @@
       getRecordingChannelCount: () => recordingChannelCount,
       getRecordedFrameCount: () => recordedFrameCount,
       getTargetSampleRate: () => targetWavSampleRate,
+      getRecordingProfile: () => recordingProfiles.getProfile(activeRecordingProfileId),
+      getMicrophoneQualification: () => microphoneQualification,
+      getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
       getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
       getRealtimePointCount: () => realtimeFeaturePoints.length,
       isRealtimeConnected: () => Boolean(realtimeSocket),
@@ -1385,17 +1499,10 @@
     }
 
     function getMicrophoneConstraints() {
-      return {
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: { ideal: 1 },
-          sampleRate: { ideal: targetWavSampleRate },
-          sampleSize: { ideal: 32 }
-        },
-        video: false
-      };
+      return recordingProfiles.createMicrophoneRequest(
+        activeRecordingProfileId,
+        targetWavSampleRate
+      ).constraints;
     }
 
     function getPrimaryAudioTrack() {
@@ -1427,6 +1534,7 @@
         return {
           status: "insufficient_audio",
           expectedPeriodSamples,
+          expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
           sampleRate
         };
       }
@@ -1440,6 +1548,7 @@
         return {
           status: "too_quiet",
           expectedPeriodSamples,
+          expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
           sampleRate,
           rms
         };
@@ -1487,14 +1596,25 @@
     function buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate) {
       const track = getPrimaryAudioTrack();
       const context = getRecordingContext();
+      const profile = recordingProfiles.getProfile(activeRecordingProfileId);
       return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         createdAt: new Date().toISOString(),
         browser: {
           userAgent: navigator.userAgent,
-          platform: navigator.platform
+          platform: navigator.platform,
+          crossOriginIsolated: Boolean(window.crossOriginIsolated)
         },
-        requestedMicrophoneConstraints: getMicrophoneConstraints().audio,
+        recordingProfile: {
+          id: profile.id,
+          label: profile.label,
+          requireConfirmedDisabledProcessing: profile.requireConfirmedDisabledProcessing,
+          requireAudioWorklet: profile.requireAudioWorklet,
+          requireTargetContextSampleRate: profile.requireTargetContextSampleRate
+        },
+        requestedMicrophoneConstraints: microphoneRequestDetails
+          ? microphoneRequestDetails.constraints.audio
+          : getMicrophoneConstraints().audio,
         microphoneTrack: {
           present: Boolean(track),
           label: track ? track.label : "",
@@ -1505,11 +1625,13 @@
           capabilities: tryCallTrackMethod(track, "getCapabilities"),
           constraints: tryCallTrackMethod(track, "getConstraints")
         },
+        microphoneQualification,
         audioContext: {
           sampleRate: context.sampleRate,
           state: context.state,
           baseLatency: Number.isFinite(context.baseLatency) ? context.baseLatency : null,
-          outputLatency: Number.isFinite(context.outputLatency) ? context.outputLatency : null
+          outputLatency: Number.isFinite(context.outputLatency) ? context.outputLatency : null,
+          qualification: audioContextQualification
         },
         playback: {
           engine: "Web Audio AudioBufferSourceNode",
@@ -1517,6 +1639,8 @@
           chirpBufferSampleRate: chirpPlaybackBuffer ? chirpPlaybackBuffer.sampleRate : null,
           chirpBufferLength: chirpPlaybackBuffer ? chirpPlaybackBuffer.length : null,
           chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
+          scheduledStartTime: chirpScheduledStartTime,
+          scheduledStartFrame: chirpScheduledStartFrame,
           loop: true
         },
         recordingExport: {
@@ -1528,6 +1652,7 @@
           frameCount: recordedAudioBuffer.length,
           duration: recordedAudioBuffer.duration
         },
+        recordingCapture: completedCaptureDiagnostics || getCaptureDiagnostics(),
         signalCheck: {
           method: "normalized_autocorrelation_near_12ms_chirp_period",
           chirpPeriodEstimate
@@ -1742,6 +1867,7 @@
       startSensingBtn.textContent = sensingActive ? "Stop sensing" : "Start sensing";
       startSensingBtn.setAttribute("aria-pressed", String(sensingActive));
       downloadSessionBtn.disabled = !preparedSessionFiles.length || sensingActive;
+      recordingProfileSelect.disabled = sensingActive || recordingSessionActive || playbackStartInProgress;
       if (stopSensingBtn) {
         stopSensingBtn.disabled = true;
         stopSensingBtn.hidden = true;
@@ -2233,7 +2359,16 @@
     function getRecordingContext() {
       if (!audioContext) {
         const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-        audioContext = new AudioContextCtor({ sampleRate: targetWavSampleRate });
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+        audioContext = new AudioContextCtor({
+          sampleRate: targetWavSampleRate,
+          latencyHint: profile.latencyHint
+        });
+        audioContextQualification = recordingProfiles.qualifyAudioContext(
+          audioContext,
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
       }
       return audioContext;
     }
@@ -2243,6 +2378,30 @@
       recordingChannelCount = 0;
       recordedFrameCount = 0;
       recordingSessionActive = false;
+    }
+
+    function resetCaptureMetrics() {
+      recordingCaptureMethod = "not-started";
+      recordingCaptureFrameSize = 0;
+      recordingChunksCaptured = 0;
+      recordingClippedSamples = 0;
+      recordingPeakAmplitude = 0;
+      recordingWorkletFrameGaps = 0;
+      recordingLastWorkletSequence = 0;
+      completedCaptureDiagnostics = null;
+    }
+
+    function getCaptureDiagnostics() {
+      return {
+        method: recordingCaptureMethod,
+        frameSize: recordingCaptureFrameSize,
+        chunksCaptured: recordingChunksCaptured,
+        workletFrameGaps: recordingWorkletFrameGaps,
+        clippedSamples: recordingClippedSamples,
+        clippingDetected: recordingClippedSamples > 0,
+        peakAbsoluteAmplitude: recordingPeakAmplitude,
+        socketFramesDroppedBeforeSend: realtimeFramesDroppedBeforeSend
+      };
     }
 
     function appendRealtimeWaveform(samples) {
@@ -2269,12 +2428,29 @@
       queueRealtimeChartDraw();
     }
 
-    function handleRecordedAudioChunk(chunk) {
+    function handleRecordedAudioChunk(chunk, metadata = {}) {
+      if (!(chunk instanceof Float32Array) || !chunk.length) {
+        return;
+      }
       if (!recordingChannelCount) {
         recordingChannelCount = 1;
       }
+      if (Number.isFinite(metadata.sequence)) {
+        if (recordingLastWorkletSequence && metadata.sequence > recordingLastWorkletSequence + 1) {
+          recordingWorkletFrameGaps += metadata.sequence - recordingLastWorkletSequence - 1;
+        }
+        recordingLastWorkletSequence = metadata.sequence;
+      }
+      for (let sampleIndex = 0; sampleIndex < chunk.length; sampleIndex += 1) {
+        const absoluteSample = Math.abs(chunk[sampleIndex]);
+        recordingPeakAmplitude = Math.max(recordingPeakAmplitude, absoluteSample);
+        if (absoluteSample >= 0.999) {
+          recordingClippedSamples += 1;
+        }
+      }
       recordingBufferChunks.push(chunk);
       recordedFrameCount += chunk.length;
+      recordingChunksCaptured += 1;
       appendRealtimeWaveform(chunk);
       sendRealtimeAudioFrame(chunk);
     }
@@ -2501,7 +2677,9 @@
       chirpSourceNode.onended = () => {
         chirpSourceNode = null;
       };
-      chirpSourceNode.start(0);
+      chirpScheduledStartTime = recordingContext.currentTime + 0.05;
+      chirpScheduledStartFrame = Math.round(chirpScheduledStartTime * recordingContext.sampleRate);
+      chirpSourceNode.start(chirpScheduledStartTime);
       receivedAudio.loop = true;
     }
 
@@ -2916,18 +3094,42 @@
       }
 
       if (hasActiveMicrophoneStream()) {
-        micStatus.textContent = "Microphone is on.";
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+        micStatus.textContent = microphoneQualification && microphoneQualification.warnings.length
+          ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
+          : `Microphone is on with ${profile.label}.`;
         return true;
       }
 
       try {
-        micStream = await navigator.mediaDevices.getUserMedia(getMicrophoneConstraints());
+        microphoneRequestDetails = recordingProfiles.createMicrophoneRequest(
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
+        micStream = await navigator.mediaDevices.getUserMedia(microphoneRequestDetails.constraints);
         if (micStream) {
-          micStatus.textContent = "Microphone is on.";
+          const track = getPrimaryAudioTrack();
+          recordingProfiles.applyMicrophoneTrackHints(track);
+          microphoneQualification = recordingProfiles.qualifyMicrophoneTrack(
+            track,
+            activeRecordingProfileId,
+            microphoneRequestDetails.supportedConstraints
+          );
+          if (!microphoneQualification.supported) {
+            const reason = microphoneQualification.errors.join(" ");
+            stopMicrophoneStream();
+            throw new Error(reason);
+          }
+          const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+          micStatus.textContent = microphoneQualification.warnings.length
+            ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
+            : `Microphone is on with ${profile.label}.`;
           return true;
         }
       } catch (error) {
-        micStatus.textContent = "Could not turn on microphone. Please allow microphone permission.";
+        microphoneQualification = null;
+        const detail = error && error.message ? ` ${error.message}` : "";
+        micStatus.textContent = `Could not qualify the microphone.${detail}`;
         return false;
       }
 
@@ -2939,6 +3141,7 @@
       const completedRecording = shouldFinalizeRecording
         ? buildAudioBufferFromRecording(getRecordingContext())
         : null;
+      completedCaptureDiagnostics = shouldFinalizeRecording ? getCaptureDiagnostics() : null;
       stopRecordingNodes();
       resetRecordingBuffers();
       if (completedRecording) {
@@ -2967,57 +3170,103 @@
         if (recordingContext.state === "suspended") {
           await recordingContext.resume();
         }
+        audioContextQualification = recordingProfiles.qualifyAudioContext(
+          recordingContext,
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
+        if (!audioContextQualification.supported) {
+          throw new Error(audioContextQualification.errors.join(" "));
+        }
 
         const microphoneOnlyStream = buildMicrophoneOnlyStream(micStream);
         const processorChannelCount = 1;
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
 
         stopRecordingNodes();
         resetRecordingBuffers();
+        resetCaptureMetrics();
         clearSpectrogram();
         clearFeatureVisualizations();
 
         recordingSourceNode = recordingContext.createMediaStreamSource(microphoneOnlyStream);
-        if (recordingContext.audioWorklet && window.AudioWorkletNode) {
-          if (!audioWorkletModuleReady) {
-            await recordingContext.audioWorklet.addModule("audio-frame-worklet.js");
-            audioWorkletModuleReady = true;
-          }
+        const workletAvailable = Boolean(recordingContext.audioWorklet && window.AudioWorkletNode);
+        let workletStarted = false;
 
-          recordingWorkletNode = new AudioWorkletNode(recordingContext, "audio-frame-processor", {
-            numberOfInputs: 1,
-            numberOfOutputs: 1,
-            outputChannelCount: [1],
-            processorOptions: {
-              frameSize: realtimeConfig.frameSize
+        if (workletAvailable) {
+          try {
+            if (!audioWorkletModuleReady) {
+              await recordingContext.audioWorklet.addModule("audio-frame-worklet.js");
+              audioWorkletModuleReady = true;
             }
-          });
-          recordingWorkletNode.port.onmessage = (event) => {
-            if (!event.data || event.data.type !== "audio-frame" || !event.data.samples) {
-              return;
+
+            recordingWorkletNode = new AudioWorkletNode(recordingContext, "audio-frame-processor", {
+              numberOfInputs: 1,
+              numberOfOutputs: 1,
+              outputChannelCount: [1],
+              processorOptions: {
+                frameSize: realtimeConfig.frameSize
+              }
+            });
+            recordingWorkletNode.port.onmessage = (event) => {
+              if (!event.data || event.data.type !== "audio-frame" || !event.data.samples) {
+                return;
+              }
+              handleRecordedAudioChunk(event.data.samples, {
+                sequence: event.data.sequence,
+                startFrame: event.data.startFrame
+              });
+            };
+            recordingMonitorNode = recordingContext.createGain();
+            recordingMonitorNode.gain.value = 0;
+            recordingSourceNode.connect(recordingWorkletNode);
+            recordingWorkletNode.connect(recordingMonitorNode);
+            recordingMonitorNode.connect(recordingContext.destination);
+            recordingCaptureMethod = "AudioWorklet + transferable Float32Array";
+            recordingCaptureFrameSize = realtimeConfig.frameSize;
+            workletStarted = true;
+          } catch (error) {
+            if (profile.requireAudioWorklet) {
+              throw new Error(`AudioWorklet capture is required but could not start. ${error.message || ""}`.trim());
             }
-            handleRecordedAudioChunk(event.data.samples);
-          };
-          recordingMonitorNode = recordingContext.createGain();
-          recordingMonitorNode.gain.value = 0;
-          recordingSourceNode.connect(recordingWorkletNode);
-          recordingWorkletNode.connect(recordingMonitorNode);
-          recordingMonitorNode.connect(recordingContext.destination);
-        } else {
+            recordingSourceNode.disconnect();
+            if (recordingWorkletNode) {
+              recordingWorkletNode.disconnect();
+              recordingWorkletNode = null;
+            }
+            if (recordingMonitorNode) {
+              recordingMonitorNode.disconnect();
+              recordingMonitorNode = null;
+            }
+          }
+        }
+
+        if (!workletStarted) {
+          if (profile.requireAudioWorklet) {
+            throw new Error("AudioWorklet capture is required by the Ultrasound profile but is unavailable.");
+          }
           recordingProcessorNode = recordingContext.createScriptProcessor(4096, processorChannelCount, processorChannelCount);
           recordingProcessorNode.onaudioprocess = (event) => {
             handleRecordedAudioChunk(toMonoFloat32(event.inputBuffer));
           };
+          recordingMonitorNode = recordingContext.createGain();
+          recordingMonitorNode.gain.value = 0;
           recordingSourceNode.connect(recordingProcessorNode);
-          recordingProcessorNode.connect(recordingContext.destination);
+          recordingProcessorNode.connect(recordingMonitorNode);
+          recordingMonitorNode.connect(recordingContext.destination);
+          recordingCaptureMethod = "ScriptProcessorNode compatibility fallback";
+          recordingCaptureFrameSize = 4096;
         }
         recordingSessionActive = true;
 
-        fileStatus.textContent = "Starting sensing while capturing mono float microphone PCM only.";
+        const contextWarning = audioContextQualification.warnings.join(" ");
+        fileStatus.textContent = `Starting sensing with ${profile.label} using ${recordingCaptureMethod}.${contextWarning ? ` ${contextWarning}` : ""}`;
         return true;
       } catch (error) {
         stopRecordingNodes();
         resetRecordingBuffers();
-        fileStatus.textContent = "Sensing could not start because raw microphone capture could not start.";
+        const detail = error && error.message ? ` ${error.message}` : "";
+        fileStatus.textContent = `Sensing could not start because raw microphone capture could not start.${detail}`;
         return false;
       }
     }
@@ -3081,6 +3330,7 @@
     });
 
     setupInteractionTracking();
+    initializeRecordingProfileControl();
     drawRealtimeChart();
     void requestMicrophone();
   </script>

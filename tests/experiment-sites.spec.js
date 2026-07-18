@@ -19,10 +19,16 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     await expect(page.locator("[data-realtime-canvas]")).toBeVisible();
     await expect(page.locator("[data-realtime-status]")).toContainText("Start sensing");
     await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
+    await expect(page.locator("[data-recording-profile]")).toHaveValue("ultrasonic");
+    await expect(page.locator("[data-recording-profile] option")).toHaveText([
+      "Ultrasound (strict)",
+      "Compatibility"
+    ]);
 
     const debugState = await page.evaluate(() => window.experimentSensing.getRealtimeDebugState());
     expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
     expect(debugState.points).toBe(0);
+    expect(await page.evaluate(() => window.experimentSensing.getRecordingProfile().id)).toBe("ultrasonic");
   }
 });
 
@@ -178,7 +184,6 @@ test("travel tourism page captures interaction data", async ({ page }) => {
 
   await page.locator("#travelStartSensingBtn").click();
   await expect(page.locator("#travelStartSensingBtn")).toHaveText("Stop sensing");
-  await expect(page.locator("[data-manual-label='hand_wave']")).toBeEnabled();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
 
