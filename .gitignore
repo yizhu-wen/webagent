@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 node_modules/
+uploads/
 npm-debug.log*
 playwright-report/
 test-results/
