@@ -92,12 +92,14 @@ textarea {
   margin-top: 16px;
   border-top: 1px solid var(--line);
   padding-top: 16px;
+  overflow-x: auto;
 }
 
 .spectrogram-canvas {
   display: block;
-  width: 100%;
-  max-width: 820px;
+  width: auto;
+  min-width: 100%;
+  max-width: none;
   height: auto;
   border: 1px solid var(--line);
   background: #0c1320;

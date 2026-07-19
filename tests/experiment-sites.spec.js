@@ -1,6 +1,37 @@
 const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
+async function installDurationLimitTimerTestHook(page) {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const durationTimerId = 40000;
+    let durationTimerCallback = null;
+
+    window.setTimeout = (callback, delay, ...args) => {
+      if (delay === 40000) {
+        durationTimerCallback = () => callback(...args);
+        return durationTimerId;
+      }
+      return nativeSetTimeout(callback, delay, ...args);
+    };
+    window.clearTimeout = (timerId) => {
+      if (timerId === durationTimerId) {
+        durationTimerCallback = null;
+        return;
+      }
+      nativeClearTimeout(timerId);
+    };
+    window.__triggerDurationLimitForTest = () => {
+      const callback = durationTimerCallback;
+      durationTimerCallback = null;
+      if (callback) {
+        callback();
+      }
+    };
+  });
+}
+
 function expectOnlyRequestedTrackingEvents(payload) {
   const trackedEventNames = ["click", "keydown", "pointer_move", "scroll"];
   const eventNames = payload.events.map((event) => event.name);
@@ -47,10 +78,13 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
     expect(debugState.points).toBe(0);
     expect(await page.evaluate(() => window.experimentSensing.getRecordingProfile().id)).toBe("ultrasonic");
+    expect(await page.evaluate(() => window.experimentSensing.getMaximumSensingDurationSeconds())).toBe(40);
+    expect(await page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(false);
   }
 });
 
 test("simple shopping page captures interaction data", async ({ page }) => {
+  await installDurationLimitTimerTestHook(page);
   await page.goto("/experiments/");
   await expect(page.getByRole("heading", { name: "Simple Shopping Task" })).toBeVisible();
   await expect(page.locator("[data-download-tracking]")).toHaveCount(0);
@@ -66,6 +100,8 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await expect(page.locator("#shoppingStartSensingBtn")).toHaveText("Stop sensing");
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(true);
+  await expect(page.locator("#shoppingSensingStatus")).toContainText("automatically after 40 seconds");
 
   await page.locator("input[name='query']").click();
   await page.keyboard.type("desk");
@@ -109,12 +145,16 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     downloads.push(download);
   });
 
-  await page.locator("#shoppingStartSensingBtn").click();
+  await page.evaluate(() => window.__triggerDurationLimitForTest());
   await expect(page.locator("#shoppingStartSensingBtn")).toBeEnabled();
   await expect(page.locator("#shoppingStartSensingBtn")).toHaveText("Start sensing");
   await expect(page.locator("#shoppingStopSensingBtn")).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(false);
+  await expect.poll(() => page.evaluate(() => (
+    window.experimentSensing.getCaptureDiagnostics().durationLimitReached
+  ))).toBe(true);
 
   await expect(page.locator("#shoppingSpectrogramPanel")).toBeVisible();
   await expect(page.locator("#shoppingSpectrogramStatus")).toContainText("Spectrogram");
@@ -237,6 +277,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await expect(page.locator("#travelStopSensingBtn")).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(false);
   await expect.poll(() => page.evaluate(() => window.experimentSensing.isPlaybackActive())).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(false);
 
   await expect(page.locator("#travelSpectrogramPanel")).toBeVisible();
   await expect(page.locator("#travelSpectrogramStatus")).toContainText("Spectrogram");

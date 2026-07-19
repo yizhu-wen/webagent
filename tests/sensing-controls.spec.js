@@ -1,6 +1,37 @@
 const fs = require("fs");
 const { test, expect } = require("@playwright/test");
 
+async function installDurationLimitTimerTestHook(page) {
+  await page.addInitScript(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const durationTimerId = 40000;
+    let durationTimerCallback = null;
+
+    window.setTimeout = (callback, delay, ...args) => {
+      if (delay === 40000) {
+        durationTimerCallback = () => callback(...args);
+        return durationTimerId;
+      }
+      return nativeSetTimeout(callback, delay, ...args);
+    };
+    window.clearTimeout = (timerId) => {
+      if (timerId === durationTimerId) {
+        durationTimerCallback = null;
+        return;
+      }
+      nativeClearTimeout(timerId);
+    };
+    window.__triggerDurationLimitForTest = () => {
+      const callback = durationTimerCallback;
+      durationTimerCallback = null;
+      if (callback) {
+        callback();
+      }
+    };
+  });
+}
+
 test("offers strict ultrasonic and compatibility recording profiles", async ({ page }) => {
   await page.goto("/");
 
@@ -68,7 +99,8 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
   ))).toBe(40);
 });
 
-test("loops the chirp between start and stop sensing", async ({ page }) => {
+test("loops the chirp and automatically stops at the 40-second limit", async ({ page }) => {
+  await installDurationLimitTimerTestHook(page);
   await page.goto("/");
 
   const startButton = page.locator("#startSensingBtn");
@@ -98,24 +130,34 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRecordedFrameCount()
   )), { timeout: 10000 }).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getMaximumSensingDurationSeconds()
+  ))).toBe(40);
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.isDurationLimitTimerActive()
+  ))).toBe(true);
+  await expect(page.locator("#fileStatus")).toContainText("automatically after 40 seconds");
 
   const downloads = [];
   page.on("download", (download) => {
     downloads.push(download);
   });
 
-  await startButton.click();
+  await page.evaluate(() => window.__triggerDurationLimitForTest());
 
   await expect.poll(
     async () => (await sensingState()).playbackActive,
     { timeout: 15000 }
   ).toBe(false);
-  await expect(startButton).toBeEnabled();
-  await expect(startButton).toHaveText("Start sensing");
-  await expect(startButton).toHaveAttribute("aria-pressed", "false");
   await expect(stopButton).toBeHidden();
   await expect(downloadButton).toBeVisible({ timeout: 20000 });
   await expect(downloadButton).toBeEnabled();
+  await expect(startButton).toBeEnabled();
+  await expect(startButton).toHaveText("Start sensing");
+  await expect(startButton).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.isDurationLimitTimerActive()
+  ))).toBe(false);
   expect(downloads).toHaveLength(0);
 
   await downloadButton.click();
@@ -141,6 +183,8 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   expect(wav.readUInt16LE(22)).toBe(1);
   expect(wav.readUInt32LE(24)).toBe(48000);
   expect(wav.readUInt16LE(34)).toBe(32);
+  const wavDurationSeconds = wav.readUInt32LE(40) / (48000 * 4);
+  expect(wavDurationSeconds).toBeLessThanOrEqual(40);
 
   const diagnosticsDownload = downloads.find((item) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(item.suggestedFilename()));
   const diagnostics = JSON.parse(fs.readFileSync(await diagnosticsDownload.path(), "utf8"));
@@ -158,6 +202,8 @@ test("loops the chirp between start and stop sensing", async ({ page }) => {
   expect(diagnostics.recordingExport.bitsPerSample).toBe(32);
   expect(diagnostics.recordingCapture.method).toContain("AudioWorklet");
   expect(diagnostics.recordingCapture.frameSize).toBe(2048);
+  expect(diagnostics.recordingCapture.maximumDurationSeconds).toBe(40);
+  expect(diagnostics.recordingCapture.durationLimitReached).toBe(true);
   expect(typeof diagnostics.recordingCapture.clippingDetected).toBe("boolean");
   expect(diagnostics.recordingCapture.clippedSamples).toBeGreaterThanOrEqual(0);
   expect(diagnostics.recordingCapture.workletFrameGaps).toBe(0);

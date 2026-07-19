@@ -221,6 +221,8 @@ Both shopping and travel:
 - Do not include manual data-collection label or marker controls.
 - Track behavior only while sensing is active.
 - Reset tracking data at the start of each sensing session.
+- Stop sensing automatically after 40 seconds and cap captured PCM at 40
+  seconds of frames, including when browser timers run late.
 - Decode and loop the chirp through the 48 kHz Web Audio context.
 - Prefer AudioWorklet mono Float32 capture and export mono 32-bit IEEE-float WAV;
   permit ScriptProcessor only in Compatibility mode.

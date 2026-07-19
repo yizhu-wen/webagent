@@ -34,6 +34,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
   const analysisApiUrl = "/api/analyze-recording";
   const targetSampleRate = 48000;
+  const maximumSensingDurationSeconds = 40;
+  const maximumSensingDurationMs = maximumSensingDurationSeconds * 1000;
   const realtimeFrameSize = 2048;
   const realtimeWindowSeconds = 20;
   const realtimeMaxPoints = 1400;
@@ -55,6 +57,9 @@ document.addEventListener("DOMContentLoaded", () => {
   let recordingChannelCount = 0;
   let recordedFrameCount = 0;
   let sensingActive = false;
+  let sensingStopInProgress = false;
+  let sensingDurationTimerId = null;
+  let sensingDurationLimitReached = false;
   let preparedSessionFiles = [];
   let selectedDetailTrip = null;
   let realtimeSocket = null;
@@ -374,6 +379,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       method: recordingCaptureMethod,
       frameSize: recordingCaptureFrameSize,
+      maximumDurationSeconds: maximumSensingDurationSeconds,
+      durationLimitReached: sensingDurationLimitReached,
       chunksCaptured: recordingChunksCaptured,
       workletFrameGaps: recordingWorkletFrameGaps,
       clippedSamples: recordingClippedSamples,
@@ -383,10 +390,50 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
+  function clearSensingDurationTimer() {
+    if (sensingDurationTimerId === null) {
+      return;
+    }
+    window.clearTimeout(sensingDurationTimerId);
+    sensingDurationTimerId = null;
+  }
+
+  function requestSensingStopAtDurationLimit() {
+    if (sensingDurationLimitReached || sensingStopInProgress) {
+      return;
+    }
+    sensingDurationLimitReached = true;
+    clearSensingDurationTimer();
+    void stopSensing({ durationLimitReached: true });
+  }
+
+  function startSensingDurationTimer() {
+    clearSensingDurationTimer();
+    sensingDurationTimerId = window.setTimeout(() => {
+      sensingDurationTimerId = null;
+      requestSensingStopAtDurationLimit();
+    }, maximumSensingDurationMs);
+  }
+
+  function getMaximumRecordingFrames() {
+    const sampleRate = audioContext && Number.isFinite(audioContext.sampleRate)
+      ? audioContext.sampleRate
+      : targetSampleRate;
+    return Math.floor(sampleRate * maximumSensingDurationSeconds);
+  }
+
   function handleRecordedAudioChunk(chunk, metadata = {}) {
     if (!(chunk instanceof Float32Array) || !chunk.length) {
       return;
     }
+    const remainingFrames = getMaximumRecordingFrames() - recordedFrameCount;
+    if (remainingFrames <= 0) {
+      requestSensingStopAtDurationLimit();
+      return;
+    }
+    const recordedChunk = chunk.length > remainingFrames
+      ? chunk.slice(0, remainingFrames)
+      : chunk;
     if (!recordingChannelCount) {
       recordingChannelCount = 1;
     }
@@ -396,18 +443,21 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       recordingLastWorkletSequence = metadata.sequence;
     }
-    for (let sampleIndex = 0; sampleIndex < chunk.length; sampleIndex += 1) {
-      const absoluteSample = Math.abs(chunk[sampleIndex]);
+    for (let sampleIndex = 0; sampleIndex < recordedChunk.length; sampleIndex += 1) {
+      const absoluteSample = Math.abs(recordedChunk[sampleIndex]);
       recordingPeakAmplitude = Math.max(recordingPeakAmplitude, absoluteSample);
       if (absoluteSample >= 0.999) {
         recordingClippedSamples += 1;
       }
     }
-    recordingBufferChunks.push(chunk);
-    recordedFrameCount += chunk.length;
+    recordingBufferChunks.push(recordedChunk);
+    recordedFrameCount += recordedChunk.length;
     recordingChunksCaptured += 1;
-    appendRealtimeWaveform(chunk);
-    sendRealtimeAudioFrame(chunk);
+    appendRealtimeWaveform(recordedChunk);
+    sendRealtimeAudioFrame(recordedChunk);
+    if (recordedFrameCount >= getMaximumRecordingFrames()) {
+      requestSensingStopAtDurationLimit();
+    }
   }
 
   function buildTimestamp() {
@@ -1444,6 +1494,87 @@ document.addEventListener("DOMContentLoaded", () => {
     return windowValues;
   }
 
+  const SPECTROGRAM_CONFIG = Object.freeze({
+    fftSize: 1024,
+    hopLength: 256,
+    maxColumns: 8192,
+    canvasHeight: 260,
+    minDb: -90,
+    maxDb: -20
+  });
+
+  function createFftWorkspace(size) {
+    return {
+      real: new Float64Array(size),
+      imaginary: new Float64Array(size),
+      magnitudes: new Float32Array(size / 2)
+    };
+  }
+
+  function computeFftMagnitudes(samples, start, windowValues, workspace) {
+    const size = windowValues.length;
+    const { real, imaginary, magnitudes } = workspace;
+
+    for (let index = 0; index < size; index += 1) {
+      real[index] = (samples[start + index] || 0) * windowValues[index];
+      imaginary[index] = 0;
+    }
+
+    for (let index = 1, reversed = 0; index < size; index += 1) {
+      let bit = size >> 1;
+      while (reversed & bit) {
+        reversed ^= bit;
+        bit >>= 1;
+      }
+      reversed ^= bit;
+
+      if (index < reversed) {
+        const realValue = real[index];
+        const imaginaryValue = imaginary[index];
+        real[index] = real[reversed];
+        imaginary[index] = imaginary[reversed];
+        real[reversed] = realValue;
+        imaginary[reversed] = imaginaryValue;
+      }
+    }
+
+    for (let blockSize = 2; blockSize <= size; blockSize <<= 1) {
+      const angle = (-2 * Math.PI) / blockSize;
+      const blockCosine = Math.cos(angle);
+      const blockSine = Math.sin(angle);
+      const halfBlockSize = blockSize >> 1;
+
+      for (let blockStart = 0; blockStart < size; blockStart += blockSize) {
+        let twiddleReal = 1;
+        let twiddleImaginary = 0;
+
+        for (let offset = 0; offset < halfBlockSize; offset += 1) {
+          const evenIndex = blockStart + offset;
+          const oddIndex = evenIndex + halfBlockSize;
+          const oddReal = real[oddIndex] * twiddleReal - imaginary[oddIndex] * twiddleImaginary;
+          const oddImaginary = real[oddIndex] * twiddleImaginary + imaginary[oddIndex] * twiddleReal;
+          const evenReal = real[evenIndex];
+          const evenImaginary = imaginary[evenIndex];
+
+          real[evenIndex] = evenReal + oddReal;
+          imaginary[evenIndex] = evenImaginary + oddImaginary;
+          real[oddIndex] = evenReal - oddReal;
+          imaginary[oddIndex] = evenImaginary - oddImaginary;
+
+          const nextTwiddleReal = twiddleReal * blockCosine - twiddleImaginary * blockSine;
+          twiddleImaginary = twiddleReal * blockSine + twiddleImaginary * blockCosine;
+          twiddleReal = nextTwiddleReal;
+        }
+      }
+    }
+
+    for (let bin = 0; bin < magnitudes.length; bin += 1) {
+      magnitudes[bin] = Math.hypot(real[bin], imaginary[bin]) / size;
+    }
+
+    return magnitudes;
+  }
+
   function getSpectrogramColor(value) {
     const clamped = Math.max(0, Math.min(1, value));
     const red = Math.round(255 * Math.pow(clamped, 0.72));
@@ -1511,11 +1642,20 @@ document.addEventListener("DOMContentLoaded", () => {
       if (samples.length < 8) {
         throw new Error("Recording too short");
       }
-      const canvasWidth = spectrogramCanvas.width;
-      const canvasHeight = spectrogramCanvas.height;
       const margin = { top: 16, right: 14, bottom: 54, left: 70 };
-      const plotWidth = canvasWidth - margin.left - margin.right;
+      const fftSize = SPECTROGRAM_CONFIG.fftSize;
+      const requestedHopLength = SPECTROGRAM_CONFIG.hopLength;
+      const availableStartSamples = Math.max(0, samples.length - fftSize);
+      const requestedFrameCount = Math.max(1, Math.floor(availableStartSamples / requestedHopLength) + 1);
+      const plotWidth = Math.min(requestedFrameCount, SPECTROGRAM_CONFIG.maxColumns);
+      const hopLength = requestedFrameCount > SPECTROGRAM_CONFIG.maxColumns
+        ? Math.max(1, Math.ceil(availableStartSamples / Math.max(1, plotWidth - 1)))
+        : requestedHopLength;
+      const canvasWidth = margin.left + plotWidth + margin.right;
+      const canvasHeight = SPECTROGRAM_CONFIG.canvasHeight;
       const plotHeight = canvasHeight - margin.top - margin.bottom;
+      spectrogramCanvas.width = canvasWidth;
+      spectrogramCanvas.height = canvasHeight;
       const plotArea = {
         left: margin.left,
         top: margin.top,
@@ -1524,10 +1664,9 @@ document.addEventListener("DOMContentLoaded", () => {
         width: plotWidth,
         height: plotHeight
       };
-      const fftSize = 512;
       const nyquistBins = fftSize / 2;
-      const hopSize = Math.max(1, Math.floor(Math.max(1, samples.length - fftSize) / plotWidth));
       const windowValues = createHannWindow(fftSize);
+      const fftWorkspace = createFftWorkspace(fftSize);
       const ctx = spectrogramCanvas.getContext("2d");
       const imageData = ctx.createImageData(plotWidth, plotHeight);
       const pixelBuffer = imageData.data;
@@ -1537,27 +1676,23 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
       for (let x = 0; x < plotWidth; x += 1) {
-        const start = Math.max(0, Math.min(samples.length - fftSize, x * hopSize));
+        const start = Math.max(0, Math.min(availableStartSamples, x * hopLength));
+        const magnitudes = computeFftMagnitudes(samples, start, windowValues, fftWorkspace);
 
         for (let y = 0; y < plotHeight; y += 1) {
           const normalizedY = y / Math.max(1, plotHeight - 1);
           const frequencyBin = Math.min(
             nyquistBins - 1,
-            Math.floor(Math.pow(normalizedY, 1.85) * (nyquistBins - 1))
+            Math.round(normalizedY * (nyquistBins - 1))
           );
 
-          let real = 0;
-          let imaginary = 0;
-          for (let n = 0; n < fftSize; n += 1) {
-            const sample = samples[start + n] * windowValues[n];
-            const angle = (2 * Math.PI * frequencyBin * n) / fftSize;
-            real += sample * Math.cos(angle);
-            imaginary -= sample * Math.sin(angle);
-          }
-
-          const magnitude = Math.sqrt(real * real + imaginary * imaginary) / fftSize;
+          const magnitude = magnitudes[frequencyBin];
           const db = 20 * Math.log10(magnitude + 1e-6);
-          const normalizedMagnitude = Math.max(0, Math.min(1, (db + 90) / 70));
+          const normalizedMagnitude = Math.max(0, Math.min(
+            1,
+            (db - SPECTROGRAM_CONFIG.minDb) /
+              (SPECTROGRAM_CONFIG.maxDb - SPECTROGRAM_CONFIG.minDb)
+          ));
           const [red, green, blue] = getSpectrogramColor(normalizedMagnitude);
           const pixelIndex = ((plotHeight - 1 - y) * plotWidth + x) * 4;
           pixelBuffer[pixelIndex] = red;
@@ -1565,11 +1700,17 @@ document.addEventListener("DOMContentLoaded", () => {
           pixelBuffer[pixelIndex + 2] = blue;
           pixelBuffer[pixelIndex + 3] = 255;
         }
+
+        if (x > 0 && x % 256 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
       }
 
       ctx.putImageData(imageData, plotArea.left, plotArea.top);
       drawSpectrogramAxes(ctx, plotArea, audioBuffer);
-      showSpectrogramStatus("Spectrogram of the recorded audio.");
+      showSpectrogramStatus(
+        `Spectrogram of the recorded audio. FFT ${fftSize}, hop ${hopLength} samples.`
+      );
     } catch (error) {
       showSpectrogramStatus("Could not generate a spectrogram for the recording.");
     }
@@ -1688,10 +1829,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function startSensing() {
-    if (!micStream || sensingActive) {
+    if (!micStream || sensingActive || sensingStopInProgress) {
       return;
     }
 
+    clearSensingDurationTimer();
+    sensingDurationLimitReached = false;
     setSensingControls(true, true);
     setSensingStatus("Starting sensing...");
 
@@ -1801,11 +1944,13 @@ document.addEventListener("DOMContentLoaded", () => {
       startChirpPlayback();
 
       sensingActive = true;
+      startSensingDurationTimer();
       window.interactionTracker.beginSession();
       setSensingControls(true, true);
       const contextWarning = audioContextQualification.warnings.join(" ");
-      setSensingStatus(`Sensing is active with ${profile.label} using ${recordingCaptureMethod}. ${siteLabel} is being tracked.${contextWarning ? ` ${contextWarning}` : ""}`);
+      setSensingStatus(`Sensing is active with ${profile.label} using ${recordingCaptureMethod}. ${siteLabel} is being tracked. Recording stops automatically after ${maximumSensingDurationSeconds} seconds.${contextWarning ? ` ${contextWarning}` : ""}`);
     } catch (error) {
+      clearSensingDurationTimer();
       sensingActive = false;
       window.interactionTracker.setEnabled(false);
       stopRealtimeSession();
@@ -1818,39 +1963,52 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function stopSensing({ prepareFiles = true } = {}) {
+  async function stopSensing({ prepareFiles = true, durationLimitReached = false } = {}) {
+    if (sensingStopInProgress) {
+      return;
+    }
+    clearSensingDurationTimer();
     if (!sensingActive && !recordedFrameCount) {
       return;
     }
 
-    const timestamp = buildTimestamp();
-    const shouldPrepareRecording = prepareFiles && recordedFrameCount > 0;
-    const completedRecording = shouldPrepareRecording
-      ? buildAudioBufferFromRecording(getAudioContext())
-      : null;
-    completedCaptureDiagnostics = recordedFrameCount > 0 ? getCaptureDiagnostics() : null;
+    sensingStopInProgress = true;
+    sensingDurationLimitReached = sensingDurationLimitReached || durationLimitReached;
+    try {
+      const timestamp = buildTimestamp();
+      const shouldPrepareRecording = prepareFiles && recordedFrameCount > 0;
+      const completedRecording = shouldPrepareRecording
+        ? buildAudioBufferFromRecording(getAudioContext())
+        : null;
+      completedCaptureDiagnostics = recordedFrameCount > 0 ? getCaptureDiagnostics() : null;
 
-    sensingActive = false;
-    let trackingArtifacts = null;
-    if (prepareFiles) {
-      trackingArtifacts = window.interactionTracker.prepareTrackingData(timestamp);
-    }
-    window.interactionTracker.setEnabled(false);
-    setSensingControls(Boolean(micStream), false);
-    stopRealtimeSession();
-    stopChirpPlayback();
-    sensingAudio.currentTime = 0;
-    stopSensingCapture();
-
-    if (prepareFiles) {
-      if (downloadSessionBtn) {
-        downloadSessionBtn.disabled = true;
+      sensingActive = false;
+      let trackingArtifacts = null;
+      if (prepareFiles) {
+        trackingArtifacts = window.interactionTracker.prepareTrackingData(timestamp);
       }
-      setSensingStatus("Sensing stopped. Preparing session files...");
-      await prepareRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
-    } else {
-      resetRecordingBuffers();
-      setSensingStatus(`Sensing is stopped. ${siteLabel} is not being tracked.`);
+      window.interactionTracker.setEnabled(false);
+      setSensingControls(Boolean(micStream), false);
+      stopRealtimeSession();
+      stopChirpPlayback();
+      sensingAudio.currentTime = 0;
+      stopSensingCapture();
+
+      if (prepareFiles) {
+        if (downloadSessionBtn) {
+          downloadSessionBtn.disabled = true;
+        }
+        setSensingStatus(durationLimitReached
+          ? `Maximum ${maximumSensingDurationSeconds}-second recording reached. Preparing session files...`
+          : "Sensing stopped. Preparing session files...");
+        await prepareRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
+      } else {
+        resetRecordingBuffers();
+        setSensingStatus(`Sensing is stopped. ${siteLabel} is not being tracked.`);
+      }
+    } finally {
+      clearSensingDurationTimer();
+      sensingStopInProgress = false;
     }
   }
 
@@ -2100,6 +2258,8 @@ document.addEventListener("DOMContentLoaded", () => {
     getRecordingChannelCount: () => recordingChannelCount,
     getRecordedFrameCount: () => recordedFrameCount,
     getTargetSampleRate: () => targetSampleRate,
+    getMaximumSensingDurationSeconds: () => maximumSensingDurationSeconds,
+    isDurationLimitTimerActive: () => sensingDurationTimerId !== null,
     getRecordingProfile: () => recordingProfiles.getProfile(activeRecordingProfileId),
     getMicrophoneQualification: () => microphoneQualification,
     getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
@@ -2127,6 +2287,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.addEventListener("pagehide", () => {
+    clearSensingDurationTimer();
     void stopSensing({ prepareFiles: false });
     stopRealtimeSession();
     stopChirpPlayback();

@@ -85,6 +85,8 @@ http://localhost:8124/
 ## Notes
 
 - Click **Start sensing** to play the ultrasound chirp, capture microphone audio, and stream live mic frames to Python. The same button changes to **Stop sensing** while sensing is active.
+- Every sensing session stops automatically after 40 seconds. Captured PCM is
+  also capped by sample count, so an exported WAV cannot exceed 40 seconds.
 - Stopping sensing does not download files automatically. It prepares the
   tracking JSON, OS-style event log, WAV, spectrogram, and diagnostics in the
   browser. Click **Download session files** when you want to save them.
