@@ -83,6 +83,24 @@ test("original page links to the simplified experiment sites", async ({ page }) 
 });
 
 test("experiment pages expose live Python IQ panels", async ({ page }) => {
+  const mainSensingApiMethods = [
+    "clearFeatureVisualizations",
+    "getCaptureDiagnostics",
+    "getMaximumSensingDurationSeconds",
+    "getMicrophoneQualification",
+    "getPreparedSessionFileNames",
+    "getRealtimeDebugState",
+    "getRealtimePointCount",
+    "getRecordedFrameCount",
+    "getRecordingChannelCount",
+    "getRecordingProfile",
+    "getTargetSampleRate",
+    "isDurationLimitTimerActive",
+    "isPlaybackActive",
+    "isRealtimeConnected",
+    "renderGeneratedFigures",
+    "renderWindowPredictions"
+  ].sort();
   for (const path of ["/experiments/", "/experiments/travel/"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { name: "Live Python IQ" })).toBeVisible();
@@ -107,6 +125,26 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     expect(debugState.points).toBe(0);
     expect(debugState.dopplerColumnsReceived).toBe(0);
     expect(debugState.doppler.points).toBe(0);
+    expect(debugState.audioEventOffsetMs).toBe(80);
+    expect(await page.evaluate(() => (
+      window.webAgentSensing === window.experimentSensing
+    ))).toBe(true);
+    expect(await page.evaluate(() => (
+      window.experimentSensing.isRealtimeConnected()
+    ))).toBe(false);
+    expect(await page.evaluate(() => (
+      Object.entries(window.webAgentSensing)
+        .filter(([, value]) => typeof value === "function")
+        .map(([name]) => name)
+        .sort()
+    ))).toEqual(mainSensingApiMethods);
+    expect(await page.evaluate(() => ({
+      prepareEventLog: typeof window.interactionTracker.prepareEventLog,
+      downloadEventLog: typeof window.interactionTracker.downloadEventLog
+    }))).toEqual({
+      prepareEventLog: "function",
+      downloadEventLog: "function"
+    });
     expect(await page.evaluate(() => window.experimentSensing.getRecordingProfile().id)).toBe("ultrasonic");
     expect(await page.evaluate(() => window.experimentSensing.getMaximumSensingDurationSeconds())).toBe(40);
     expect(await page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(false);
@@ -118,7 +156,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await page.goto("/experiments/");
   await expect(page.getByRole("heading", { name: "Simple Shopping Task" })).toBeVisible();
   await expect(page.locator("[data-download-tracking]")).toHaveCount(0);
-  await expect(page.locator("[data-download-session]")).toBeHidden();
+  await expect(page.locator("[data-download-session]")).toHaveCount(0);
   await expect(page.locator("#shoppingStartSensingBtn")).toBeEnabled();
   await expect(page.locator("#shoppingStopSensingBtn")).toBeHidden();
 
@@ -210,11 +248,6 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
   expect(spectrogramFormat.darkUltrasoundPixels).toBeGreaterThan(20);
 
-  await expect(page.locator("[data-download-session]")).toBeVisible({ timeout: 20000 });
-  await expect(page.locator("[data-download-session]")).toBeEnabled();
-  expect(downloads).toHaveLength(0);
-  await page.locator("[data-download-session]").click();
-
   await expect.poll(() => ({
     keyboard: downloads.some((download) => download.suggestedFilename() === "keyboard_events.json"),
     cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
@@ -252,7 +285,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Simple Travel Task" })).toBeVisible();
   await expect(page.locator("[data-product-row]")).toHaveCount(5);
   await expect(page.locator("[data-download-tracking]")).toHaveCount(0);
-  await expect(page.locator("[data-download-session]")).toBeHidden();
+  await expect(page.locator("[data-download-session]")).toHaveCount(0);
   await expect(page.locator("#travelStartSensingBtn")).toBeEnabled();
   await expect(page.locator("#travelStopSensingBtn")).toBeHidden();
 
@@ -343,11 +376,6 @@ test("travel tourism page captures interaction data", async ({ page }) => {
     return brightPixels;
   });
   expect(brightSpectrogramPixels).toBeGreaterThan(20);
-
-  await expect(page.locator("[data-download-session]")).toBeVisible({ timeout: 20000 });
-  await expect(page.locator("[data-download-session]")).toBeEnabled();
-  expect(downloads).toHaveLength(0);
-  await page.locator("[data-download-session]").click();
 
   await expect.poll(() => ({
     keyboard: downloads.some((download) => download.suggestedFilename() === "keyboard_events.json"),

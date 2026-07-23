@@ -6,7 +6,7 @@ This project is a browser-based sensing and behavior-tracking prototype. The
 root page plays a looping ultrasound chirp, records microphone audio while
 sensing is active, tracks user behavior only during active sensing, renders a
 recorded spectrogram, and prepares session artifacts after sensing stops. Files
-are downloaded only when the user selects `Download session files`.
+are downloaded automatically after Stop finishes preparing them.
 
 There are also dummy experiment websites for collecting interaction behavior in simple task contexts:
 
@@ -32,7 +32,7 @@ The current design goal is intentionally simple and functional, with minimal vis
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
 - `experiments/site.js`: Shared experiment-site behavior for sensing,
   microphone recording, spectrogram generation, product filtering/actions,
-  forms, and explicit session downloads.
+  forms, and automatic Stop-time session downloads.
 - `experiments/tracker.js`: Shared gated client-side interaction tracker for experiment sites.
 - `experiments/styles.css`: Shared experiment styles plus travel-specific scoped styles.
 - `tests/*.spec.js`: Playwright tests for tracking, sensing controls, shopping, and travel.
@@ -146,14 +146,13 @@ Python figures can be generated.
 - Behavioral data is tracked only while sensing is active.
 - Stop prepares `keyboard_events.json`, `cursor_events.json`, `metadata.json`,
   the sensed microphone WAV, and rendered spectrogram PNG in browser memory.
-- The `Download session files (N)` button appears after preparation. No browser
-  download begins until the user selects that button.
+- Stop automatically downloads all prepared session files. There is no separate
+  session-download button.
 - Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
   local Python backend for offline processing. The page later displays exact
-  Stage-4 amplitude/phase lines, a Doppler velocity-time map, derived
-  motion/band-energy traces, and an MLP prediction timeline when the required
-  artifact is available. This backend upload is independent of the browser
-  download button.
+  Stage-4 amplitude/phase lines and an MLP prediction timeline when the required
+  artifact is available. This backend upload is independent of the automatic
+  browser downloads.
 - When supplied, the default audible-only MLP predicts every overlapping `0.5`
   second signal window with a `0.25` second stride after Stop. The first and
   final `1.0` second are excluded. A scrollable table shows every window's
@@ -234,6 +233,8 @@ raw-PCM recording improvements above.
 Both shopping and travel:
 
 - Request microphone permission first.
+- Expose the same `window.webAgentSensing` function surface as the main page,
+  with `window.experimentSensing` retained as an alias.
 - Expose the same strict and compatibility recording profiles as the main page.
 - Have a single sensing toggle button that starts as `Start sensing` and changes
   to `Stop sensing` while sensing is active.
@@ -245,7 +246,7 @@ Both shopping and travel:
 - Decode and loop the chirp through the 48 kHz Web Audio context.
 - Prefer AudioWorklet mono Float32 capture and export mono 32-bit IEEE-float WAV;
   permit ScriptProcessor only in Compatibility mode.
-- On Stop, prepare the following files without downloading them automatically:
+- On Stop, prepare and automatically download:
   - `keyboard_events.json`
   - `cursor_events.json`
   - `metadata.json`, containing only `fs`, `chirp_samples`, `left_band_hz`,
@@ -253,10 +254,8 @@ Both shopping and travel:
     `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
-  - Stage-4 amplitude/phase, Doppler, and optional MLP prediction figures when
-    the Python server endpoint is available
-- Show `Download session files (N)` when preparation completes. Selecting it is
-  the only action that starts the browser downloads.
+  - Stage-4 amplitude/phase and optional MLP prediction figures when the Python
+    server endpoint is available
 - Show the recorded spectrogram on the page after Stop.
 - Show every MLP prediction window in a time-aligned table after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.
@@ -273,8 +272,6 @@ The Stop-time Python pipeline always generates these model-independent figures:
 - `stage4_signal_events_phase_change.png`: median-normalized left/right wrapped
   phase-change lines from each channel's 10 most-variable lag bins, with the
   same action markers.
-- `02_doppler_velocity.png`: slow-time Doppler energy versus recording time
-  and radial velocity.
 When `models/signal_event_model_audible_only.joblib` is available, it also
 generates:
 
@@ -462,9 +459,8 @@ awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html | node --check 
 ## Development Notes
 
 - Keep behavior tracking gated by sensing state. Do not track user behavior while sensing is inactive.
-- Keep Stop responsible for preparing session files, not downloading them.
-- Keep `Download session files` as the explicit user action that starts browser
-  downloads on the main and experiment pages.
+- Keep Stop responsible for preparing and automatically downloading session
+  files on the main and experiment pages.
 - Do not re-add data-collection label or marker controls unless explicitly requested.
 - The shopping and travel sites share `experiments/site.js`; prefer data attributes and scoped CSS over duplicating logic.
 - Travel-specific visual styling should remain scoped under `body.travel-site`.

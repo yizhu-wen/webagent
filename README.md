@@ -87,10 +87,10 @@ http://localhost:8124/
 - Click **Start sensing** to play the ultrasound chirp, capture microphone audio, and stream live mic frames to Python. The same button changes to **Stop sensing** while sensing is active.
 - Every sensing session stops automatically after 40 seconds. Captured PCM is
   also capped by sample count, so an exported WAV cannot exceed 40 seconds.
-- Stopping sensing does not download files automatically. It prepares the
-  Python-style `keyboard_events.json`, `cursor_events.json`, and `metadata.json`
-  files together with the received-audio WAV and spectrogram. Click **Download
-  session files** when you want to save them. `metadata.json` follows the
+- Stopping sensing automatically downloads the Python-style
+  `keyboard_events.json`, `cursor_events.json`, and `metadata.json` files
+  together with the received-audio WAV, spectrogram, and available processed
+  figures. `metadata.json` follows the
   standalone Python recorder's field names and includes the signal parameters,
   actual duration, recording name, capture method, browser-visible OS
   information, and event counts.
@@ -100,18 +100,19 @@ http://localhost:8124/
   values are seconds relative to sensing start.
 - The completed WAV, internal diagnostics, and an internal compatibility event stream are also sent to the local
   `/api/analyze-recording` endpoint for post-processing. This backend upload is
-  separate from the optional browser download; neither the internal diagnostics
+  separate from the automatic browser downloads; neither the internal diagnostics
   nor the compatibility stream is included in downloaded session files.
 - After Stop, Python produces the same Stage-4 amplitude-change and phase-change
   line charts as `extract_feature_maps_demo.py`, with time-aligned key,
-  pointer-move, scroll, and click markers. It also produces a Doppler
-  velocity-time map. When a compatible MLP model is available, it predicts
-  overlapping 0.5-second windows and displays their labels and confidence.
+  pointer-move, scroll, and click markers. When a compatible MLP model is
+  available, it predicts overlapping 0.5-second windows and displays their
+  labels and confidence.
 - This checkout does not currently contain `models/`. Train or provide
   `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
-  prediction timeline and table. The Stage-4 and Doppler figures do not require
-  the model.
+  prediction timeline and table. The Stage-4 figures do not require the model.
 - The main page, shopping experiment, and travel experiment all use the same realtime `/realtime` backend.
+- Shopping and travel expose the same `window.webAgentSensing` function surface
+  as the main page; `window.experimentSensing` remains an alias on those pages.
 - Use `Ctrl+C` in the terminal to stop the local server.
 - For browser microphone access, `localhost` is the recommended local URL.
 
@@ -193,8 +194,8 @@ recording. Realtime mode instead maintains exact accumulated statistics up to
 the current chirp and subtracts the accumulated complex mean from the trailing
 64-chirp window. Consequently, the first Doppler column appears about `3.8 s`
 after sensing starts with the existing 3-second trim, and its window-center
-timestamp has `0.384 s` latency. Completed-recording Doppler remains the exact
-offline reference.
+timestamp has `0.384 s` latency. This Doppler visualization is realtime-only;
+the Stop-time Doppler velocity PNG is not generated.
 
 `SharedArrayBuffer`, a browser DSP worker, and ONNX Runtime Web are not part of
 the current path: live IQ and model processing run in the Python backend. Those
@@ -300,7 +301,7 @@ before running `npm test`.
 ## Generated Data
 
 The Python analysis endpoint stores server-side session inputs and generated
-outputs under `uploads/`. These files are local runtime data and are not a
-replacement for the user-controlled **Download session files** action. Avoid
+outputs under `uploads/`. These files are local runtime data and are separate
+from the automatic browser downloads after Stop. Avoid
 committing new recordings or generated model outputs unless they are deliberate
 fixtures.

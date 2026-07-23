@@ -88,9 +88,9 @@ test("renders processed feature figures on the sensing page", async ({ page }) =
           description: "Matched-filter return energy over distance and time."
         },
         {
-          name: "02_doppler_velocity.png",
+          name: "stage4_signal_events_phase_change.png",
           url: image,
-          description: "Radial motion direction and speed."
+          description: "Phase change with action markers."
         }
       ],
       predictions: {
@@ -122,7 +122,7 @@ test("renders processed feature figures on the sensing page", async ({ page }) =
   await expect(panel).toBeVisible();
   await expect(panel.locator(".feature-visualization-item")).toHaveCount(2);
   await expect(panel).toContainText("Range Time Energy");
-  await expect(panel).toContainText("Doppler Velocity");
+  await expect(panel).toContainText("Phase Change");
   await expect(panel).toContainText("model feature pipeline");
   await expect(panel.locator("#windowPredictionBody tr")).toHaveCount(2);
   await expect(panel).toContainText("hand_wave");

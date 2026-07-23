@@ -8,7 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const sensingStatusNode = document.querySelector("[data-sensing-status]") || document.getElementById("shoppingSensingStatus");
   const startSensingBtn = document.querySelector("[data-start-sensing]") || document.getElementById("shoppingStartSensingBtn");
   const stopSensingBtn = document.querySelector("[data-stop-sensing]") || document.getElementById("shoppingStopSensingBtn");
-  const downloadSessionBtn = document.querySelector("[data-download-session]");
   const sensingAudio = document.querySelector("[data-sensing-audio]") || document.getElementById("shoppingSensingAudio");
   const spectrogramPanel = document.querySelector("[data-spectrogram-panel]") || document.getElementById("shoppingSpectrogramPanel");
   const spectrogramStatus = document.querySelector("[data-spectrogram-status]") || document.getElementById("shoppingSpectrogramStatus");
@@ -256,9 +255,6 @@ document.addEventListener("DOMContentLoaded", () => {
       stopSensingBtn.disabled = true;
       stopSensingBtn.hidden = true;
       stopSensingBtn.setAttribute("aria-hidden", "true");
-    }
-    if (downloadSessionBtn) {
-      downloadSessionBtn.disabled = !preparedSessionFiles.length || active;
     }
     if (recordingProfileSelect) {
       recordingProfileSelect.disabled = active;
@@ -523,25 +519,18 @@ document.addEventListener("DOMContentLoaded", () => {
   function setPreparedSessionFiles(files) {
     preparedSessionFiles = (Array.isArray(files) ? files : [])
       .filter((file) => file && file.name && (file.blob || file.url));
-    if (!downloadSessionBtn) {
-      return;
-    }
-
-    const hasFiles = preparedSessionFiles.length > 0;
-    downloadSessionBtn.hidden = !hasFiles;
-    downloadSessionBtn.disabled = !hasFiles || sensingActive;
-    downloadSessionBtn.textContent = hasFiles
-      ? `Download session files (${preparedSessionFiles.length})`
-      : "Download session files";
   }
 
   function downloadPreparedSessionFiles() {
     if (!preparedSessionFiles.length || sensingActive) {
-      return;
+      return 0;
     }
 
     const downloadCount = downloadFileArtifacts(preparedSessionFiles);
-    setSensingStatus(`Download started for ${downloadCount} session files.`);
+    setSensingStatus(
+      `Sensing is stopped. Automatic download started for ${downloadCount} session files.`
+    );
+    return downloadCount;
   }
 
   function clampPcmSample(sample) {
@@ -2051,7 +2040,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!recordedAudioBuffer) {
       setPreparedSessionFiles(sessionFiles);
       setSensingStatus(sessionFiles.length
-        ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+        ? "Sensing stopped without microphone audio. Preparing automatic tracking-file downloads."
         : "Sensing stopped, but no microphone recording was captured.");
       resetRecordingBuffers();
       return sessionFiles;
@@ -2093,9 +2082,9 @@ document.addEventListener("DOMContentLoaded", () => {
       setPreparedSessionFiles(sessionFiles);
 
       if (figureFiles.length > 0) {
-        setSensingStatus(`Sensing is stopped. ${sessionFiles.length} session files are ready, including ${figureFiles.length} processed feature figures. Choose Download session files to save them.`);
+        setSensingStatus(`Sensing is stopped. Prepared ${sessionFiles.length} session files, including ${figureFiles.length} processed feature figures. Starting automatic download...`);
       } else {
-        setSensingStatus(`Sensing is stopped. ${sessionFiles.length} session files are ready. Choose Download session files to save them. Exact Python figures require serving the app with webagent/server.py.`);
+        setSensingStatus(`Sensing is stopped. Prepared ${sessionFiles.length} session files. Starting automatic download... Exact Python figures require serving the app with webagent/server.py.`);
       }
     } catch (error) {
       setPreparedSessionFiles(sessionFiles);
@@ -2326,13 +2315,11 @@ document.addEventListener("DOMContentLoaded", () => {
       stopSensingCapture();
 
       if (prepareFiles) {
-        if (downloadSessionBtn) {
-          downloadSessionBtn.disabled = true;
-        }
         setSensingStatus(durationLimitReached
           ? `Maximum ${maximumSensingDurationSeconds}-second recording reached. Preparing session files...`
           : "Sensing stopped. Preparing session files...");
         await prepareRecordedAudio(completedRecording, { timestamp, trackingArtifacts });
+        downloadPreparedSessionFiles();
       } else {
         resetRecordingBuffers();
         setSensingStatus(`Sensing is stopped. ${siteLabel} is not being tracked.`);
@@ -2574,17 +2561,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (downloadSessionBtn) {
-    downloadSessionBtn.addEventListener("click", () => {
-      downloadPreparedSessionFiles();
-    });
-  }
-
   window.addEventListener("webagent:track-event", (event) => {
     recordRealtimeEventMarker(event.detail);
   });
 
-  window.experimentSensing = {
+  const sensingApi = {
     isPlaybackActive: () => Boolean(chirpSourceNode),
     getRecordingChannelCount: () => recordingChannelCount,
     getRecordedFrameCount: () => recordedFrameCount,
@@ -2596,6 +2577,7 @@ document.addEventListener("DOMContentLoaded", () => {
     getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
     getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
     getRealtimePointCount: () => realtimeFeaturePoints.length,
+    isRealtimeConnected: () => Boolean(realtimeSocket),
     renderGeneratedFigures,
     renderWindowPredictions,
     clearFeatureVisualizations,
@@ -2612,12 +2594,15 @@ document.addEventListener("DOMContentLoaded", () => {
       waveformPoints: realtimeWaveformPoints.length,
       status: realtimeLastStatusMessage,
       realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
+      audioEventOffsetMs: getLocalStorageNumber("webagentAudioEventOffsetMs", 80),
       latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
       doppler: dopplerVisualization.getDebugState(),
       latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
       markers: realtimeEventMarkers.slice(-8)
     })
   };
+  window.experimentSensing = sensingApi;
+  window.webAgentSensing = sensingApi;
 
   window.addEventListener("pagehide", () => {
     clearSensingDurationTimer();

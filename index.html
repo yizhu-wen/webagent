@@ -384,7 +384,6 @@
         <div id="filePrompt" class="file-prompt hidden">
           <button id="startSensingBtn" class="prompt-button" type="button">Start sensing</button>
           <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
-          <button id="downloadSessionBtn" class="prompt-button hidden" type="button" disabled hidden>Download session files</button>
         </div>
         <div class="event-log-actions">
           <a class="prompt-button experiment-link" href="experiments/">Open shopping experiment</a>
@@ -454,7 +453,6 @@
     const filePrompt = document.getElementById("filePrompt");
     const startSensingBtn = document.getElementById("startSensingBtn");
     const stopSensingBtn = document.getElementById("stopSensingBtn");
-    const downloadSessionBtn = document.getElementById("downloadSessionBtn");
     const receivedAudio = document.getElementById("receivedAudio");
     const spectrogramPanel = document.getElementById("spectrogramPanel");
     const spectrogramStatus = document.getElementById("spectrogramStatus");
@@ -1553,7 +1551,6 @@
       startSensingBtn.disabled = !fileReady && !sensingActive;
       startSensingBtn.textContent = sensingActive ? "Stop sensing" : "Start sensing";
       startSensingBtn.setAttribute("aria-pressed", String(sensingActive));
-      downloadSessionBtn.disabled = !preparedSessionFiles.length || sensingActive;
       recordingProfileSelect.disabled = sensingActive || recordingSessionActive || playbackStartInProgress;
       if (stopSensingBtn) {
         stopSensingBtn.disabled = true;
@@ -1613,22 +1610,17 @@
     function setPreparedSessionFiles(files) {
       preparedSessionFiles = (Array.isArray(files) ? files : [])
         .filter((file) => file && file.name && (file.blob || file.url));
-      const hasFiles = preparedSessionFiles.length > 0;
-      downloadSessionBtn.hidden = !hasFiles;
-      downloadSessionBtn.classList.toggle("hidden", !hasFiles);
-      downloadSessionBtn.disabled = !hasFiles || sensingSessionActive || recordingSessionActive;
-      downloadSessionBtn.textContent = hasFiles
-        ? `Download session files (${preparedSessionFiles.length})`
-        : "Download session files";
     }
 
     function downloadPreparedSessionFiles() {
       if (!preparedSessionFiles.length || sensingSessionActive || recordingSessionActive) {
-        return;
+        return 0;
       }
 
       const downloadCount = downloadFileArtifacts(preparedSessionFiles);
-      fileStatus.textContent = `Download started for ${downloadCount} session files.`;
+      fileStatus.textContent =
+        `Sensing stopped. Automatic download started for ${downloadCount} session files.`;
+      return downloadCount;
     }
 
     function showSpectrogramStatus(message) {
@@ -2959,7 +2951,7 @@
       if (!recordedAudioBuffer) {
         setPreparedSessionFiles(sessionFiles);
         fileStatus.textContent = sessionFiles.length
-          ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+          ? "Sensing stopped without microphone audio. Preparing automatic tracking-file downloads."
           : "Sensing stopped, but no microphone recording was captured.";
         return sessionFiles;
       }
@@ -3000,9 +2992,9 @@
         setPreparedSessionFiles(sessionFiles);
 
         if (figureFiles.length > 0) {
-          fileStatus.textContent = `Sensing stopped. ${sessionFiles.length} session files are ready, including ${figureFiles.length} processed feature figures. Choose Download session files to save them.`;
+          fileStatus.textContent = `Sensing stopped. Prepared ${sessionFiles.length} session files, including ${figureFiles.length} processed feature figures. Starting automatic download...`;
         } else {
-          fileStatus.textContent = `Sensing stopped. ${sessionFiles.length} session files are ready. Choose Download session files to save them. Exact Python figures require serving the app with server.py.`;
+          fileStatus.textContent = `Sensing stopped. Prepared ${sessionFiles.length} session files. Starting automatic download... Exact Python figures require serving the app with server.py.`;
         }
       } catch (error) {
         setPreparedSessionFiles(sessionFiles);
@@ -3097,7 +3089,6 @@
         setInteractionTrackingEnabled(false);
         startSensingBtn.disabled = true;
         stopSensingBtn.disabled = true;
-        downloadSessionBtn.disabled = true;
         stopChirpPlayback();
         stopRealtimeSession();
         receivedAudio.currentTime = 0;
@@ -3106,6 +3097,7 @@
           : "Sensing stopped. Preparing session files...";
 
         await stopRecordingSession({ timestamp, trackingArtifacts });
+        downloadPreparedSessionFiles();
         setSensingControls(Boolean(pendingFileUrl), false);
       } finally {
         clearSensingDurationTimer();
@@ -3209,7 +3201,7 @@
       } else {
         setPreparedSessionFiles((options.trackingArtifacts && options.trackingArtifacts.files) || []);
         fileStatus.textContent = preparedSessionFiles.length
-          ? "Sensing stopped without microphone audio. The tracking files are ready to download."
+          ? "Sensing stopped without microphone audio. Preparing automatic tracking-file downloads."
           : "Sensing stopped, but no microphone recording was captured.";
         return false;
       }
@@ -3359,10 +3351,6 @@
 
     stopSensingBtn.addEventListener("click", async () => {
       await stopSensing();
-    });
-
-    downloadSessionBtn.addEventListener("click", () => {
-      downloadPreparedSessionFiles();
     });
 
     receivedAudio.addEventListener("ended", () => {

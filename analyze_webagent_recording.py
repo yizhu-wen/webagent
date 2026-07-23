@@ -19,7 +19,6 @@ import numpy as np
 from matplotlib.colors import ListedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
-from scipy.signal import stft
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR / "scripts"))
@@ -36,10 +35,8 @@ ACTION_COLORS = {
 from signal_event_cnn import split_feature_matrices  # noqa: E402
 from train_signal_event_model import (  # noqa: E402
     EPS,
-    FC,
     FS_SLOW,
     RANGE_PER_SAMPLE_CM,
-    SPEED_OF_SOUND,
     FeatureConfig,
     compute_recording_features,
     extract_features,
@@ -60,10 +57,6 @@ FIGURE_DESCRIPTIONS = {
         "Median-normalized left/right wrapped phase-change lines made from the "
         "10 matched-filter lag bins with the greatest temporal variation, with "
         "time-aligned key, pointer-move, scroll, and click markers."
-    ),
-    "02_doppler_velocity.png": (
-        "Shows motion speed and direction over time. Energy away from zero indicates "
-        "movement; positive and negative velocities indicate opposite radial directions."
     ),
     "06_mlp_prediction_timeline.png": (
         "Audible-only MLP predictions from overlapping 0.5-second windows. The upper strip "
@@ -423,59 +416,6 @@ def plot_range_time(
     save_figure(fig, output)
 
 
-def plot_doppler_velocity(
-    output: Path,
-    correlation: np.ndarray,
-    time_offset: float,
-    top_bins: np.ndarray,
-) -> None:
-    strongest_bin = int(top_bins[0])
-    slow_signal = correlation[strongest_bin] - np.mean(correlation[strongest_bin])
-    nperseg = min(64, len(slow_signal))
-    if nperseg < 8:
-        raise ValueError("Recording is too short for a Doppler map.")
-    noverlap = max(0, nperseg - max(2, nperseg // 12))
-    frequencies, times, spectrum = stft(
-        slow_signal,
-        fs=FS_SLOW,
-        window="hann",
-        nperseg=nperseg,
-        noverlap=noverlap,
-        nfft=128,
-        return_onesided=False,
-        boundary=None,
-        padded=False,
-    )
-    frequencies = np.fft.fftshift(frequencies)
-    spectrum_db = 20 * np.log10(np.abs(np.fft.fftshift(spectrum, axes=0)) + EPS)
-    velocity_cm_s = frequencies * (SPEED_OF_SOUND / FC) / 2 * 100
-    vmin, vmax = robust_limits(spectrum_db, 5, 99.5)
-
-    fig, axis = plt.subplots(figsize=(13, 5.5))
-    image = axis.imshow(
-        spectrum_db,
-        origin="lower",
-        aspect="auto",
-        extent=[
-            times[0] + time_offset,
-            times[-1] + time_offset,
-            velocity_cm_s[0],
-            velocity_cm_s[-1],
-        ],
-        cmap="inferno",
-        vmin=vmin,
-        vmax=vmax,
-    )
-    axis.axhline(0, color="white", linewidth=0.8, alpha=0.7)
-    axis.set(
-        title="Doppler velocity-time map",
-        xlabel="Time (s)",
-        ylabel="Radial velocity (cm/s)",
-    )
-    fig.colorbar(image, ax=axis, label="Doppler energy (dB)")
-    save_figure(fig, output)
-
-
 def plot_range_variability(
     output: Path,
     correlation: np.ndarray,
@@ -782,12 +722,6 @@ def main() -> None:
 
     plot_stage4_feature_changes(args.out_dir, feature_maps, action_markers)
 
-    plot_doppler_velocity(
-        args.out_dir / "02_doppler_velocity.png",
-        correlation,
-        recording.offset_seconds,
-        top_bins,
-    )
     prediction_summary = None
     prediction_path = None
     if model_artifact is not None:

@@ -504,7 +504,9 @@
   window.interactionTracker = {
     trackEvent,
     prepareTrackingData,
+    prepareEventLog: prepareTrackingData,
     downloadTrackingData,
+    downloadEventLog: downloadTrackingData,
     getEvents: () => eventLog.slice(),
     getKeyboardEvents: () => keyboardEvents.slice(),
     getCursorEvents: () => cursorEvents.slice(),

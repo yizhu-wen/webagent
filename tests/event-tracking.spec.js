@@ -4,7 +4,7 @@ const { test, expect } = require("@playwright/test");
 test("downloads Python-style keyboard and cursor event files", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#downloadEventLogBtn")).toHaveCount(0);
-  await expect(page.locator("#downloadSessionBtn")).toBeHidden();
+  await expect(page.locator("#downloadSessionBtn")).toHaveCount(0);
   await expect(page.locator("#startSensingBtn")).toBeEnabled();
   await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
 
@@ -56,11 +56,6 @@ test("downloads Python-style keyboard and cursor event files", async ({ page }) 
   });
 
   await page.locator("#startSensingBtn").click();
-  await expect(page.locator("#downloadSessionBtn")).toBeVisible({ timeout: 20000 });
-  await expect(page.locator("#downloadSessionBtn")).toBeEnabled();
-  expect(downloads).toHaveLength(0);
-
-  await page.locator("#downloadSessionBtn").click();
   await expect.poll(() => (
     downloads.find((download) => download.suggestedFilename() === "keyboard_events.json")
       ? "ready"

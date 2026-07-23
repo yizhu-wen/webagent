@@ -105,7 +105,6 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
 
   const startButton = page.locator("#startSensingBtn");
   const stopButton = page.locator("#stopSensingBtn");
-  const downloadButton = page.locator("#downloadSessionBtn");
   const sensingState = () => page.evaluate(() => {
     const audio = document.getElementById("receivedAudio");
     return {
@@ -118,7 +117,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   await expect(startButton).toBeVisible();
   await expect(startButton).toBeEnabled();
   await expect(stopButton).toBeHidden();
-  await expect(downloadButton).toBeHidden();
+  await expect(page.locator("#downloadSessionBtn")).toHaveCount(0);
 
   await startButton.click();
 
@@ -150,8 +149,6 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
     { timeout: 15000 }
   ).toBe(false);
   await expect(stopButton).toBeHidden();
-  await expect(downloadButton).toBeVisible({ timeout: 20000 });
-  await expect(downloadButton).toBeEnabled();
   await expect(startButton).toBeEnabled();
   await expect(startButton).toHaveText("Start sensing");
   await expect(startButton).toHaveAttribute("aria-pressed", "false");
@@ -169,9 +166,6 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   });
   expect(spectrogramFormat.height).toBe(394);
   expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
-  expect(downloads).toHaveLength(0);
-
-  await downloadButton.click();
   await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(5);
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
