@@ -198,6 +198,7 @@
       props.pointerType ? `pointerType=${props.pointerType}` : "",
       Number.isFinite(props.button) ? `button=${props.button}` : "",
       Number.isFinite(props.buttons) ? `buttons=${props.buttons}` : "",
+      typeof props.pressed === "boolean" ? `pressed=${props.pressed}` : "",
       Number.isFinite(props.pressure) ? `pressure=${props.pressure.toFixed(3)}` : "",
       Number.isFinite(props.x) ? `x=${props.x}` : "",
       Number.isFinite(props.y) ? `y=${props.y}` : "",
@@ -245,13 +246,25 @@
     return `${date}_${time}`;
   }
 
-  function buildOsLevelEventLog(events, downloadedEpochSeconds) {
+  function getAudioEventOffsetMs() {
+    const configured = Number.parseFloat(
+      window.localStorage.getItem("webagentAudioEventOffsetMs") || ""
+    );
+    return Number.isFinite(configured) ? configured : 80;
+  }
+
+  function buildOsLevelEventLog(events, downloadedEpochSeconds, audioStartEpochSeconds = null) {
     const startEpoch = Number.isFinite(startedEpochSeconds)
       ? startedEpochSeconds
       : getEpochSeconds(events[0] || {});
+    const audioStartEpoch = Number.isFinite(audioStartEpochSeconds)
+      ? audioStartEpochSeconds
+      : startEpoch;
 
     const lines = [
       `# start_epoch | ${startEpoch.toFixed(6)}`,
+      `# audio_start_epoch | ${audioStartEpoch.toFixed(6)}`,
+      `# audio_event_offset_ms | ${getAudioEventOffsetMs()}`,
       `# downloaded_epoch | ${downloadedEpochSeconds.toFixed(6)}`,
       `# session_id | ${sessionId}`,
       "# schema | webagent_os_events_v1",
@@ -350,14 +363,21 @@
     setInteractionTrackingEnabled(true);
   }
 
-  function prepareTrackingData(timestampSlug = buildDownloadTimestamp()) {
+  function prepareTrackingData(
+    timestampSlug = buildDownloadTimestamp(),
+    audioStartEpochSeconds = null
+  ) {
     const downloadedAt = new Date();
     const payload = {
       keyboardEvents: keyboardEvents.slice(),
       cursorEvents: cursorEvents.slice()
     };
     const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
-    const osEventLog = buildOsLevelEventLog(eventLog.slice(), downloadedEpochSeconds);
+    const osEventLog = buildOsLevelEventLog(
+      eventLog.slice(),
+      downloadedEpochSeconds,
+      audioStartEpochSeconds
+    );
     return {
       payload,
       keyboardEvents: payload.keyboardEvents,

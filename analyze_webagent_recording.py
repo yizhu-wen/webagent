@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import matplotlib
@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import joblib
 import numpy as np
 from matplotlib.colors import ListedColormap
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from scipy.signal import stft
 
@@ -24,6 +25,13 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR / "scripts"))
 
 DEFAULT_MLP_MODEL = SCRIPT_DIR / "models" / "signal_event_model_audible_only.joblib"
+DEFAULT_AUDIO_EVENT_OFFSET_MS = 80.0
+ACTION_COLORS = {
+    "keydown": "#d62728",
+    "pointer_move": "#1f77b4",
+    "scroll": "#17becf",
+    "click": "#9467bd",
+}
 
 from signal_event_cnn import split_feature_matrices  # noqa: E402
 from train_signal_event_model import (  # noqa: E402
@@ -46,11 +54,13 @@ from ultrasonic_feature_maps import extract_stage4_traces  # noqa: E402
 FIGURE_DESCRIPTIONS = {
     "stage4_signal_events_amplitude_change.png": (
         "Median-normalized left/right amplitude-change lines made from the 10 "
-        "matched-filter lag bins with the greatest temporal variation."
+        "matched-filter lag bins with the greatest temporal variation, with "
+        "time-aligned key, pointer-move, scroll, and click markers."
     ),
     "stage4_signal_events_phase_change.png": (
         "Median-normalized left/right wrapped phase-change lines made from the "
-        "10 matched-filter lag bins with the greatest temporal variation."
+        "10 matched-filter lag bins with the greatest temporal variation, with "
+        "time-aligned key, pointer-move, scroll, and click markers."
     ),
     "02_doppler_velocity.png": (
         "Shows motion speed and direction over time. Energy away from zero indicates "
@@ -66,6 +76,16 @@ FIGURE_DESCRIPTIONS = {
         "shows the predicted event label and the lower trace shows prediction confidence."
     ),
 }
+
+
+@dataclass(frozen=True)
+class ActionMarker:
+    """One browser action aligned to the start of the captured audio."""
+
+    name: str
+    time_seconds: float
+    label: str
+    value: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,12 +115,220 @@ def save_figure(fig: plt.Figure, path: Path) -> None:
     plt.close(fig)
 
 
+def _event_field(value: str, name: str) -> str | None:
+    prefix = f"{name}="
+    for token in value.split():
+        if token.startswith(prefix):
+            return token[len(prefix) :]
+    return None
+
+
+def _event_label(name: str, value: str) -> str:
+    if name == "keydown":
+        code = _event_field(value, "code")
+        if code and code.startswith("Key") and len(code) == 4:
+            return code[3:]
+        return _event_field(value, "key") or "key"
+    if name == "pointer_move":
+        return "move"
+    return name
+
+
+def load_action_markers(events_path: Path | None) -> list[ActionMarker]:
+    """Parse the browser's pipe-delimited event log into audio-relative actions."""
+    if events_path is None or not events_path.exists():
+        return []
+
+    headers: dict[str, str] = {}
+    raw_events: list[tuple[str, str, float]] = []
+    for raw_line in events_path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            header_parts = [part.strip() for part in line[1:].split("|", 1)]
+            if len(header_parts) == 2:
+                headers[header_parts[0].lower()] = header_parts[1]
+            continue
+
+        parts = [part.strip() for part in line.rsplit("|", 2)]
+        if len(parts) != 3:
+            continue
+        name = parts[0].lower()
+        if name not in ACTION_COLORS:
+            continue
+        try:
+            epoch_seconds = float(parts[2])
+        except ValueError:
+            continue
+        raw_events.append((name, parts[1], epoch_seconds))
+
+    if not raw_events:
+        return []
+
+    reference_epoch_text = (
+        headers.get("audio_start_epoch")
+        or headers.get("start_epoch")
+    )
+    try:
+        reference_epoch = float(reference_epoch_text)
+    except (TypeError, ValueError):
+        reference_epoch = raw_events[0][2]
+    try:
+        audio_event_offset_ms = float(
+            headers.get("audio_event_offset_ms", DEFAULT_AUDIO_EVENT_OFFSET_MS)
+        )
+    except ValueError:
+        audio_event_offset_ms = DEFAULT_AUDIO_EVENT_OFFSET_MS
+
+    markers = []
+    pending_legacy_click_epoch: float | None = None
+    for name, value, epoch_seconds in raw_events:
+        if name == "click":
+            pressed = _event_field(value, "pressed")
+            if pressed == "false":
+                continue
+            if pressed is None:
+                if (
+                    pending_legacy_click_epoch is not None
+                    and epoch_seconds - pending_legacy_click_epoch <= 0.5
+                ):
+                    pending_legacy_click_epoch = None
+                    continue
+                pending_legacy_click_epoch = epoch_seconds
+        time_seconds = (
+            epoch_seconds
+            - reference_epoch
+            + audio_event_offset_ms / 1000.0
+        )
+        if time_seconds < 0:
+            continue
+        markers.append(
+            ActionMarker(
+                name=name,
+                time_seconds=time_seconds,
+                label=_event_label(name, value),
+                value=value,
+            )
+        )
+    return markers
+
+
+def _activity_spans(
+    markers: list[ActionMarker],
+    name: str,
+    time_min: float,
+    time_max: float,
+    gap_seconds: float = 0.30,
+) -> list[tuple[float, float]]:
+    """Group dense pointer or scroll samples into readable activity spans."""
+    times = sorted(
+        marker.time_seconds
+        for marker in markers
+        if marker.name == name and time_min <= marker.time_seconds <= time_max
+    )
+    if not times:
+        return []
+
+    spans: list[tuple[float, float]] = []
+    start = previous = times[0]
+    for current in times[1:]:
+        if current - previous > gap_seconds:
+            spans.append(
+                (max(time_min, start - 0.05), min(time_max, previous + 0.05))
+            )
+            start = current
+        previous = current
+    spans.append((max(time_min, start - 0.05), min(time_max, previous + 0.05)))
+    return spans
+
+
+def overlay_action_markers(
+    axis: plt.Axes,
+    markers: list[ActionMarker],
+    time_min: float,
+    time_max: float,
+) -> list[Line2D | Patch]:
+    """Overlay the four tracked action types using the realtime chart colors."""
+    visible = [
+        marker
+        for marker in markers
+        if time_min <= marker.time_seconds <= time_max
+    ]
+    if not visible:
+        return []
+
+    legend_handles: list[Line2D | Patch] = []
+    for name, display_name in (
+        ("pointer_move", "move"),
+        ("scroll", "scroll"),
+    ):
+        spans = _activity_spans(visible, name, time_min, time_max)
+        if not spans:
+            continue
+        color = ACTION_COLORS[name]
+        for span_start, span_end in spans:
+            axis.axvspan(span_start, span_end, color=color, alpha=0.10, linewidth=0)
+            axis.text(
+                (span_start + span_end) / 2,
+                0.98,
+                display_name,
+                color=color,
+                fontsize=9,
+                fontweight="bold",
+                ha="center",
+                va="top",
+                transform=axis.get_xaxis_transform(),
+            )
+        legend_handles.append(
+            Patch(facecolor=color, alpha=0.18, label=display_name)
+        )
+
+    for name, line_style in (("keydown", ":"), ("click", "--")):
+        selected = [marker for marker in visible if marker.name == name]
+        if not selected:
+            continue
+        color = ACTION_COLORS[name]
+        for marker in selected:
+            axis.axvline(
+                marker.time_seconds,
+                color=color,
+                linewidth=1.3,
+                linestyle=line_style,
+                alpha=0.62,
+            )
+            axis.text(
+                marker.time_seconds,
+                0.98,
+                marker.label,
+                color=color,
+                fontsize=9,
+                fontweight="bold",
+                ha="right",
+                va="top",
+                rotation=90,
+                transform=axis.get_xaxis_transform(),
+            )
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=color,
+                linewidth=1.5,
+                linestyle=line_style,
+                label="key" if name == "keydown" else "click",
+            )
+        )
+    return legend_handles
+
+
 def plot_stage4_feature_trace(
     output: Path,
     feature: str,
     time_seconds: np.ndarray,
     normalized_left: np.ndarray,
     normalized_right: np.ndarray,
+    action_markers: list[ActionMarker],
 ) -> None:
     """Save the same final two-series line chart as the reference demo."""
     fig, axis = plt.subplots(figsize=(16, 5.5))
@@ -128,7 +356,20 @@ def plot_stage4_feature_trace(
     axis.set_xlabel("time (s)", fontsize=13)
     axis.tick_params(axis="both", labelsize=11)
     axis.margins(x=0)
-    axis.legend(loc="best", framealpha=0.95, fontsize=12)
+    action_handles = overlay_action_markers(
+        axis,
+        action_markers,
+        float(time_seconds[0]),
+        float(time_seconds[-1]),
+    )
+    trace_handles, _ = axis.get_legend_handles_labels()
+    axis.legend(
+        handles=[*trace_handles, *action_handles],
+        loc="best",
+        framealpha=0.95,
+        fontsize=11,
+        ncol=min(6, 2 + len(action_handles)),
+    )
     axis.set_title(feature.capitalize(), fontsize=16, fontweight="bold")
     fig.tight_layout()
     fig.savefig(output, dpi=130, bbox_inches="tight")
@@ -138,6 +379,7 @@ def plot_stage4_feature_trace(
 def plot_stage4_feature_changes(
     output_dir: Path,
     feature_maps: dict[str, np.ndarray | float],
+    action_markers: list[ActionMarker],
 ) -> None:
     """Render the latest reference-format amplitude and phase line charts."""
     for feature in ("amplitude", "phase"):
@@ -147,6 +389,7 @@ def plot_stage4_feature_changes(
             np.asarray(feature_maps["time"]),
             np.asarray(feature_maps[f"{feature}_left_trace"]),
             np.asarray(feature_maps[f"{feature}_right_trace"]),
+            action_markers,
         )
 
 
@@ -579,6 +822,7 @@ def main() -> None:
     )
     samples, sample_rate = read_audio(args.wav)
     feature_maps = extract_stage4_traces(samples, sample_rate)
+    action_markers = load_action_markers(args.events)
     recording = compute_recording_features(samples, sample_rate, config, "combined")
     if recording.C is None or recording.dphi is None or recording.top_bins is None:
         raise RuntimeError("Ultrasound feature extraction did not produce correlation maps.")
@@ -592,7 +836,7 @@ def main() -> None:
     range_cm = np.arange(correlation.shape[0]) * RANGE_PER_SAMPLE_CM
     amplitude_db = 20 * np.log10(np.abs(correlation) + EPS)
 
-    plot_stage4_feature_changes(args.out_dir, feature_maps)
+    plot_stage4_feature_changes(args.out_dir, feature_maps, action_markers)
 
     plot_doppler_velocity(
         args.out_dir / "02_doppler_velocity.png",
@@ -675,6 +919,8 @@ def main() -> None:
         "predictionFile": prediction_path.name if prediction_path is not None else None,
         "prediction": prediction_summary,
         "featureConfig": asdict(config),
+        "actionMarkerCount": len(action_markers),
+        "actionMarkerCounts": dict(Counter(marker.name for marker in action_markers)),
         "figures": FIGURE_DESCRIPTIONS,
     }
     (args.out_dir / "analysis_summary.json").write_text(

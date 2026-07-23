@@ -268,9 +268,11 @@ Both shopping and travel:
 The Stop-time Python pipeline always generates these model-independent figures:
 
 - `stage4_signal_events_amplitude_change.png`: median-normalized left/right
-  amplitude-change lines from each channel's 10 most-variable lag bins.
+  amplitude-change lines from each channel's 10 most-variable lag bins, with
+  time-aligned key, pointer-move, scroll, and click markers.
 - `stage4_signal_events_phase_change.png`: median-normalized left/right wrapped
-  phase-change lines from each channel's 10 most-variable lag bins.
+  phase-change lines from each channel's 10 most-variable lag bins, with the
+  same action markers.
 - `02_doppler_velocity.png`: slow-time Doppler energy versus recording time
   and radial velocity.
 - `05_derived_motion_traces.png`: dominant reflection range, phase-derived

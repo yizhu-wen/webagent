@@ -103,10 +103,11 @@ http://localhost:8124/
   separate from the optional browser download; neither the internal diagnostics
   nor the compatibility stream is included in downloaded session files.
 - After Stop, Python produces the same Stage-4 amplitude-change and phase-change
-  line charts as `extract_feature_maps_demo.py`, plus a Doppler velocity-time
-  map and derived motion/band-energy traces. When a compatible MLP model is
-  available, it also predicts overlapping 0.5-second windows and displays their
-  labels and confidence.
+  line charts as `extract_feature_maps_demo.py`, with time-aligned key,
+  pointer-move, scroll, and click markers. It also produces a Doppler
+  velocity-time map and derived motion/band-energy traces. When a compatible
+  MLP model is available, it predicts overlapping 0.5-second windows and
+  displays their labels and confidence.
 - This checkout does not currently contain `models/`. Train or provide
   `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
   prediction timeline and table. The Stage-4, Doppler, and derived-feature

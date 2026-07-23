@@ -2313,7 +2313,10 @@ document.addEventListener("DOMContentLoaded", () => {
       sensingActive = false;
       let trackingArtifacts = null;
       if (prepareFiles) {
-        trackingArtifacts = window.interactionTracker.prepareTrackingData(timestamp);
+        trackingArtifacts = window.interactionTracker.prepareTrackingData(
+          timestamp,
+          realtimeSessionStartEpoch
+        );
       }
       window.interactionTracker.setEnabled(false);
       setSensingControls(Boolean(micStream), false);
