@@ -22,6 +22,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const realtimePanel = document.querySelector("[data-realtime-panel]");
   const realtimeStatus = document.querySelector("[data-realtime-status]");
   const realtimeCanvas = document.querySelector("[data-realtime-canvas]");
+  const dopplerStatus = document.querySelector("[data-doppler-status]");
+  const dopplerCanvas = document.querySelector("[data-doppler-canvas]");
   const recordingProfileSelect = document.querySelector("[data-recording-profile]");
   const recordingProfileDescription = document.querySelector("[data-recording-profile-description]");
   const recordingProfiles = window.webAgentRecordingProfiles;
@@ -79,7 +81,18 @@ document.addEventListener("DOMContentLoaded", () => {
   let realtimeFramesSent = 0;
   let realtimeFramesReceived = 0;
   let realtimeFeaturesReceived = 0;
+  let realtimeDopplerColumnsReceived = 0;
   let realtimeFramesDroppedBeforeSend = 0;
+  const dopplerVisualization = window.WebAgentMicroDoppler.create({
+    canvas: dopplerCanvas,
+    statusNode: dopplerStatus,
+    timelineDurationSeconds: realtimeTimelineDurationSeconds,
+    timelineTickSeconds: realtimeTimelineTickSeconds,
+    stillRegions: realtimeStillRegions,
+    maximumPoints: 1000,
+    getMarkers: () => realtimeEventMarkers,
+    initialStatus: "Start sensing to see live left/right micro-Doppler heatmaps."
+  });
   let activeRecordingProfileId = recordingProfiles.normalizeProfileId(getLocalStorageItem("webagentRecordingProfile"));
   let microphoneRequestDetails = null;
   let microphoneQualification = null;
@@ -931,9 +944,13 @@ document.addEventListener("DOMContentLoaded", () => {
     realtimeFramesSent = 0;
     realtimeFramesReceived = 0;
     realtimeFeaturesReceived = 0;
+    realtimeDopplerColumnsReceived = 0;
     realtimeFramesDroppedBeforeSend = 0;
     realtimeSessionStartEpoch = null;
     drawRealtimeChart();
+    dopplerVisualization.reset(
+      "Waiting for chirp alignment and the first 64-chirp Doppler window."
+    );
   }
 
   function queueRealtimeChartDraw() {
@@ -1290,6 +1307,11 @@ document.addEventListener("DOMContentLoaded", () => {
     queueRealtimeChartDraw();
   }
 
+  function appendRealtimeDoppler(message) {
+    realtimeDopplerColumnsReceived += 1;
+    dopplerVisualization.append(message, realtimeSessionStartEpoch);
+  }
+
   function appendRealtimeWaveform(samples) {
     if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch) || !samples || !samples.length) {
       return;
@@ -1375,6 +1397,7 @@ document.addEventListener("DOMContentLoaded", () => {
       realtimeEventMarkers.splice(0, realtimeEventMarkers.length - realtimeMaxMarkers);
     }
     queueRealtimeChartDraw();
+    dopplerVisualization.queueDraw();
   }
 
   function handleRealtimeMessage(rawData) {
@@ -1389,18 +1412,31 @@ document.addEventListener("DOMContentLoaded", () => {
       appendRealtimeFeature(message);
       return;
     }
+    if (message.type === "doppler") {
+      appendRealtimeDoppler(message);
+      return;
+    }
     if (message.type === "alignment") {
       setRealtimeStatus(`Live Python IQ aligned. Peak/base ${Number(message.peak_over_baseline || 0).toFixed(1)}x.`);
+      dopplerVisualization.setStatus(
+        "Chirp aligned. Collecting the first 64 post-trim chirps for Doppler."
+      );
       return;
     }
     if (message.type === "status") {
       if (message.status === "connected") {
         setRealtimeStatus("Live backend connected. Waiting for sensing frames...");
+        dopplerVisualization.setStatus(
+          "Live backend connected. Waiting for sensing frames."
+        );
       } else if (message.status === "started") {
         const resampleText = message.resampling
           ? ` Resampling ${message.sample_rate} Hz to ${message.processing_sample_rate} Hz.`
           : "";
         setRealtimeStatus(`Live Python IQ running.${resampleText}`);
+        dopplerVisualization.setStatus(
+          `Collecting aligned complex chirps for micro-Doppler.${resampleText}`
+        );
       } else if (message.status === "frames") {
         realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
         if (!realtimeFeaturesReceived) {
@@ -1416,13 +1452,26 @@ document.addEventListener("DOMContentLoaded", () => {
             : "";
           setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
         }
+        if (!realtimeDopplerColumnsReceived) {
+          dopplerVisualization.setStatus(
+            message.aligned
+              ? "Aligned. Doppler begins after the 3-second trim and first 64-chirp window."
+              : "Waiting for chirp alignment before collecting Doppler data."
+          );
+        }
       } else if (message.status === "stopped") {
         setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);
+        dopplerVisualization.setStatus(
+          `Micro-Doppler stopped with ${realtimeDopplerColumnsReceived} time columns.`
+        );
       }
       return;
     }
     if (message.type === "warning" || message.type === "error") {
       setRealtimeStatus(`Live Python IQ: ${message.message || message.type}`);
+      dopplerVisualization.setStatus(
+        `Live micro-Doppler: ${message.message || message.type}`
+      );
     }
   }
 
@@ -2553,6 +2602,7 @@ document.addEventListener("DOMContentLoaded", () => {
       framesSent: realtimeFramesSent,
       framesReceived: realtimeFramesReceived,
       featuresReceived: realtimeFeaturesReceived,
+      dopplerColumnsReceived: realtimeDopplerColumnsReceived,
       framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
       recordedFrameCount,
       points: realtimeFeaturePoints.length,
@@ -2560,6 +2610,7 @@ document.addEventListener("DOMContentLoaded", () => {
       status: realtimeLastStatusMessage,
       realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
       latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+      doppler: dopplerVisualization.getDebugState(),
       latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
       markers: realtimeEventMarkers.slice(-8)
     })

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="styles.css">
   <script src="tracker.js" defer></script>
   <script src="../recording-profile.js" defer></script>
+  <script src="../micro-doppler-visualization.js" defer></script>
   <script src="site.js" defer></script>
 </head>
 <body data-site-slug="simple-shopping">
@@ -44,6 +45,18 @@
         <h2>Live Python IQ</h2>
         <p data-realtime-status>Start sensing to see live Stage-4 amplitude-change and phase-change lines.</p>
         <canvas class="realtime-canvas" width="820" height="620" data-realtime-canvas></canvas>
+      </div>
+      <div class="realtime-panel" data-doppler-panel>
+        <h2>Live Micro-Doppler</h2>
+        <p data-doppler-status>Start sensing to see live left/right micro-Doppler heatmaps.</p>
+        <canvas
+          class="realtime-canvas"
+          width="820"
+          height="520"
+          data-doppler-canvas
+          role="img"
+          aria-label="Live left and right ultrasonic micro-Doppler heatmaps"
+        ></canvas>
       </div>
       <div class="feature-visualization-panel" data-feature-visualization-panel hidden>
         <h2>Processed feature visualizations</h2>

@@ -398,6 +398,20 @@
             <canvas id="realtimeCanvas" class="realtime-canvas" width="820" height="620"></canvas>
           </div>
         </div>
+        <div id="dopplerPanel" class="realtime-panel">
+          <h4>Live Micro-Doppler</h4>
+          <p id="dopplerStatus">Start sensing to see live left/right micro-Doppler heatmaps.</p>
+          <div class="realtime-chart-wrap">
+            <canvas
+              id="dopplerCanvas"
+              class="realtime-canvas"
+              width="820"
+              height="520"
+              role="img"
+              aria-label="Live left and right ultrasonic micro-Doppler heatmaps"
+            ></canvas>
+          </div>
+        </div>
         <div id="spectrogramPanel" class="spectrogram-panel hidden">
           <h4>Recorded Spectrogram</h4>
           <p id="spectrogramStatus">Generating spectrogram...</p>
@@ -433,6 +447,7 @@
   </main>
 
   <script src="recording-profile.js"></script>
+  <script src="micro-doppler-visualization.js"></script>
   <script>
     const micStatus = document.getElementById("micStatus");
     const fileStatus = document.getElementById("fileStatus");
@@ -452,6 +467,8 @@
     const windowPredictionBody = document.getElementById("windowPredictionBody");
     const realtimeStatus = document.getElementById("realtimeStatus");
     const realtimeCanvas = document.getElementById("realtimeCanvas");
+    const dopplerStatus = document.getElementById("dopplerStatus");
+    const dopplerCanvas = document.getElementById("dopplerCanvas");
     const recordingProfileSelect = document.getElementById("recordingProfile");
     const recordingProfileDescription = document.getElementById("recordingProfileDescription");
     const recordingProfiles = window.webAgentRecordingProfiles;
@@ -492,6 +509,7 @@
     let realtimeFramesSent = 0;
     let realtimeFramesReceived = 0;
     let realtimeFeaturesReceived = 0;
+    let realtimeDopplerColumnsReceived = 0;
     let realtimeFramesDroppedBeforeSend = 0;
     let activeRecordingProfileId = recordingProfiles.normalizeProfileId(getLocalStorageItem("webagentRecordingProfile"));
     let microphoneQualification = null;
@@ -618,6 +636,16 @@
       maxSocketBufferedBytes: 512 * 1024,
       audioFrameHeaderBytes: 20
     };
+    const dopplerVisualization = window.WebAgentMicroDoppler.create({
+      canvas: dopplerCanvas,
+      statusNode: dopplerStatus,
+      timelineDurationSeconds: realtimeConfig.timelineDurationSeconds,
+      timelineTickSeconds: realtimeConfig.timelineTickSeconds,
+      stillRegions: realtimeConfig.stillRegions,
+      maximumPoints: 1000,
+      getMarkers: () => realtimeEventMarkers,
+      initialStatus: "Start sensing to see live left/right micro-Doppler heatmaps."
+    });
 
     const trackingConfig = {
       maxCompatibilityEvents: 10000
@@ -1084,6 +1112,7 @@
         framesSent: realtimeFramesSent,
         framesReceived: realtimeFramesReceived,
         featuresReceived: realtimeFeaturesReceived,
+        dopplerColumnsReceived: realtimeDopplerColumnsReceived,
         framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
         recordedFrameCount,
         points: realtimeFeaturePoints.length,
@@ -1092,6 +1121,7 @@
         realtimeWebSocketUrl: appConfig.realtimeWebSocketUrl || null,
         audioEventOffsetMs: appConfig.audioEventOffsetMs,
         latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+        doppler: dopplerVisualization.getDebugState(),
         latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
         markers: realtimeEventMarkers.slice(-8)
       })
@@ -1614,9 +1644,13 @@
       realtimeFramesSent = 0;
       realtimeFramesReceived = 0;
       realtimeFeaturesReceived = 0;
+      realtimeDopplerColumnsReceived = 0;
       realtimeFramesDroppedBeforeSend = 0;
       realtimeSessionStartEpoch = null;
       drawRealtimeChart();
+      dopplerVisualization.reset(
+        "Waiting for chirp alignment and the first 64-chirp Doppler window."
+      );
     }
 
     function queueRealtimeChartDraw() {
@@ -1970,6 +2004,11 @@
       queueRealtimeChartDraw();
     }
 
+    function appendRealtimeDoppler(message) {
+      realtimeDopplerColumnsReceived += 1;
+      dopplerVisualization.append(message, realtimeSessionStartEpoch);
+    }
+
     function getRealtimeMarkerColor(name) {
       return {
         keydown: "#d62728",
@@ -2032,6 +2071,7 @@
         realtimeEventMarkers.splice(0, realtimeEventMarkers.length - realtimeConfig.maxMarkers);
       }
       queueRealtimeChartDraw();
+      dopplerVisualization.queueDraw();
     }
 
     function toMonoChannel(audioBuffer) {
@@ -2237,18 +2277,31 @@
         appendRealtimeFeature(message);
         return;
       }
+      if (message.type === "doppler") {
+        appendRealtimeDoppler(message);
+        return;
+      }
       if (message.type === "alignment") {
         setRealtimeStatus(`Live Python IQ aligned. Peak/base ${Number(message.peak_over_baseline || 0).toFixed(1)}x.`);
+        dopplerVisualization.setStatus(
+          "Chirp aligned. Collecting the first 64 post-trim chirps for Doppler."
+        );
         return;
       }
       if (message.type === "status") {
         if (message.status === "connected") {
           setRealtimeStatus("Live backend connected. Waiting for sensing frames...");
+          dopplerVisualization.setStatus(
+            "Live backend connected. Waiting for sensing frames."
+          );
         } else if (message.status === "started") {
           const resampleText = message.resampling
             ? ` Resampling ${message.sample_rate} Hz to ${message.processing_sample_rate} Hz.`
             : "";
           setRealtimeStatus(`Live Python IQ running.${resampleText}`);
+          dopplerVisualization.setStatus(
+            `Collecting aligned complex chirps for micro-Doppler.${resampleText}`
+          );
         } else if (message.status === "frames") {
           realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
           if (!realtimeFeaturesReceived) {
@@ -2264,13 +2317,26 @@
               : "";
             setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
           }
+          if (!realtimeDopplerColumnsReceived) {
+            dopplerVisualization.setStatus(
+              message.aligned
+                ? "Aligned. Doppler begins after the 3-second trim and first 64-chirp window."
+                : "Waiting for chirp alignment before collecting Doppler data."
+            );
+          }
         } else if (message.status === "stopped") {
           setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);
+          dopplerVisualization.setStatus(
+            `Micro-Doppler stopped with ${realtimeDopplerColumnsReceived} time columns.`
+          );
         }
         return;
       }
       if (message.type === "warning" || message.type === "error") {
         setRealtimeStatus(`Live Python IQ: ${message.message || message.type}`);
+        dopplerVisualization.setStatus(
+          `Live micro-Doppler: ${message.message || message.type}`
+        );
       }
     }
 

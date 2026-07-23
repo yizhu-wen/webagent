@@ -171,6 +171,31 @@ session; the completed recording is recalculated offline using the full trace.
 Realtime filtering is causal, while completed-recording processing uses the
 reference script's zero-phase filter.
 
+## Realtime Micro-Doppler
+
+The same realtime processor retains the complex matched-filter maps needed for
+micro-Doppler processing. It follows the supplied `doppler.py` configuration:
+
+- 12 motion-sensitive lag bins per ultrasonic band
+- 64-chirp Hann window (`0.768 s`)
+- 8-chirp hop (`0.096 s`, approximately `10.4 Hz` updates)
+- 256-point slow-time FFT
+- fixed `-30 dB` to `0 dB` relative-power color scale
+
+The website displays this output in a separate **Live Micro-Doppler** panel with
+stacked left-band and right-band heatmaps. Time is horizontal, Doppler frequency
+is vertical, and Turbo color represents relative motion power. Event markers
+and the beginning/end still regions share the same 40-second timeline as the
+raw audio and Stage-4 lines.
+
+The sample script selects bins and removes clutter using the complete
+recording. Realtime mode instead maintains exact accumulated statistics up to
+the current chirp and subtracts the accumulated complex mean from the trailing
+64-chirp window. Consequently, the first Doppler column appears about `3.8 s`
+after sensing starts with the existing 3-second trim, and its window-center
+timestamp has `0.384 s` latency. Completed-recording Doppler remains the exact
+offline reference.
+
 `SharedArrayBuffer`, a browser DSP worker, and ONNX Runtime Web are not part of
 the current path: live IQ and model processing run in the Python backend. Those
 changes require cross-origin isolation and a browser-deployable model and should

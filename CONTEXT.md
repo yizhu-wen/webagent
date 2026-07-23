@@ -211,6 +211,17 @@ recordings use zero-phase filtering and the full unsampled feature map, so those
 offline Stage-4 figures are the exact reference result; realtime uses causal
 filtering and transport downsampling because future samples are unavailable.
 
+The processor also emits `doppler` messages for a separate realtime
+micro-Doppler panel. It maintains accumulated top-12 motion-bin statistics for
+each band, removes the accumulated complex mean as causal MTI clutter
+suppression, and applies a 64-chirp Hann window with an 8-chirp hop and
+256-point slow-time FFT. Messages contain the shared Doppler-frequency axis and
+left/right `-30..0 dB` power columns. This gives approximately `10.4 Hz`
+updates, a `0.768 s` analysis window, and `0.384 s` window-center latency after
+the existing 3-second trim. The browser renders separate stacked left and right
+Turbo heatmaps on the same fixed 40-second time axis and overlays tracked event
+markers and still regions.
+
 The architecture review's `SharedArrayBuffer`, dedicated browser DSP worker,
 and ONNX Runtime Web path is intentionally deferred. The current application
 performs DSP and inference in Python over WebSocket, is not configured for
@@ -249,6 +260,8 @@ Both shopping and travel:
 - Show the recorded spectrogram on the page after Stop.
 - Show every MLP prediction window in a time-aligned table after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.
+- Show the shared separate Live Micro-Doppler panel with left/right stacked
+  heatmaps driven by the same `/realtime` WebSocket.
 
 ## Figure Generation
 

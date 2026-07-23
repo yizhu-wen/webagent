@@ -88,6 +88,10 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Live Python IQ" })).toBeVisible();
     await expect(page.locator("[data-realtime-canvas]")).toBeVisible();
     await expect(page.locator("[data-realtime-status]")).toContainText("Start sensing");
+    await expect(page.getByRole("heading", { name: "Live Micro-Doppler" })).toBeVisible();
+    await expect(page.locator("[data-doppler-canvas]")).toBeVisible();
+    await expect(page.locator("[data-doppler-canvas]")).toHaveAttribute("height", "520");
+    await expect(page.locator("[data-doppler-status]")).toContainText("Start sensing");
     await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
     await expect(page.locator("[data-recording-profile]")).toHaveValue("ultrasonic");
     await expect(page.locator("[data-recording-profile] option")).toHaveText([
@@ -101,6 +105,8 @@ test("experiment pages expose live Python IQ panels", async ({ page }) => {
     const debugState = await page.evaluate(() => window.experimentSensing.getRealtimeDebugState());
     expect(debugState.realtimeWebSocketUrl).toMatch(/\/realtime$/);
     expect(debugState.points).toBe(0);
+    expect(debugState.dopplerColumnsReceived).toBe(0);
+    expect(debugState.doppler.points).toBe(0);
     expect(await page.evaluate(() => window.experimentSensing.getRecordingProfile().id)).toBe("ultrasonic");
     expect(await page.evaluate(() => window.experimentSensing.getMaximumSensingDurationSeconds())).toBe(40);
     expect(await page.evaluate(() => window.experimentSensing.isDurationLimitTimerActive())).toBe(false);

@@ -7,8 +7,9 @@ Run from the project root or webagent folder:
 
 This standalone debug server receives raw Float32 microphone frames at
 ws://127.0.0.1:8765 and returns JSON left/right amplitude-change and
-phase-change source columns for live Stage-4 line plotting. The deployed app
-uses server.py's same-origin /realtime endpoint.
+phase-change source columns for live Stage-4 line plotting, plus left/right
+micro-Doppler spectrum columns. The deployed app uses server.py's same-origin
+/realtime endpoint.
 """
 
 from __future__ import annotations

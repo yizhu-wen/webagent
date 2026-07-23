@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Streaming source-map extraction for live Stage-4 feature traces.
+"""Streaming extraction for live Stage-4 traces and micro-Doppler heatmaps.
 
 The completed-recording reference uses zero-phase filtering. A live stream has
 no future samples, so this processor uses the causal form of the same sixth-
@@ -7,16 +7,18 @@ order Butterworth band filters. Chirp references, alignment, normalized matched
 filtering, lag bins, and amplitude/phase change definitions match
 ``ultrasonic_feature_maps.py`` and the supplied feature-line demo. The browser
 uses accumulated map columns for top-10 variable-bin selection, averaging, and
-median normalization while drawing the live lines.
+median normalization while drawing the live lines. The processor also retains
+complex maps for causal top-12-bin MTI and slow-time Doppler FFT columns.
 """
 
 from __future__ import annotations
 
 import math
+from collections import deque
 from pathlib import Path
 
 import numpy as np
-from scipy.signal import butter, correlate, hilbert, resample_poly, sosfilt
+from scipy.signal import butter, correlate, get_window, hilbert, resample_poly, sosfilt
 
 from ultrasonic_feature_maps import (
     CHIRP_DURATION,
@@ -45,6 +47,16 @@ N_TRI = CHIRP_SAMPLES
 ALIGNMENT_CHIRPS = 7
 ALIGN_SEARCH_SECONDS = 1.5
 FEATURE_EMIT_STRIDE_CHIRPS = 4
+DOPPLER_TOP_K = 12
+DOPPLER_WINDOW_CHIRPS = 64
+DOPPLER_HOP_CHIRPS = 8
+DOPPLER_NFFT = 256
+DOPPLER_DB_FLOOR = -30.0
+DOPPLER_SLOW_RATE_HZ = 1.0 / CHIRP_DURATION
+DOPPLER_FREQUENCIES_HZ = np.fft.fftshift(
+    np.fft.fftfreq(DOPPLER_NFFT, d=CHIRP_DURATION)
+)
+DOPPLER_WINDOW = get_window("hann", DOPPLER_WINDOW_CHIRPS)
 
 
 class StreamingIqProcessor:
@@ -96,6 +108,28 @@ class StreamingIqProcessor:
         self.pending_phase_left: list[np.ndarray] = []
         self.pending_phase_right: list[np.ndarray] = []
         self.pending_window_start_sample = None
+        self.doppler_left_window: deque[np.ndarray] = deque(
+            maxlen=DOPPLER_WINDOW_CHIRPS
+        )
+        self.doppler_right_window: deque[np.ndarray] = deque(
+            maxlen=DOPPLER_WINDOW_CHIRPS
+        )
+        self.doppler_map_count = 0
+        self.doppler_change_count = 0
+        self.doppler_left_mean = np.zeros(len(LAGS), dtype=np.complex128)
+        self.doppler_right_mean = np.zeros(len(LAGS), dtype=np.complex128)
+        self.doppler_previous_left_map = None
+        self.doppler_previous_right_map = None
+        self.doppler_left_change_sum = np.zeros(len(LAGS), dtype=np.float64)
+        self.doppler_right_change_sum = np.zeros(len(LAGS), dtype=np.float64)
+        self.doppler_left_change_square_sum = np.zeros(
+            len(LAGS), dtype=np.float64
+        )
+        self.doppler_right_change_square_sum = np.zeros(
+            len(LAGS), dtype=np.float64
+        )
+        self.doppler_left_echo_sum = np.zeros(len(LAGS), dtype=np.float64)
+        self.doppler_right_echo_sum = np.zeros(len(LAGS), dtype=np.float64)
 
     def _resample_if_needed(self, samples: np.ndarray) -> np.ndarray:
         if self.input_sample_rate == FS:
@@ -160,13 +194,148 @@ class StreamingIqProcessor:
         """Downsample for transport without modifying a retained column."""
         return pending[-1]
 
+    @staticmethod
+    def _select_doppler_bins(
+        change_sum: np.ndarray,
+        change_square_sum: np.ndarray,
+        echo_sum: np.ndarray,
+        count: int,
+    ) -> np.ndarray:
+        if count <= 0:
+            return np.arange(min(DOPPLER_TOP_K, len(change_sum)))
+        mean_change = change_sum / count
+        change_variance = np.maximum(
+            change_square_sum / count - mean_change * mean_change,
+            0.0,
+        )
+        score = np.sqrt(change_variance) * (echo_sum / count)
+        return np.sort(np.argsort(score)[::-1][:DOPPLER_TOP_K])
+
+    @staticmethod
+    def _doppler_power_column(
+        maps: deque[np.ndarray],
+        running_mean: np.ndarray,
+        selected_bins: np.ndarray,
+    ) -> np.ndarray:
+        window_maps = np.stack(tuple(maps), axis=1)
+        moving_maps = window_maps - running_mean[:, np.newaxis]
+        selected = moving_maps[selected_bins] * DOPPLER_WINDOW[np.newaxis, :]
+        spectrum = np.fft.fft(selected, n=DOPPLER_NFFT, axis=1)
+        power = np.sum(np.abs(spectrum) ** 2, axis=0)
+        power = np.fft.fftshift(power)
+        if float(np.max(power)) <= EPS:
+            return np.full(DOPPLER_NFFT, DOPPLER_DB_FLOOR, dtype=np.float64)
+        power_db = 10.0 * np.log10(power + EPS)
+        power_db -= np.max(power_db)
+        return np.clip(power_db, DOPPLER_DB_FLOOR, 0.0)
+
+    def _update_doppler(
+        self,
+        left_map: np.ndarray,
+        right_map: np.ndarray,
+        time_seconds: float,
+    ) -> dict | None:
+        self.doppler_map_count += 1
+        map_count = self.doppler_map_count
+        self.doppler_left_mean += (
+            left_map - self.doppler_left_mean
+        ) / map_count
+        self.doppler_right_mean += (
+            right_map - self.doppler_right_mean
+        ) / map_count
+        self.doppler_left_window.append(left_map.copy())
+        self.doppler_right_window.append(right_map.copy())
+
+        if (
+            self.doppler_previous_left_map is not None
+            and self.doppler_previous_right_map is not None
+        ):
+            left_change = np.abs(
+                np.abs(left_map) - np.abs(self.doppler_previous_left_map)
+            )
+            right_change = np.abs(
+                np.abs(right_map) - np.abs(self.doppler_previous_right_map)
+            )
+            self.doppler_change_count += 1
+            self.doppler_left_change_sum += left_change
+            self.doppler_right_change_sum += right_change
+            self.doppler_left_change_square_sum += left_change * left_change
+            self.doppler_right_change_square_sum += right_change * right_change
+            self.doppler_left_echo_sum += np.abs(left_map)
+            self.doppler_right_echo_sum += np.abs(right_map)
+
+        self.doppler_previous_left_map = left_map
+        self.doppler_previous_right_map = right_map
+
+        if (
+            len(self.doppler_left_window) < DOPPLER_WINDOW_CHIRPS
+            or map_count % DOPPLER_HOP_CHIRPS
+        ):
+            return None
+
+        left_bins = self._select_doppler_bins(
+            self.doppler_left_change_sum,
+            self.doppler_left_change_square_sum,
+            self.doppler_left_echo_sum,
+            self.doppler_change_count,
+        )
+        right_bins = self._select_doppler_bins(
+            self.doppler_right_change_sum,
+            self.doppler_right_change_square_sum,
+            self.doppler_right_echo_sum,
+            self.doppler_change_count,
+        )
+        left_power_db = self._doppler_power_column(
+            self.doppler_left_window,
+            self.doppler_left_mean,
+            left_bins,
+        )
+        right_power_db = self._doppler_power_column(
+            self.doppler_right_window,
+            self.doppler_right_mean,
+            right_bins,
+        )
+        window_start_time = (
+            time_seconds - (DOPPLER_WINDOW_CHIRPS - 1) * CHIRP_DURATION
+        )
+        center_time = (
+            window_start_time + DOPPLER_WINDOW_CHIRPS / 2 * CHIRP_DURATION
+        )
+        return {
+            "type": "doppler",
+            "method": "causal_micro_doppler_top12_mti_stft",
+            "time": center_time,
+            "timestamp": (
+                self.start_epoch + center_time
+                if self.start_epoch is not None
+                else None
+            ),
+            "window_start_time": window_start_time,
+            "window_end_time": time_seconds + CHIRP_DURATION,
+            "latency_seconds": (
+                time_seconds + CHIRP_DURATION - center_time
+            ),
+            "timestamp_source": "doppler_window_center",
+            "window_chirps": DOPPLER_WINDOW_CHIRPS,
+            "hop_chirps": DOPPLER_HOP_CHIRPS,
+            "nfft": DOPPLER_NFFT,
+            "slow_rate_hz": DOPPLER_SLOW_RATE_HZ,
+            "db_floor": DOPPLER_DB_FLOOR,
+            "frequencies_hz": np.round(DOPPLER_FREQUENCIES_HZ, 4).tolist(),
+            "left_power_db": np.round(left_power_db, 3).tolist(),
+            "right_power_db": np.round(right_power_db, 3).tolist(),
+            "left_selected_bins": left_bins.tolist(),
+            "right_selected_bins": right_bins.tolist(),
+        }
+
     def _process_one_chirp(
         self,
         left_samples: np.ndarray,
         right_samples: np.ndarray,
         left_start_sample: int,
         right_start_sample: int,
-    ) -> dict | None:
+    ) -> list[dict]:
+        output: list[dict] = []
         left_map = matched_filter_frame(hilbert(left_samples), self.reference_left)
         right_map = matched_filter_frame(hilbert(right_samples), self.reference_right)
 
@@ -174,7 +343,7 @@ class StreamingIqProcessor:
             self.previous_left_map = left_map
             self.previous_right_map = right_map
             self.chirp_index += 1
-            return None
+            return output
 
         amplitude_left, phase_left = calculate_change_vectors(
             self.previous_left_map, left_map
@@ -188,13 +357,18 @@ class StreamingIqProcessor:
         time_seconds = left_start_sample / FS
         if time_seconds < START_TRIM_SEC:
             self.chirp_index += 1
-            return None
+            return output
+
+        doppler = self._update_doppler(left_map, right_map, time_seconds)
+        if doppler is not None:
+            output.append(doppler)
+
         if not self.trim_complete:
             # The batch reference keeps its first post-trim complex column and
             # assigns the first change to the following column.
             self.trim_complete = True
             self.chirp_index += 1
-            return None
+            return output
 
         if self.pending_window_start_sample is None:
             self.pending_window_start_sample = left_start_sample
@@ -205,7 +379,7 @@ class StreamingIqProcessor:
         self.chirp_index += 1
 
         if len(self.pending_amplitude_left) < FEATURE_EMIT_STRIDE_CHIRPS:
-            return None
+            return output
 
         amplitude_left_out = self._sample_latest(self.pending_amplitude_left)
         amplitude_right_out = self._sample_latest(self.pending_amplitude_right)
@@ -218,7 +392,7 @@ class StreamingIqProcessor:
         self.pending_phase_right.clear()
         self.pending_window_start_sample = None
 
-        feature = {
+        output.append({
             "type": "feature_map",
             "method": "stage4_top10_source_maps",
             "time": time_seconds,
@@ -242,8 +416,8 @@ class StreamingIqProcessor:
             "amplitude_change_right": np.round(amplitude_right_out, 6).tolist(),
             "phase_change_left": np.round(phase_left_out, 5).tolist(),
             "phase_change_right": np.round(phase_right_out, 5).tolist(),
-        }
-        return feature
+        })
+        return output
 
     def push_samples(self, samples: np.ndarray) -> list[dict]:
         if samples.size == 0:
@@ -276,14 +450,13 @@ class StreamingIqProcessor:
             self.right_buffer = self.right_buffer[N_TRI:]
             self.left_buffer_start_sample += N_TRI
             self.right_buffer_start_sample += N_TRI
-            feature = self._process_one_chirp(
+            results = self._process_one_chirp(
                 left_chirp,
                 right_chirp,
                 left_start,
                 right_start,
             )
-            if feature is not None:
-                output.append(feature)
+            output.extend(results)
 
         max_keep = N_TRI * 8
         if len(self.left_buffer) > max_keep:
