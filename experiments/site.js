@@ -1031,7 +1031,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.translate(x + 2, area.top + 4);
         ctx.rotate(-Math.PI / 2);
         ctx.fillStyle = marker.color;
-        ctx.font = "11px 'Segoe UI', sans-serif";
+        ctx.font = "13px 'Segoe UI', sans-serif";
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
         ctx.fillText(marker.label, 0, 0);
@@ -1045,11 +1045,11 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.strokeStyle = "rgba(46, 36, 28, 0.24)";
       ctx.strokeRect(area.left, area.top, area.width, area.height);
       ctx.fillStyle = "#2e241c";
-      ctx.font = "15px 'Segoe UI', sans-serif";
+      ctx.font = "17px 'Segoe UI', sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
       ctx.fillText(title, area.left, area.top - 5);
-      ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.font = "13px 'Segoe UI', sans-serif";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       for (let index = 0; index < tickValues.length; index += 1) {
@@ -1070,7 +1070,7 @@ document.addEventListener("DOMContentLoaded", () => {
       drawTimeGrid(rawArea);
       ctx.save();
       ctx.fillStyle = "rgba(145, 25, 25, 0.9)";
-      ctx.font = "bold 11px 'Segoe UI', sans-serif";
+      ctx.font = "bold 13px 'Segoe UI', sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const region of realtimeStillRegions) {
@@ -1204,7 +1204,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ["0", (maximum / 2).toFixed(1), maximum.toFixed(1)]
       );
       ctx.save();
-      ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.font = "13px 'Segoe UI', sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#1f77b4";
       ctx.fillRect(area.right - 154, area.top + 8, 18, 2);
@@ -1240,7 +1240,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     ctx.save();
     ctx.fillStyle = "rgba(46, 36, 28, 0.76)";
-    ctx.font = "12px 'Segoe UI', sans-serif";
+    ctx.font = "14px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (
@@ -1250,12 +1250,12 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
       ctx.fillText(`${seconds}s`, xToPx(seconds), phaseArea.bottom + 12);
     }
-    ctx.font = "13px 'Segoe UI', sans-serif";
+    ctx.font = "15px 'Segoe UI', sans-serif";
     ctx.fillText("Recording time (s)", width / 2, height - 18);
     if (!visiblePoints.length && !visibleWaveformPoints.length) {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "15px 'Segoe UI', sans-serif";
+      ctx.font = "17px 'Segoe UI', sans-serif";
       ctx.fillText(realtimeLastStatusMessage, width / 2, height / 2);
     }
     ctx.restore();
