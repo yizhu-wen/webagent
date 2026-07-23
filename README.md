@@ -88,13 +88,20 @@ http://localhost:8124/
 - Every sensing session stops automatically after 40 seconds. Captured PCM is
   also capped by sample count, so an exported WAV cannot exceed 40 seconds.
 - Stopping sensing does not download files automatically. It prepares the
-  tracking JSON, OS-style event log, WAV, spectrogram, and diagnostics in the
-  browser. Click **Download session files** when you want to save them.
-- While sensing is active, the page tracks only keystrokes (`keydown`), pointer
-  movement, scrolling, and clicks. No gesture or form-event records are derived.
-- The completed WAV, diagnostics, and event log are also sent to the local
+  Python-style `keyboard_events.json`, `cursor_events.json`, and `metadata.json`
+  files together with the received-audio WAV and spectrogram. Click **Download
+  session files** when you want to save them. `metadata.json` follows the
+  standalone Python recorder's field names and includes the signal parameters,
+  actual duration, recording/scenario names, capture method, detected input
+  type, protocol phases, browser-visible OS information, and event counts.
+- While sensing is active, `keyboard_events.json` records key down/up events,
+  dwell time, and keydown-to-keydown flight time. `cursor_events.json` records
+  pointer movement, click press/release, and wheel/touchpad scrolling. All `t`
+  values are seconds relative to sensing start.
+- The completed WAV, internal diagnostics, and an internal compatibility event stream are also sent to the local
   `/api/analyze-recording` endpoint for post-processing. This backend upload is
-  separate from the optional browser download.
+  separate from the optional browser download; neither the internal diagnostics
+  nor the compatibility stream is included in downloaded session files.
 - When a compatible MLP model is available, the Python analysis pipeline calculates and displays
   two full-width feature views: a Doppler velocity-time map and derived
   motion/band-energy traces. It also runs the saved audible-only MLP on
@@ -104,7 +111,7 @@ http://localhost:8124/
 - This checkout does not currently contain `models/`. Train or provide
   `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
   figures and prediction table. Without it, browser-side recording,
-  spectrogram, diagnostics, tracking, and explicit downloads still work.
+  spectrogram, metadata, tracking, and explicit downloads still work.
 - The main page, shopping experiment, and travel experiment all use the same realtime `/realtime` backend.
 - Use `Ctrl+C` in the terminal to stop the local server.
 - For browser microphone access, `localhost` is the recommended local URL.
@@ -125,9 +132,10 @@ getUserMedia microphone track
 The worklet output is connected through a zero-gain node only to keep the Web
 Audio graph active; microphone input is never monitored to the speaker. WAV
 export remains mono 32-bit IEEE-float PCM. Chirp playback is scheduled 50 ms
-ahead on the same AudioContext timeline after capture is ready. The browser also records clipping,
-worklet sequence gaps, WebSocket backpressure drops, actual track settings, and
-the capture method in each diagnostics JSON file.
+ahead on the same AudioContext timeline after capture is ready. The browser also
+collects clipping, worklet sequence gaps, WebSocket backpressure drops, actual
+track settings, and capture-method diagnostics for the local analysis request;
+this detailed diagnostics object is not a user download.
 
 Use the **Recording profile** selector before sensing:
 
@@ -144,7 +152,7 @@ Use the **Recording profile** selector before sensing:
 The selected profile is shared across pages through
 `localStorage.webagentRecordingProfile`. Browser settings cannot prove that the
 operating system, driver, or audio hardware performs no additional processing,
-so use the diagnostics and recorded spectrum to qualify each device.
+so use the recorded spectrum to qualify each device.
 
 `SharedArrayBuffer`, a browser DSP worker, and ONNX Runtime Web are not part of
 the current path: live IQ and model processing run in the Python backend. Those

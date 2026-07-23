@@ -155,18 +155,34 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   await expect(startButton).toBeEnabled();
   await expect(startButton).toHaveText("Start sensing");
   await expect(startButton).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#spectrogramStatus")).toContainText("18-24 kHz");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.isDurationLimitTimerActive()
   ))).toBe(false);
+  const spectrogramFormat = await page.evaluate(() => {
+    const canvas = document.getElementById("spectrogramCanvas");
+    const context = canvas.getContext("2d");
+    return {
+      height: canvas.height,
+      background: Array.from(context.getImageData(0, 0, 1, 1).data)
+    };
+  });
+  expect(spectrogramFormat.height).toBe(394);
+  expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
   expect(downloads).toHaveLength(0);
 
   await downloadButton.click();
   await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(5);
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
+  expect(fileNames).toContain("keyboard_events.json");
+  expect(fileNames).toContain("cursor_events.json");
+  expect(fileNames.some((name) => name.startsWith("tracking_data_"))).toBe(false);
+  expect(fileNames.some((name) => name.startsWith("os_event_log_"))).toBe(false);
   expect(fileNames.some((name) => /^recording_\d{8}_\d{6}\.wav$/.test(name))).toBe(true);
   expect(fileNames.some((name) => /^recording_spectrogram_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
-  expect(fileNames.some((name) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(name))).toBe(true);
+  expect(fileNames).toContain("metadata.json");
+  expect(fileNames.some((name) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^input_events_amplitude_phase\.png$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^keydown_amplitude_phase\.png$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^01_alignment_and_recording_spectrogram_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
@@ -186,28 +202,25 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   const wavDurationSeconds = wav.readUInt32LE(40) / (48000 * 4);
   expect(wavDurationSeconds).toBeLessThanOrEqual(40);
 
-  const diagnosticsDownload = downloads.find((item) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(item.suggestedFilename()));
-  const diagnostics = JSON.parse(fs.readFileSync(await diagnosticsDownload.path(), "utf8"));
-  expect(diagnostics.requestedMicrophoneConstraints.channelCount.ideal).toBe(1);
-  expect(diagnostics.requestedMicrophoneConstraints.sampleRate.ideal).toBe(48000);
-  expect(diagnostics.requestedMicrophoneConstraints.echoCancellation.exact).toBe(false);
-  expect(diagnostics.recordingProfile.id).toBe("ultrasonic");
-  expect(diagnostics.microphoneQualification.processingDisabled).toBe(true);
-  expect(diagnostics.audioContext.sampleRate).toBe(48000);
-  expect(diagnostics.audioContext.qualification.supported).toBe(true);
-  expect(diagnostics.playback.scheduledStartTime).toBeGreaterThan(0);
-  expect(diagnostics.playback.scheduledStartFrame).toBeGreaterThan(0);
-  expect(diagnostics.recordingExport.encoding).toBe("IEEE_FLOAT");
-  expect(diagnostics.recordingExport.channels).toBe(1);
-  expect(diagnostics.recordingExport.bitsPerSample).toBe(32);
-  expect(diagnostics.recordingCapture.method).toContain("AudioWorklet");
-  expect(diagnostics.recordingCapture.frameSize).toBe(2048);
-  expect(diagnostics.recordingCapture.maximumDurationSeconds).toBe(40);
-  expect(diagnostics.recordingCapture.durationLimitReached).toBe(true);
-  expect(typeof diagnostics.recordingCapture.clippingDetected).toBe("boolean");
-  expect(diagnostics.recordingCapture.clippedSamples).toBeGreaterThanOrEqual(0);
-  expect(diagnostics.recordingCapture.workletFrameGaps).toBe(0);
-  expect(diagnostics.signalCheck.method).toBe("normalized_autocorrelation_near_12ms_chirp_period");
-  expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodSamples).toBe(576);
-  expect(diagnostics.signalCheck.chirpPeriodEstimate.expectedPeriodMs).toBe(12);
+  const metadataDownload = downloads.find((item) => item.suggestedFilename() === "metadata.json");
+  const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
+  expect(metadata.fs).toBe(48000);
+  expect(metadata.chirp_samples).toBe(576);
+  expect(metadata.left_band_hz).toEqual([19000, 20500]);
+  expect(metadata.right_band_hz).toEqual([21500, 23000]);
+  expect(metadata.tx_amplitude).toBe(0.12);
+  expect(metadata.duration_sec).toBeGreaterThan(0);
+  expect(metadata.duration_sec).toBeLessThanOrEqual(40);
+  expect(metadata.recording_name).toMatch(/^recording_\d{8}_\d{6}$/);
+  expect(metadata.scenario).toBe("Human");
+  expect(metadata.capture).toContain("AudioWorklet");
+  expect(metadata.input).toBe("Still");
+  expect(metadata.phases_sec).toEqual([
+    { start: 0, end: 5, label: "SIT STILL  (baseline)" },
+    { start: 5, end: 35, label: "DO ACTIONS (type / touchpad)" },
+    { start: 35, end: 40, label: "SIT STILL  (tail)" }
+  ]);
+  expect(typeof metadata.os.system).toBe("string");
+  expect(metadata.n_key_events).toBe(0);
+  expect(metadata.n_cursor_events).toBe(0);
 });

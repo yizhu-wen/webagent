@@ -1,18 +1,17 @@
 (() => {
   const trackingConfig = {
-    maxEvents: 10000,
-    pointerMoveThrottleMs: 120,
-    scrollThrottleMs: 120
+    maxCompatibilityEvents: 10000
   };
   const trackedEventNames = new Set(["keydown", "pointer_move", "scroll", "click"]);
   const eventLog = [];
+  const keyboardEvents = [];
+  const cursorEvents = [];
+  const keyDownTimes = new Map();
   const sessionId = createTrackingId();
   let startedAt = null;
   let startedEpochSeconds = null;
-  let lastPointerMoveTrackAt = 0;
-  let lastPointerMovePoint = null;
-  let lastScrollTrackAt = 0;
-  let lastScrollPoint = null;
+  let startedPerformanceMs = null;
+  let lastKeyDownTime = null;
   let interactionTrackingEnabled = false;
 
   function createTrackingId() {
@@ -70,11 +69,77 @@
     return descriptor;
   }
 
-  function getSafeKey(event) {
-    if (typeof event.key !== "string" || event.key.length === 0) {
-      return "Unidentified";
+  function getTrackedKeyName(event) {
+    const key = typeof event.key === "string" && event.key.length
+      ? event.key
+      : "Unidentified";
+    if (key.length === 1 && key !== " ") {
+      return key;
     }
-    return event.key.length === 1 ? "character" : event.key;
+
+    const codeAliases = {
+      AltLeft: "Key.alt",
+      AltRight: "Key.alt_r",
+      ControlLeft: "Key.ctrl",
+      ControlRight: "Key.ctrl_r",
+      MetaLeft: "Key.cmd",
+      MetaRight: "Key.cmd_r",
+      ShiftLeft: "Key.shift",
+      ShiftRight: "Key.shift_r"
+    };
+    if (codeAliases[event.code]) {
+      return codeAliases[event.code];
+    }
+
+    const keyAliases = {
+      " ": "Key.space",
+      ArrowDown: "Key.down",
+      ArrowLeft: "Key.left",
+      ArrowRight: "Key.right",
+      ArrowUp: "Key.up",
+      Backspace: "Key.backspace",
+      CapsLock: "Key.caps_lock",
+      Delete: "Key.delete",
+      End: "Key.end",
+      Enter: "Key.enter",
+      Escape: "Key.esc",
+      Home: "Key.home",
+      Insert: "Key.insert",
+      PageDown: "Key.page_down",
+      PageUp: "Key.page_up",
+      Tab: "Key.tab"
+    };
+    if (keyAliases[key]) {
+      return keyAliases[key];
+    }
+    return `Key.${key.toLowerCase().replace(/\s+/g, "_")}`;
+  }
+
+  function getRelativeTrackingTime(event) {
+    if (!Number.isFinite(startedPerformanceMs)) {
+      return 0;
+    }
+    const eventTime = event && Number.isFinite(event.timeStamp)
+      ? event.timeStamp
+      : performance.now();
+    return Math.max(0, (eventTime - startedPerformanceMs) / 1000);
+  }
+
+  function getPythonButtonName(button) {
+    return {
+      0: "Button.left",
+      1: "Button.middle",
+      2: "Button.right",
+      3: "Button.x1",
+      4: "Button.x2"
+    }[button] || `Button.${button}`;
+  }
+
+  function getScreenPoint(event) {
+    return {
+      x: Number.isFinite(event.screenX) ? event.screenX : event.clientX,
+      y: Number.isFinite(event.screenY) ? event.screenY : event.clientY
+    };
   }
 
   function sanitizePipeValue(value) {
@@ -222,7 +287,7 @@
       return;
     }
 
-    if (eventLog.length >= trackingConfig.maxEvents) {
+    if (eventLog.length >= trackingConfig.maxCompatibilityEvents) {
       eventLog.shift();
     }
 
@@ -243,59 +308,19 @@
     }));
   }
 
-  function getPointerMoveProperties(event) {
-    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
-    const movementY = Number.isFinite(event.movementY) ? event.movementY : 0;
-    const dx = lastPointerMovePoint ? event.clientX - lastPointerMovePoint.x : movementX;
-    const dy = lastPointerMovePoint ? event.clientY - lastPointerMovePoint.y : movementY;
-    return {
-      pointerId: event.pointerId,
-      pointerType: event.pointerType || "mouse",
-      isPrimary: event.isPrimary,
-      buttons: event.buttons,
-      pressure: Number.isFinite(event.pressure) ? event.pressure : 0,
-      x: event.clientX,
-      y: event.clientY,
-      pageX: event.pageX,
-      pageY: event.pageY,
-      dx,
-      dy,
-      movementX,
-      movementY,
-      target: getElementDescriptor(event.target)
-    };
-  }
-
   function trackPointerMove(event) {
     if (!interactionTrackingEnabled) {
       return;
     }
-
-    const now = performance.now();
-    if (now - lastPointerMoveTrackAt < trackingConfig.pointerMoveThrottleMs) {
-      return;
-    }
-
-    const properties = getPointerMoveProperties(event);
-    if (
-      lastPointerMovePoint &&
-      properties.dx === 0 &&
-      properties.dy === 0 &&
-      properties.movementX === 0 &&
-      properties.movementY === 0
-    ) {
-      return;
-    }
-
-    lastPointerMoveTrackAt = now;
-    lastPointerMovePoint = {
-      x: event.clientX,
-      y: event.clientY,
-      pageX: event.pageX,
-      pageY: event.pageY,
-      time: now
-    };
-    trackEvent("pointer_move", properties);
+    const point = getScreenPoint(event);
+    const t = getRelativeTrackingTime(event);
+    cursorEvents.push({ type: "move", x: point.x, y: point.y, t });
+    trackEvent("pointer_move", {
+      pointerType: event.pointerType || "mouse",
+      x: point.x,
+      y: point.y,
+      target: getElementDescriptor(event.target)
+    });
   }
 
   function setInteractionTrackingEnabled(enabled) {
@@ -308,56 +333,46 @@
       const startDate = new Date();
       startedAt = startedAt || startDate.toISOString();
       startedEpochSeconds = startedEpochSeconds ?? startDate.getTime() / 1000;
+      startedPerformanceMs = startedPerformanceMs ?? performance.now();
     }
   }
 
   function beginTrackingSession() {
     eventLog.length = 0;
+    keyboardEvents.length = 0;
+    cursorEvents.length = 0;
+    keyDownTimes.clear();
+    lastKeyDownTime = null;
     const startDate = new Date();
     startedAt = startDate.toISOString();
     startedEpochSeconds = startDate.getTime() / 1000;
-    lastPointerMoveTrackAt = 0;
-    lastPointerMovePoint = null;
-    lastScrollTrackAt = 0;
-    lastScrollPoint = null;
+    startedPerformanceMs = performance.now();
     setInteractionTrackingEnabled(true);
   }
 
-  function buildTrackingFileName(timestampSlug) {
-    const slug = document.body.dataset.siteSlug || "experiment";
-    return `tracking_data_${slug}_${timestampSlug}.json`;
-  }
-
   function prepareTrackingData(timestampSlug = buildDownloadTimestamp()) {
-    const events = eventLog.slice();
     const downloadedAt = new Date();
     const payload = {
-      schemaVersion: 1,
-      sessionId,
-      startedAt,
-      startEpochSeconds: startedEpochSeconds,
-      downloadedAt: downloadedAt.toISOString(),
-      downloadedEpochSeconds: downloadedAt.getTime() / 1000,
-      eventCount: events.length,
-      trackingConfig: { ...trackingConfig },
-      page: getPageInfo(),
-      events
+      keyboardEvents: keyboardEvents.slice(),
+      cursorEvents: cursorEvents.slice()
     };
     const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
-    const osEventLog = buildOsLevelEventLog(events, downloadedEpochSeconds);
+    const osEventLog = buildOsLevelEventLog(eventLog.slice(), downloadedEpochSeconds);
     return {
       payload,
+      keyboardEvents: payload.keyboardEvents,
+      cursorEvents: payload.cursorEvents,
       osEventLog,
       timestampSlug,
       downloadedEpochSeconds,
       files: [
         {
-          name: buildTrackingFileName(timestampSlug),
-          blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" })
+          name: "keyboard_events.json",
+          blob: new Blob([JSON.stringify(payload.keyboardEvents, null, 2)], { type: "application/json" })
         },
         {
-          name: `os_event_log_${timestampSlug}.txt`,
-          blob: new Blob([osEventLog], { type: "text/plain" })
+          name: "cursor_events.json",
+          blob: new Blob([JSON.stringify(payload.cursorEvents, null, 2)], { type: "application/json" })
         }
       ]
     };
@@ -374,56 +389,96 @@
       trackPointerMove(event);
     }, { passive: true, capture: true });
 
-    document.addEventListener("click", (event) => {
-      trackEvent("click", {
-        x: event.clientX,
-        y: event.clientY,
-        pageX: event.pageX,
-        pageY: event.pageY,
-        button: event.button,
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
-        target: getElementDescriptor(event.target)
-      });
-    }, true);
-
-    window.addEventListener("scroll", (event) => {
+    const trackPointerButton = (event, pressed) => {
       if (!interactionTrackingEnabled) {
         return;
       }
-      const now = performance.now();
-      if (now - lastScrollTrackAt < trackingConfig.scrollThrottleMs) {
-        return;
-      }
-      const scrollX = window.scrollX;
-      const scrollY = window.scrollY;
-      trackEvent("scroll", {
-        scrollX,
-        scrollY,
-        deltaX: lastScrollPoint ? scrollX - lastScrollPoint.x : 0,
-        deltaY: lastScrollPoint ? scrollY - lastScrollPoint.y : 0,
+      const point = getScreenPoint(event);
+      const t = getRelativeTrackingTime(event);
+      const button = getPythonButtonName(event.button);
+      cursorEvents.push({
+        type: "click",
+        x: point.x,
+        y: point.y,
+        button,
+        pressed,
+        t
+      });
+      trackEvent("click", {
+        x: point.x,
+        y: point.y,
+        button,
+        pressed,
+        pointerType: event.pointerType || "mouse",
         target: getElementDescriptor(event.target)
       });
-      lastScrollTrackAt = now;
-      lastScrollPoint = { x: scrollX, y: scrollY };
-    }, { passive: true });
+    };
+    document.addEventListener("pointerdown", (event) => {
+      trackPointerButton(event, true);
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      trackPointerButton(event, false);
+    }, true);
+
+    document.addEventListener("wheel", (event) => {
+      if (!interactionTrackingEnabled) {
+        return;
+      }
+      const point = getScreenPoint(event);
+      const t = getRelativeTrackingTime(event);
+      const dx = -event.deltaX;
+      const dy = -event.deltaY;
+      cursorEvents.push({ type: "scroll", x: point.x, y: point.y, dx, dy, t });
+      trackEvent("scroll", {
+        x: point.x,
+        y: point.y,
+        dx,
+        dy,
+        target: getElementDescriptor(event.target)
+      });
+    }, { passive: true, capture: true });
 
     document.addEventListener("keydown", (event) => {
+      if (!interactionTrackingEnabled) {
+        return;
+      }
+      const key = getTrackedKeyName(event);
+      const identity = event.code || key;
+      if (event.repeat || keyDownTimes.has(identity)) {
+        return;
+      }
+      const t = getRelativeTrackingTime(event);
+      keyboardEvents.push({
+        event: "down",
+        key,
+        t,
+        flight_sec: lastKeyDownTime === null ? null : t - lastKeyDownTime
+      });
+      keyDownTimes.set(identity, t);
+      lastKeyDownTime = t;
       trackEvent("keydown", {
-        key: getSafeKey(event),
+        key,
         code: event.code || "",
-        location: event.location,
-        repeat: event.repeat,
-        altKey: event.altKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        shiftKey: event.shiftKey,
         target: getElementDescriptor(event.target)
       });
     }, true);
 
+    document.addEventListener("keyup", (event) => {
+      if (!interactionTrackingEnabled) {
+        return;
+      }
+      const key = getTrackedKeyName(event);
+      const identity = event.code || key;
+      const t = getRelativeTrackingTime(event);
+      const downTime = keyDownTimes.has(identity) ? keyDownTimes.get(identity) : null;
+      keyDownTimes.delete(identity);
+      keyboardEvents.push({
+        event: "up",
+        key,
+        t,
+        dwell_sec: downTime === null ? null : t - downTime
+      });
+    }, true);
   }
 
   window.interactionTracker = {
@@ -431,6 +486,8 @@
     prepareTrackingData,
     downloadTrackingData,
     getEvents: () => eventLog.slice(),
+    getKeyboardEvents: () => keyboardEvents.slice(),
+    getCursorEvents: () => cursorEvents.slice(),
     getSessionId: () => sessionId,
     createTrackingId,
     isEnabled: () => interactionTrackingEnabled,

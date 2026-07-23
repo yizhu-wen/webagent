@@ -32,14 +32,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
+  const recordingScenario = document.body.dataset.recordingScenario
+    || siteLabel.replace(/\s+behavior$/i, "");
   const analysisApiUrl = "/api/analyze-recording";
   const targetSampleRate = 48000;
   const maximumSensingDurationSeconds = 40;
   const maximumSensingDurationMs = maximumSensingDurationSeconds * 1000;
   const realtimeFrameSize = 2048;
-  const realtimeWindowSeconds = 20;
-  const realtimeMaxPoints = 1400;
-  const realtimeMaxWaveformPoints = 6000;
+  const realtimeTimelineDurationSeconds = maximumSensingDurationSeconds;
+  const realtimeTimelineTickSeconds = 5;
+  const realtimeStillRegions = [
+    { start: 0, end: 5, label: "STILL" },
+    { start: 35, end: 40, label: "STILL" }
+  ];
+  const realtimeMaxPoints = 2400;
+  const realtimeMaxWaveformPoints = 10000;
   const realtimeMaxMarkers = 220;
   const realtimeWaveformPlotHz = 240;
   const realtimeMaxSocketBufferedBytes = 512 * 1024;
@@ -671,10 +678,75 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function buildAudioDiagnosticsArtifact(diagnostics, timestamp) {
+  function getBrowserOsMetadata() {
+    const userAgent = navigator.userAgent || "";
+    let system = "Unknown";
+    if (/Windows/i.test(userAgent)) {
+      system = "Windows";
+    } else if (/Macintosh|Mac OS X/i.test(userAgent)) {
+      system = "Darwin";
+    } else if (/Android/i.test(userAgent)) {
+      system = "Android";
+    } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+      system = "iOS";
+    } else if (/Linux/i.test(userAgent)) {
+      system = "Linux";
+    }
+
     return {
-      name: `${recordingFilePrefix}_diagnostics_${timestamp}.json`,
-      blob: new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" })
+      system,
+      release: null,
+      machine: null,
+      node: null
+    };
+  }
+
+  function detectMetadataInputTag(trackingArtifacts) {
+    const keyEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
+    const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
+    const hasKeyboard = keyEvents.some((event) => event.event === "down");
+    const hasCursor = cursorEvents.length > 0;
+    if (hasKeyboard && hasCursor) {
+      return "Mix";
+    }
+    if (hasKeyboard) {
+      return "Key";
+    }
+    if (hasCursor) {
+      return "Touch";
+    }
+    return "Still";
+  }
+
+  function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
+    const keyboardEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
+    const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
+    const metadata = {
+      fs: recordedAudioBuffer.sampleRate,
+      chirp_samples: Math.round(chirpPeriodSeconds * recordedAudioBuffer.sampleRate),
+      left_band_hz: [19000, 20500],
+      right_band_hz: [21500, 23000],
+      tx_amplitude: 0.12,
+      duration_sec: recordedAudioBuffer.duration,
+      recording_name: `${recordingFilePrefix}_${timestamp}`,
+      scenario: recordingScenario,
+      capture: diagnostics && diagnostics.recordingCapture
+        ? diagnostics.recordingCapture.method
+        : recordingCaptureMethod,
+      input: detectMetadataInputTag(trackingArtifacts),
+      phases_sec: [
+        { start: 0, end: 5, label: "SIT STILL  (baseline)" },
+        { start: 5, end: 35, label: "DO ACTIONS (type / touchpad)" },
+        { start: 35, end: 40, label: "SIT STILL  (tail)" }
+      ],
+      os: getBrowserOsMetadata(),
+      n_key_events: keyboardEvents.length,
+      n_cursor_events: cursorEvents.length
+    };
+
+    return {
+      name: "metadata.json",
+      blob: new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" })
     };
   }
 
@@ -941,18 +1013,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.fillStyle = "#fffdfa";
     ctx.fillRect(0, 0, width, height);
 
-    const latestFeatureTime = realtimeFeaturePoints.length
-      ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1].time
-      : 0;
-    const latestWaveformTime = realtimeWaveformPoints.length
-      ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1].time
-      : 0;
-    const latestMarkerTime = realtimeEventMarkers.length
-      ? realtimeEventMarkers[realtimeEventMarkers.length - 1].time
-      : 0;
-    const latestTime = Math.max(latestFeatureTime, latestWaveformTime, latestMarkerTime, realtimeWindowSeconds);
-    const xMax = Math.max(realtimeWindowSeconds, latestTime);
-    const xMin = Math.max(0, xMax - realtimeWindowSeconds);
+    const xMin = 0;
+    const xMax = realtimeTimelineDurationSeconds;
     const visiblePoints = realtimeFeaturePoints.filter((point) => point.time >= xMin && point.time <= xMax);
     const visibleWaveformPoints = realtimeWaveformPoints.filter((point) => point.time >= xMin && point.time <= xMax);
     const visibleMarkers = realtimeEventMarkers.filter((marker) => marker.time >= xMin && marker.time <= xMax);
@@ -995,6 +1057,46 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.textBaseline = "bottom";
       ctx.fillText(title, area.left, area.top - 6);
 
+      ctx.fillStyle = "rgba(190, 45, 45, 0.16)";
+      for (const region of realtimeStillRegions) {
+        const left = xToPx(region.start);
+        const right = xToPx(region.end);
+        ctx.fillRect(left, area.top, right - left, area.height);
+      }
+
+      for (
+        let seconds = xMin;
+        seconds <= xMax + 1e-6;
+        seconds += realtimeTimelineTickSeconds
+      ) {
+        const x = xToPx(seconds);
+        const isPhaseBoundary = realtimeStillRegions.some(
+          (region) => seconds === region.start || seconds === region.end
+        ) && seconds > xMin && seconds < xMax;
+        ctx.strokeStyle = isPhaseBoundary
+          ? "rgba(150, 35, 35, 0.62)"
+          : "rgba(31, 41, 51, 0.14)";
+        ctx.lineWidth = isPhaseBoundary ? 1.5 : 1;
+        ctx.setLineDash(isPhaseBoundary ? [] : [3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, area.top);
+        ctx.lineTo(x, area.bottom);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+
+      if (area === rawArea) {
+        ctx.fillStyle = "rgba(145, 25, 25, 0.9)";
+        ctx.font = "bold 11px Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (const region of realtimeStillRegions) {
+          ctx.fillText(region.label, xToPx((region.start + region.end) / 2), area.top + 5);
+        }
+      }
+
+      ctx.strokeStyle = "rgba(31, 41, 51, 0.18)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(area.left, area.top);
       ctx.lineTo(area.left, area.bottom);
@@ -1072,12 +1174,15 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.font = "12px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (let tick = 0; tick <= 5; tick += 1) {
-      const ratio = tick / 5;
-      const timeValue = xMin + ratio * (xMax - xMin);
-      const x = ampArea.left + ratio * ampArea.width;
-      ctx.fillText(`${timeValue.toFixed(1)}s`, x, phaseArea.bottom + 12);
+    for (
+      let seconds = xMin;
+      seconds <= xMax + 1e-6;
+      seconds += realtimeTimelineTickSeconds
+    ) {
+      ctx.fillText(`${seconds}s`, xToPx(seconds), phaseArea.bottom + 12);
     }
+    ctx.font = "13px Arial, sans-serif";
+    ctx.fillText("Recording time (s)", width / 2, height - 18);
     if (!visiblePoints.length && !visibleWaveformPoints.length) {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1498,10 +1603,25 @@ document.addEventListener("DOMContentLoaded", () => {
     fftSize: 1024,
     hopLength: 256,
     maxColumns: 8192,
-    canvasHeight: 260,
+    canvasHeight: 394,
+    minFrequency: 18000,
+    maxFrequency: 24000,
     minDb: -90,
-    maxDb: -20
+    maxDb: -20,
+    margin: Object.freeze({ top: 71, right: 29, bottom: 60, left: 85 })
   });
+
+  const SPECTROGRAM_COLOR_STOPS = Object.freeze([
+    Object.freeze([0, 0, 40]),
+    Object.freeze([24, 15, 61]),
+    Object.freeze([68, 15, 118]),
+    Object.freeze([106, 28, 129]),
+    Object.freeze([147, 38, 103]),
+    Object.freeze([188, 55, 84]),
+    Object.freeze([222, 81, 72]),
+    Object.freeze([248, 133, 92]),
+    Object.freeze([252, 209, 128])
+  ]);
 
   function createFftWorkspace(size) {
     return {
@@ -1577,56 +1697,118 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getSpectrogramColor(value) {
     const clamped = Math.max(0, Math.min(1, value));
-    const red = Math.round(255 * Math.pow(clamped, 0.72));
-    const green = Math.round(255 * Math.pow(clamped, 1.55));
-    const blue = Math.round(40 + 180 * (1 - clamped) * Math.pow(clamped, 0.35));
-    return [red, green, blue];
+    const scaledPosition = clamped * (SPECTROGRAM_COLOR_STOPS.length - 1);
+    const lowerIndex = Math.min(
+      SPECTROGRAM_COLOR_STOPS.length - 2,
+      Math.floor(scaledPosition)
+    );
+    const blend = scaledPosition - lowerIndex;
+    const lowerColor = SPECTROGRAM_COLOR_STOPS[lowerIndex];
+    const upperColor = SPECTROGRAM_COLOR_STOPS[lowerIndex + 1];
+    return lowerColor.map((channel, index) => (
+      Math.round(channel + blend * (upperColor[index] - channel))
+    ));
   }
 
-  function drawSpectrogramAxes(ctx, plotArea, audioBuffer) {
+  function getSpectrogramTimeTickStep(duration) {
+    if (duration <= 5) return 0.5;
+    if (duration <= 10) return 1;
+    if (duration <= 20) return 2;
+    if (duration <= 60) return 5;
+    if (duration <= 120) return 10;
+    return 20;
+  }
+
+  function drawSpectrogramAxes(ctx, plotArea, audioBuffer, renderingConfig) {
     const duration = audioBuffer.duration;
-    const sampleRate = audioBuffer.sampleRate;
-    const maxFrequency = sampleRate / 2;
-    const frequencyTicks = 5;
-    const timeTicks = Math.max(2, Math.min(6, Math.round(duration)));
+    const {
+      fftSize,
+      hopLength,
+      minFrequency,
+      maxFrequency,
+      minDb,
+      maxDb
+    } = renderingConfig;
+    const canvasCenter = ctx.canvas.width / 2;
+    const overlapPercent = Math.round((1 - hopLength / fftSize) * 100);
+    const minFrequencyKhz = minFrequency / 1000;
+    const maxFrequencyKhz = maxFrequency / 1000;
+    const frequencyStepKhz = 1;
+    const timeStep = getSpectrogramTimeTickStep(duration);
 
     ctx.save();
-    ctx.strokeStyle = "rgba(255, 248, 240, 0.28)";
-    ctx.fillStyle = "rgba(255, 248, 240, 0.92)";
+    ctx.strokeStyle = "#111827";
+    ctx.fillStyle = "#111827";
     ctx.lineWidth = 1;
-    ctx.font = "12px 'Segoe UI', sans-serif";
 
-    ctx.beginPath();
-    ctx.moveTo(plotArea.left, plotArea.top);
-    ctx.lineTo(plotArea.left, plotArea.bottom);
-    ctx.lineTo(plotArea.right, plotArea.bottom);
-    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.font = "600 13px 'Segoe UI', sans-serif";
+    ctx.fillText(
+      `Received audio spectrogram (${minFrequencyKhz.toFixed(0)}-${maxFrequencyKhz.toFixed(0)} kHz)`,
+      canvasCenter,
+      9
+    );
+    ctx.font = "10px 'Segoe UI', sans-serif";
+    ctx.fillText(
+      `FFT ${fftSize} | effective hop ${hopLength} samples | overlap ${overlapPercent}% | color ${minDb} to ${maxDb} dB`,
+      canvasCenter,
+      29
+    );
 
+    ctx.strokeRect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
+
+    ctx.font = "10px 'Segoe UI', sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (let index = 0; index < frequencyTicks; index += 1) {
-      const ratio = index / (frequencyTicks - 1);
+    for (
+      let frequencyKhz = Math.ceil(minFrequencyKhz);
+      frequencyKhz <= maxFrequencyKhz + 1e-6;
+      frequencyKhz += frequencyStepKhz
+    ) {
+      const ratio = (frequencyKhz - minFrequencyKhz) /
+        Math.max(1e-9, maxFrequencyKhz - minFrequencyKhz);
       const y = plotArea.bottom - ratio * plotArea.height;
-      const frequency = (ratio * maxFrequency) / 1000;
       ctx.beginPath();
-      ctx.moveTo(plotArea.left - 6, y);
+      ctx.moveTo(plotArea.left - 5, y);
       ctx.lineTo(plotArea.left, y);
       ctx.stroke();
-      ctx.fillText(`${frequency.toFixed(frequency >= 10 ? 0 : 1)} kHz`, plotArea.left - 10, y);
+      ctx.fillText(frequencyKhz.toFixed(0), plotArea.left - 9, y);
     }
 
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (let index = 0; index <= timeTicks; index += 1) {
-      const ratio = index / timeTicks;
-      const x = plotArea.left + ratio * plotArea.width;
-      const seconds = ratio * duration;
+    for (let seconds = 0; seconds <= duration + 1e-6; seconds += timeStep) {
+      const x = plotArea.left + (seconds / Math.max(duration, 1e-9)) * plotArea.width;
       ctx.beginPath();
       ctx.moveTo(x, plotArea.bottom);
-      ctx.lineTo(x, plotArea.bottom + 6);
+      ctx.lineTo(x, plotArea.bottom + 5);
       ctx.stroke();
-      ctx.fillText(`${seconds.toFixed(duration >= 10 ? 0 : 1)} s`, x, plotArea.bottom + 10);
+      ctx.fillText(
+        seconds.toFixed(timeStep < 1 ? 1 : 0),
+        x,
+        plotArea.bottom + 8
+      );
     }
+
+    if (duration % timeStep > 1e-6) {
+      ctx.beginPath();
+      ctx.moveTo(plotArea.right, plotArea.bottom);
+      ctx.lineTo(plotArea.right, plotArea.bottom + 5);
+      ctx.stroke();
+      ctx.fillText(duration.toFixed(duration < 10 ? 1 : 0), plotArea.right, plotArea.bottom + 8);
+    }
+
+    ctx.font = "11px 'Segoe UI', sans-serif";
+    ctx.fillText("Time (s)", canvasCenter, ctx.canvas.height - 18);
+
+    ctx.save();
+    ctx.translate(18, plotArea.top + plotArea.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("Frequency (kHz)", 0, 0);
+    ctx.restore();
 
     ctx.restore();
   }
@@ -1642,7 +1824,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (samples.length < 8) {
         throw new Error("Recording too short");
       }
-      const margin = { top: 16, right: 14, bottom: 54, left: 70 };
+      const margin = SPECTROGRAM_CONFIG.margin;
       const fftSize = SPECTROGRAM_CONFIG.fftSize;
       const requestedHopLength = SPECTROGRAM_CONFIG.hopLength;
       const availableStartSamples = Math.max(0, samples.length - fftSize);
@@ -1665,6 +1847,22 @@ document.addEventListener("DOMContentLoaded", () => {
         height: plotHeight
       };
       const nyquistBins = fftSize / 2;
+      const minFrequency = Math.min(
+        SPECTROGRAM_CONFIG.minFrequency,
+        audioBuffer.sampleRate / 2
+      );
+      const maxFrequency = Math.max(
+        minFrequency,
+        Math.min(SPECTROGRAM_CONFIG.maxFrequency, audioBuffer.sampleRate / 2)
+      );
+      const minFrequencyBin = Math.min(
+        nyquistBins - 1,
+        Math.floor((minFrequency * fftSize) / audioBuffer.sampleRate)
+      );
+      const maxFrequencyBin = Math.min(
+        nyquistBins - 1,
+        Math.ceil((maxFrequency * fftSize) / audioBuffer.sampleRate)
+      );
       const windowValues = createHannWindow(fftSize);
       const fftWorkspace = createFftWorkspace(fftSize);
       const ctx = spectrogramCanvas.getContext("2d");
@@ -1672,7 +1870,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const pixelBuffer = imageData.data;
 
       ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-      ctx.fillStyle = "#0c0820";
+      ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
       for (let x = 0; x < plotWidth; x += 1) {
@@ -1682,8 +1880,10 @@ document.addEventListener("DOMContentLoaded", () => {
         for (let y = 0; y < plotHeight; y += 1) {
           const normalizedY = y / Math.max(1, plotHeight - 1);
           const frequencyBin = Math.min(
-            nyquistBins - 1,
-            Math.round(normalizedY * (nyquistBins - 1))
+            maxFrequencyBin,
+            Math.round(
+              minFrequencyBin + normalizedY * (maxFrequencyBin - minFrequencyBin)
+            )
           );
 
           const magnitude = magnitudes[frequencyBin];
@@ -1707,9 +1907,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       ctx.putImageData(imageData, plotArea.left, plotArea.top);
-      drawSpectrogramAxes(ctx, plotArea, audioBuffer);
+      drawSpectrogramAxes(ctx, plotArea, audioBuffer, {
+        fftSize,
+        hopLength,
+        minFrequency,
+        maxFrequency,
+        minDb: SPECTROGRAM_CONFIG.minDb,
+        maxDb: SPECTROGRAM_CONFIG.maxDb
+      });
       showSpectrogramStatus(
-        `Spectrogram of the recorded audio. FFT ${fftSize}, hop ${hopLength} samples.`
+        `Spectrogram of the recorded audio (${(minFrequency / 1000).toFixed(0)}-${(maxFrequency / 1000).toFixed(0)} kHz). FFT ${fftSize}, hop ${hopLength} samples.`
       );
     } catch (error) {
       showSpectrogramStatus("Could not generate a spectrogram for the recording.");
@@ -1742,7 +1949,7 @@ document.addEventListener("DOMContentLoaded", () => {
           name: `${recordingFilePrefix}_spectrogram_${timestamp}.png`,
           url: spectrogramCanvas.toDataURL("image/png")
         },
-        buildAudioDiagnosticsArtifact(diagnostics, timestamp)
+        buildMetadataArtifact(recordedAudioBuffer, diagnostics, options.trackingArtifacts, timestamp)
       );
       setSensingStatus("Sensing stopped. Calculating post-processed signal features...");
 

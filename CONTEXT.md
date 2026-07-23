@@ -142,11 +142,11 @@ Python figures can be generated.
   audio. This keeps the chart current on low-CPU deployments.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
-- Stop prepares the tracking JSON, OS-style event log, sensed microphone WAV,
-  rendered spectrogram PNG, and recording diagnostics JSON in browser memory.
+- Stop prepares `keyboard_events.json`, `cursor_events.json`, `metadata.json`,
+  the sensed microphone WAV, and rendered spectrogram PNG in browser memory.
 - The `Download session files (N)` button appears after preparation. No browser
   download begins until the user selects that button.
-- Stop uploads the recorded WAV, OS-style event log, and diagnostics to the
+- Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
   local Python backend for offline processing. The page later displays a
   Doppler velocity-time map, derived motion/band-energy traces, and an MLP
   prediction timeline when the required MLP artifact is available. This backend
@@ -171,7 +171,7 @@ Python figures can be generated.
 - Captured float samples are buffered for mono 32-bit IEEE-float WAV export and
   are simultaneously packaged into the 20-byte `WAIQ` header plus Float32 PCM
   payload for the `/realtime` WebSocket.
-- The diagnostics JSON records requested microphone constraints, browser-reported
+- The internal diagnostics object records requested microphone constraints, browser-reported
   `MediaStreamTrack` settings/capabilities/constraints, `AudioContext` sample
   rate/latency and qualification, selected recording profile, actual capture
   method, clipping count/peak, worklet sequence gaps, WebSocket backpressure
@@ -227,11 +227,11 @@ Both shopping and travel:
 - Prefer AudioWorklet mono Float32 capture and export mono 32-bit IEEE-float WAV;
   permit ScriptProcessor only in Compatibility mode.
 - On Stop, prepare the following files without downloading them automatically:
-  - Tracking JSON
-  - Pipe-delimited OS-style event log
+  - `keyboard_events.json`
+  - `cursor_events.json`
+  - `metadata.json`, using the standalone Python recorder's metadata field names
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
-  - Recording diagnostics JSON
   - Doppler, derived-feature, and MLP prediction figures when the Python server endpoint is available
 - Show `Download session files (N)` when preparation completes. Selecting it is
   the only action that starts the browser downloads.
@@ -267,7 +267,8 @@ Use these inputs:
 
 - Recorded microphone WAV from Stop sensing.
 - OS-style event log from the same Stop sensing session.
-- Recording diagnostics JSON, optional but uploaded when available.
+- Internal recording diagnostics, optional but uploaded when available and not
+  included in the browser download list.
 
 Start the Python backend with:
 
@@ -285,34 +286,42 @@ browser-side artifacts remain available through the download button.
 
 ## Tracked User Events
 
-The behavioral tracker records exactly four browser-page event types while
-sensing is active:
+The behavioral tracker follows the standalone Python recorder's two-file
+schema while sensing is active. Export preparation does not add synthetic
+events.
 
-- `keydown` for keystrokes
-- `pointer_move`
-- `scroll`
-- `click`
+`keyboard_events.json` is a JSON array. Keydown records use:
 
-Export preparation does not add synthetic events to the log.
-Each JSON event includes both an ISO `timestamp` and numeric `epochSeconds`.
-The extra `os_event_log_*.txt` download uses the same broad shape as the Python capture logs:
-
-```text
-# start_epoch | 1710000000.000000
-# format | EVENT | VALUE | EPOCH_SECONDS
-POINTER_MOVE | pointerType=mouse x=180 y=120 dx=20 dy=8 movementX=20.0 movementY=8.0 | 1710000001.250000
-KEYDOWN | key=Tab code=Tab location=0 button#startSensingBtn label=Stop sensing | 1710000001.300000
-SCROLL | deltaX=0.0 deltaY=640.0 scrollX=0.0 scrollY=640.0 | 1710000001.345678
-CLICK | button=0 x=120 y=80 button#startSensingBtn label=Stop sensing | 1710000002.000000
+```json
+{"event":"down","key":"a","t":1.25,"flight_sec":0.18}
 ```
 
-This is browser-page scoped, not a global OS hook; events outside the page are not visible to the browser.
+Keyup records use:
 
-The tracker does not derive gestures or log pointer down/up, wheel, input,
-change, form-submit, page-view, key-up, or visibility events. Pointer movement
-and scrolling are throttled while sensing is active. Printable `keydown` values
-are logged as `key=character`; browser `code` is still included so physical key
-identity is available.
+```json
+{"event":"up","key":"a","t":1.31,"dwell_sec":0.06}
+```
+
+Auto-repeat keydowns are ignored. The first keydown has `flight_sec: null`, and
+an unmatched keyup has `dwell_sec: null`.
+
+`cursor_events.json` is a JSON array containing exactly these record shapes:
+
+```json
+{"type":"move","x":180,"y":120,"t":1.25}
+{"type":"click","x":180,"y":120,"button":"Button.left","pressed":true,"t":1.30}
+{"type":"click","x":180,"y":120,"button":"Button.left","pressed":false,"t":1.36}
+{"type":"scroll","x":180,"y":120,"dx":0,"dy":-640,"t":1.42}
+```
+
+All `t` values are seconds relative to sensing start. Pointer movement is not
+throttled. Browser wheel events represent mouse-wheel and touchpad scrolling.
+Browser APIs generally expose a touchpad as a mouse-like pointer, so they cannot
+reliably label which physical device produced a move or click. Tracking remains
+browser-page scoped; activity outside the page is not visible.
+
+The legacy compatibility event stream remains internal for live chart markers
+and the local analysis upload. It is not included in downloaded session files.
 
 ## Signal Event Models
 
@@ -370,9 +379,8 @@ Features:
 - Search input, category select, and checkbox filters.
 - Filters do not apply immediately; they apply only after clicking `Apply search`.
 - Product rows include labels/tags so filtering is visible and testable.
-- Add-to-cart, save, and checkout interactions generate only click, keystroke, pointer-move, and scroll tracking events.
+- Add-to-cart, save, and checkout interactions populate only the Python-style keyboard and cursor event arrays.
 - Download filename prefix: `shopping_recording`.
-- Tracking JSON slug: `simple-shopping`.
 
 ## Travel Experiment
 
@@ -390,12 +398,11 @@ Features:
 - Five trip rows with numbered itinerary-style layout.
 - Search input, trip type select, and checkbox filters.
 - Filters apply only after clicking `Apply search`.
-- Select trip, save, details, and booking interactions generate only click, keystroke, pointer-move, and scroll tracking events.
+- Select trip, save, details, and booking interactions populate only the Python-style keyboard and cursor event arrays.
 - Each trip has a `Details` button that expands details inline inside that same trip row, not in a shared bottom panel.
 - Inline trip details show duration, route, included items, note, and price.
 - Inline trip details include `Use this trip`, which adds that trip to the booking count and can prefill booking notes, plus `Close details`.
 - Download filename prefix: `travel_recording`.
-- Tracking JSON slug: `travel-tourism`.
 
 ## Testing
 

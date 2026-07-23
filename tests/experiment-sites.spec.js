@@ -32,19 +32,22 @@ async function installDurationLimitTimerTestHook(page) {
   });
 }
 
-function expectOnlyRequestedTrackingEvents(payload) {
-  const trackedEventNames = ["click", "keydown", "pointer_move", "scroll"];
-  const eventNames = payload.events.map((event) => event.name);
+function expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents) {
+  expect(Array.isArray(keyboardEvents)).toBe(true);
+  expect(Array.isArray(cursorEvents)).toBe(true);
+  expect(keyboardEvents.some((event) => event.event === "down")).toBe(true);
+  expect(keyboardEvents.some((event) => event.event === "up")).toBe(true);
+  expect(keyboardEvents.every((event) => (
+    typeof event.key === "string" && Number.isFinite(event.t)
+  ))).toBe(true);
 
-  for (const expectedEvent of trackedEventNames) {
-    expect(eventNames).toContain(expectedEvent);
-  }
-  expect([...new Set(eventNames)].sort()).toEqual(trackedEventNames);
-  expect(Object.keys(payload.trackingConfig).sort()).toEqual([
-    "maxEvents",
-    "pointerMoveThrottleMs",
-    "scrollThrottleMs"
-  ]);
+  const cursorTypes = [...new Set(cursorEvents.map((event) => event.type))].sort();
+  expect(cursorTypes).toEqual(["click", "move", "scroll"]);
+  expect(cursorEvents.some((event) => event.type === "click" && event.pressed === true)).toBe(true);
+  expect(cursorEvents.some((event) => event.type === "click" && event.pressed === false)).toBe(true);
+  expect(cursorEvents.every((event) => (
+    Number.isFinite(event.x) && Number.isFinite(event.y) && Number.isFinite(event.t)
+  ))).toBe(true);
 }
 
 test("original page links to the simplified experiment sites", async ({ page }) => {
@@ -157,22 +160,28 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   ))).toBe(true);
 
   await expect(page.locator("#shoppingSpectrogramPanel")).toBeVisible();
-  await expect(page.locator("#shoppingSpectrogramStatus")).toContainText("Spectrogram");
-  const brightSpectrogramPixels = await page.evaluate(() => {
+  await expect(page.locator("#shoppingSpectrogramStatus")).toContainText("18-24 kHz");
+  const spectrogramFormat = await page.evaluate(() => {
     const canvas = document.getElementById("shoppingSpectrogramCanvas");
     const ctx = canvas.getContext("2d");
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let brightPixels = 0;
+    let darkUltrasoundPixels = 0;
 
     for (let index = 0; index < pixels.length; index += 4) {
-      if (pixels[index] > 180 && pixels[index + 1] > 170 && pixels[index + 2] > 150) {
-        brightPixels += 1;
+      if (pixels[index] < 50 && pixels[index + 1] < 50 && pixels[index + 2] >= 35 && pixels[index + 2] < 130) {
+        darkUltrasoundPixels += 1;
       }
     }
 
-    return brightPixels;
+    return {
+      height: canvas.height,
+      background: Array.from(ctx.getImageData(0, 0, 1, 1).data),
+      darkUltrasoundPixels
+    };
   });
-  expect(brightSpectrogramPixels).toBeGreaterThan(20);
+  expect(spectrogramFormat.height).toBe(394);
+  expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
+  expect(spectrogramFormat.darkUltrasoundPixels).toBeGreaterThan(20);
 
   await expect(page.locator("[data-download-session]")).toBeVisible({ timeout: 20000 });
   await expect(page.locator("[data-download-session]")).toBeEnabled();
@@ -180,24 +189,36 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   await page.locator("[data-download-session]").click();
 
   await expect.poll(() => ({
-    tracking: downloads.some((download) => download.suggestedFilename().includes("simple-shopping")),
+    keyboard: downloads.some((download) => download.suggestedFilename() === "keyboard_events.json"),
+    cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
+    metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^shopping_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
     spectrogram: downloads.some((download) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
-    tracking: true,
+    keyboard: true,
+    cursor: true,
+    metadata: true,
     audio: true,
     spectrogram: true
   });
 
-  const trackingDownload = downloads.find((item) => item.suggestedFilename().includes("simple-shopping"));
+  const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");
+  const cursorDownload = downloads.find((item) => item.suggestedFilename() === "cursor_events.json");
+  const metadataDownload = downloads.find((item) => item.suggestedFilename() === "metadata.json");
   const audioDownload = downloads.find((item) => /^shopping_recording_\d{8}_\d{6}\.wav$/.test(item.suggestedFilename()));
   const spectrogramDownload = downloads.find((item) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(item.suggestedFilename()));
-  expect(trackingDownload.suggestedFilename()).toContain("simple-shopping");
   expect(audioDownload.suggestedFilename()).toMatch(/^shopping_recording_\d{8}_\d{6}\.wav$/);
   expect(spectrogramDownload.suggestedFilename()).toMatch(/^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/);
 
-  const payload = JSON.parse(fs.readFileSync(await trackingDownload.path(), "utf8"));
-  expectOnlyRequestedTrackingEvents(payload);
+  const keyboardEvents = JSON.parse(fs.readFileSync(await keyboardDownload.path(), "utf8"));
+  const cursorEvents = JSON.parse(fs.readFileSync(await cursorDownload.path(), "utf8"));
+  const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
+  expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents);
+  expect(metadata.scenario).toBe("Shopping");
+  expect(metadata.input).toBe("Mix");
+  expect(metadata.n_key_events).toBe(keyboardEvents.length);
+  expect(metadata.n_cursor_events).toBe(cursorEvents.length);
+  expect(metadata.recording_name).toMatch(/^shopping_recording_\d{8}_\d{6}$/);
 });
 
 test("travel tourism page captures interaction data", async ({ page }) => {
@@ -303,16 +324,29 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   await page.locator("[data-download-session]").click();
 
   await expect.poll(() => ({
-    tracking: downloads.some((download) => download.suggestedFilename().includes("travel-tourism")),
+    keyboard: downloads.some((download) => download.suggestedFilename() === "keyboard_events.json"),
+    cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
+    metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^travel_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
     spectrogram: downloads.some((download) => /^travel_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
-    tracking: true,
+    keyboard: true,
+    cursor: true,
+    metadata: true,
     audio: true,
     spectrogram: true
   });
 
-  const trackingDownload = downloads.find((item) => item.suggestedFilename().includes("travel-tourism"));
-  const payload = JSON.parse(fs.readFileSync(await trackingDownload.path(), "utf8"));
-  expectOnlyRequestedTrackingEvents(payload);
+  const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");
+  const cursorDownload = downloads.find((item) => item.suggestedFilename() === "cursor_events.json");
+  const metadataDownload = downloads.find((item) => item.suggestedFilename() === "metadata.json");
+  const keyboardEvents = JSON.parse(fs.readFileSync(await keyboardDownload.path(), "utf8"));
+  const cursorEvents = JSON.parse(fs.readFileSync(await cursorDownload.path(), "utf8"));
+  const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
+  expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents);
+  expect(metadata.scenario).toBe("Travel");
+  expect(metadata.input).toBe("Mix");
+  expect(metadata.n_key_events).toBe(keyboardEvents.length);
+  expect(metadata.n_cursor_events).toBe(cursorEvents.length);
+  expect(metadata.recording_name).toMatch(/^travel_recording_\d{8}_\d{6}$/);
 });
