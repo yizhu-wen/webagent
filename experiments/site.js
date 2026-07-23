@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let realtimeWaveformPoints = [];
   let realtimeEventMarkers = [];
   let realtimeDrawPending = false;
-  let realtimeLastStatusMessage = "Start sensing to see live dual-band amplitude-change and phase-change maps.";
+  let realtimeLastStatusMessage = "Start sensing to see live Stage-4 amplitude-change and phase-change lines.";
   let realtimeFramesSent = 0;
   let realtimeFramesReceived = 0;
   let realtimeFeaturesReceived = 0;
@@ -957,7 +957,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const margin = { top: 28, right: 18, bottom: 46, left: 82 };
     const gap = 24;
     const plotWidth = width - margin.left - margin.right;
-    const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 4) / 5);
+    const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 2) / 3);
     const makeArea = (index) => ({
       left: margin.left,
       top: margin.top + index * (panelHeight + gap),
@@ -967,10 +967,8 @@ document.addEventListener("DOMContentLoaded", () => {
       height: panelHeight
     });
     const rawArea = makeArea(0);
-    const amplitudeLeftArea = makeArea(1);
-    const amplitudeRightArea = makeArea(2);
-    const phaseLeftArea = makeArea(3);
-    const phaseRightArea = makeArea(4);
+    const amplitudeArea = makeArea(1);
+    const phaseArea = makeArea(2);
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#fffdfa";
@@ -1099,79 +1097,146 @@ document.addEventListener("DOMContentLoaded", () => {
       drawPanelFrame(rawArea, "Raw microphone audio", "PCM", ["-1", "0", "1"]);
     }
 
-    function heatmapColor(value, maximum) {
-      const normalized = Math.max(0, Math.min(1, value / Math.max(maximum, 1e-12)));
-      const intensity = Math.pow(normalized, 0.65);
-      return [
-        Math.round(255 + (79 - 255) * intensity),
-        Math.round(253 + (131 - 253) * intensity),
-        Math.round(250 + (204 - 250) * intensity)
-      ];
+    function median(values) {
+      if (!values.length) {
+        return 0;
+      }
+      const sorted = [...values].sort((left, right) => left - right);
+      const middle = Math.floor(sorted.length / 2);
+      return sorted.length % 2
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
     }
 
-    function maximumAcross(keys, fallback) {
-      let maximum = 0;
-      for (const point of visiblePoints) {
-        for (const key of keys) {
-          for (const value of point[key] || []) {
-            maximum = Math.max(maximum, Number(value) || 0);
-          }
+    function buildStage4Trace(key) {
+      const rows = visiblePoints
+        .map((point) => ({
+          time: point.time,
+          values: Array.isArray(point[key]) ? point[key] : []
+        }))
+        .filter((row) => row.values.length);
+      if (!rows.length) {
+        return { points: [], selectedBins: [], quietMedian: 0 };
+      }
+
+      const lagCount = Math.min(...rows.map((row) => row.values.length));
+      const sums = new Float64Array(lagCount);
+      const squaredSums = new Float64Array(lagCount);
+      for (const row of rows) {
+        for (let lag = 0; lag < lagCount; lag += 1) {
+          const value = Number(row.values[lag]) || 0;
+          sums[lag] += value;
+          squaredSums[lag] += value * value;
         }
       }
-      return maximum > 0 ? maximum : fallback;
+      const variability = Array.from({ length: lagCount }, (_, lag) => {
+        const mean = sums[lag] / rows.length;
+        return Math.sqrt(Math.max(0, squaredSums[lag] / rows.length - mean * mean));
+      });
+      const selectedBins = Array.from({ length: lagCount }, (_, lag) => lag)
+        .sort((left, right) => variability[right] - variability[left] || right - left)
+        .slice(0, Math.min(10, lagCount))
+        .sort((left, right) => left - right);
+      const rawTrace = rows.map((row) => (
+        selectedBins.reduce(
+          (total, lag) => total + (Number(row.values[lag]) || 0),
+          0
+        ) / selectedBins.length
+      ));
+      const quietMedian = median(rawTrace);
+      return {
+        points: rows.map((row, index) => ({
+          time: row.time,
+          value: rawTrace[index] / (quietMedian + 1e-8)
+        })),
+        selectedBins,
+        quietMedian
+      };
     }
 
-    function drawHeatmap(area, title, key, maximum, phaseMap) {
-      const image = ctx.createImageData(area.width, area.height);
-      let pointIndex = -1;
-      for (let x = 0; x < area.width; x += 1) {
-        const time = xMin + (x / Math.max(1, area.width - 1)) * (xMax - xMin);
-        while (pointIndex + 1 < visiblePoints.length && visiblePoints[pointIndex + 1].time <= time) {
-          pointIndex += 1;
-        }
-        const values = pointIndex >= 0 ? visiblePoints[pointIndex][key] : null;
-        for (let y = 0; y < area.height; y += 1) {
-          const lagIndex = values && values.length
-            ? Math.round(((area.height - 1 - y) / Math.max(1, area.height - 1)) * (values.length - 1))
-            : 0;
-          const [red, green, blue] = heatmapColor(
-            values && values.length ? Number(values[lagIndex]) || 0 : 0,
-            maximum
-          );
-          const pixel = (y * area.width + x) * 4;
-          image.data[pixel] = red;
-          image.data[pixel + 1] = green;
-          image.data[pixel + 2] = blue;
-          image.data[pixel + 3] = 255;
-        }
+    function drawFeatureLine(area, points, color, maximum) {
+      if (!points.length) {
+        return;
       }
-      ctx.putImageData(image, area.left, area.top);
-      drawTimeGrid(area);
-      drawMarkers(area);
-      drawPanelFrame(area, title, "Lag (samples)", ["0", "140", "280"]);
       ctx.save();
-      ctx.fillStyle = "rgba(46, 36, 28, 0.72)";
-      ctx.font = "10px 'Segoe UI', sans-serif";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(
-        phaseMap ? `scale 0-${maximum.toFixed(2)} rad` : `scale 0-${maximum.toExponential(1)}`,
-        area.right,
-        area.top - 5
-      );
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const x = xToPx(point.time);
+        const y = area.bottom - (Math.max(0, point.value) / maximum) * area.height;
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
       ctx.restore();
     }
 
-    const amplitudeMaximum = maximumAcross(
-      ["amplitude_change_left", "amplitude_change_right"],
-      1e-3
-    );
-    const phaseMaximum = Math.PI;
+    function drawStage4Panel(area, title, ylabel, leftTrace, rightTrace) {
+      const maximumValue = Math.max(
+        1e-8,
+        ...leftTrace.points.map((point) => point.value),
+        ...rightTrace.points.map((point) => point.value)
+      );
+      const maximum = maximumValue * 1.14;
+      drawTimeGrid(area);
+      ctx.save();
+      ctx.strokeStyle = "rgba(46, 36, 28, 0.1)";
+      ctx.setLineDash([3, 4]);
+      for (const ratio of [0.5, 1]) {
+        const y = area.bottom - ratio * area.height;
+        ctx.beginPath();
+        ctx.moveTo(area.left, y);
+        ctx.lineTo(area.right, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+      drawFeatureLine(area, leftTrace.points, "#1f77b4", maximum);
+      drawFeatureLine(area, rightTrace.points, "#ff7f0e", maximum);
+      drawMarkers(area);
+      drawPanelFrame(
+        area,
+        title,
+        ylabel,
+        ["0", (maximum / 2).toFixed(1), maximum.toFixed(1)]
+      );
+      ctx.save();
+      ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#1f77b4";
+      ctx.fillRect(area.right - 154, area.top + 8, 18, 2);
+      ctx.fillStyle = "#2e241c";
+      ctx.textAlign = "left";
+      ctx.fillText("left channel", area.right - 130, area.top + 9);
+      ctx.fillStyle = "#ff7f0e";
+      ctx.fillRect(area.right - 154, area.top + 25, 18, 2);
+      ctx.fillStyle = "#2e241c";
+      ctx.fillText("right channel", area.right - 130, area.top + 26);
+      ctx.restore();
+    }
+
+    const amplitudeLeft = buildStage4Trace("amplitude_change_left");
+    const amplitudeRight = buildStage4Trace("amplitude_change_right");
+    const phaseLeft = buildStage4Trace("phase_change_left");
+    const phaseRight = buildStage4Trace("phase_change_right");
     drawRawPanel();
-    drawHeatmap(amplitudeLeftArea, "Left-band amplitude change", "amplitude_change_left", amplitudeMaximum, false);
-    drawHeatmap(amplitudeRightArea, "Right-band amplitude change", "amplitude_change_right", amplitudeMaximum, false);
-    drawHeatmap(phaseLeftArea, "Left-band wrapped phase change", "phase_change_left", phaseMaximum, true);
-    drawHeatmap(phaseRightArea, "Right-band wrapped phase change", "phase_change_right", phaseMaximum, true);
+    drawStage4Panel(
+      amplitudeArea,
+      "Amplitude change",
+      "amplitude change",
+      amplitudeLeft,
+      amplitudeRight
+    );
+    drawStage4Panel(
+      phaseArea,
+      "Phase change",
+      "phase change",
+      phaseLeft,
+      phaseRight
+    );
 
     ctx.save();
     ctx.fillStyle = "rgba(46, 36, 28, 0.76)";
@@ -1183,7 +1248,7 @@ document.addEventListener("DOMContentLoaded", () => {
       seconds <= xMax + 1e-6;
       seconds += realtimeTimelineTickSeconds
     ) {
-      ctx.fillText(`${seconds}s`, xToPx(seconds), phaseRightArea.bottom + 12);
+      ctx.fillText(`${seconds}s`, xToPx(seconds), phaseArea.bottom + 12);
     }
     ctx.font = "13px 'Segoe UI', sans-serif";
     ctx.fillText("Recording time (s)", width / 2, height - 18);
@@ -2479,7 +2544,6 @@ document.addEventListener("DOMContentLoaded", () => {
     getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
     getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
     getRealtimePointCount: () => realtimeFeaturePoints.length,
-    appendRealtimeFeature,
     renderGeneratedFigures,
     renderWindowPredictions,
     clearFeatureVisualizations,

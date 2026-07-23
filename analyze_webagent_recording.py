@@ -40,13 +40,17 @@ from train_signal_event_model import (  # noqa: E402
     sliding_starts,
     window_matrix,
 )
-from ultrasonic_feature_maps import extract_all_feature_maps  # noqa: E402
+from ultrasonic_feature_maps import extract_stage4_traces  # noqa: E402
 
 
 FIGURE_DESCRIPTIONS = {
-    "01_dual_band_feature_changes.png": (
-        "Left/right normalized matched-filter amplitude-change and wrapped "
-        "phase-change maps, using the same 281 lag bins as the live processor."
+    "stage4_signal_events_amplitude_change.png": (
+        "Median-normalized left/right amplitude-change lines made from the 10 "
+        "matched-filter lag bins with the greatest temporal variation."
+    ),
+    "stage4_signal_events_phase_change.png": (
+        "Median-normalized left/right wrapped phase-change lines made from the "
+        "10 matched-filter lag bins with the greatest temporal variation."
     ),
     "02_doppler_velocity.png": (
         "Shows motion speed and direction over time. Energy away from zero indicates "
@@ -91,53 +95,58 @@ def save_figure(fig: plt.Figure, path: Path) -> None:
     plt.close(fig)
 
 
-def plot_dual_band_feature_changes(
+def plot_stage4_feature_trace(
     output: Path,
-    feature_maps: dict[str, np.ndarray],
+    feature: str,
+    time_seconds: np.ndarray,
+    normalized_left: np.ndarray,
+    normalized_right: np.ndarray,
 ) -> None:
-    """Render the four maps produced by the supplied reference method."""
-    time_seconds = feature_maps["time"]
-    lags = feature_maps["lags"]
-    amplitude = np.concatenate(
-        [
-            feature_maps["amplitude_left"].ravel(),
-            feature_maps["amplitude_right"].ravel(),
-        ]
+    """Save the same final two-series line chart as the reference demo."""
+    fig, axis = plt.subplots(figsize=(16, 5.5))
+    axis.plot(
+        time_seconds,
+        normalized_left,
+        color="C0",
+        linewidth=0.9,
+        label="left channel",
     )
-    _amp_min, amp_max = robust_limits(amplitude, 0.0, 99.5)
-    phase = np.concatenate(
-        [
-            feature_maps["phase_left"].ravel(),
-            feature_maps["phase_right"].ravel(),
-        ]
+    axis.plot(
+        time_seconds,
+        normalized_right,
+        color="C1",
+        linewidth=0.9,
+        label="right channel",
     )
-    _phase_min, phase_max = robust_limits(phase, 0.0, 99.5)
-    phase_max = min(float(np.pi), phase_max)
+    ymax = max(
+        float(np.max(normalized_left)),
+        float(np.max(normalized_right)),
+        1e-8,
+    )
+    axis.set_ylim(0, ymax * 1.14)
+    axis.set_ylabel(feature)
+    axis.set_xlabel("time (s)")
+    axis.margins(x=0)
+    axis.legend(loc="best", framealpha=0.95)
+    axis.set_title(feature.capitalize(), fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(output, dpi=130, bbox_inches="tight")
+    plt.close(fig)
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 8), sharex=True, sharey=True)
-    panels = [
-        ("amplitude_left", "Left-band amplitude change", "magma", amp_max, "|Δ normalized amplitude|"),
-        ("amplitude_right", "Right-band amplitude change", "magma", amp_max, "|Δ normalized amplitude|"),
-        ("phase_left", "Left-band phase change", "viridis", phase_max, "|wrapped Δ phase| (rad)"),
-        ("phase_right", "Right-band phase change", "viridis", phase_max, "|wrapped Δ phase| (rad)"),
-    ]
-    for axis, (key, title, cmap, vmax, color_label) in zip(axes.ravel(), panels):
-        image = axis.imshow(
-            feature_maps[key],
-            origin="lower",
-            aspect="auto",
-            extent=[time_seconds[0], time_seconds[-1], lags[0], lags[-1]],
-            cmap=cmap,
-            vmin=0.0,
-            vmax=max(float(vmax), 1e-9),
+
+def plot_stage4_feature_changes(
+    output_dir: Path,
+    feature_maps: dict[str, np.ndarray | float],
+) -> None:
+    """Render the latest reference-format amplitude and phase line charts."""
+    for feature in ("amplitude", "phase"):
+        plot_stage4_feature_trace(
+            output_dir / f"stage4_signal_events_{feature}_change.png",
+            f"{feature} change",
+            np.asarray(feature_maps["time"]),
+            np.asarray(feature_maps[f"{feature}_left_trace"]),
+            np.asarray(feature_maps[f"{feature}_right_trace"]),
         )
-        axis.set_title(title)
-        axis.set_ylabel("Matched-filter lag (samples)")
-        fig.colorbar(image, ax=axis, label=color_label)
-    for axis in axes[-1]:
-        axis.set_xlabel("Recording time (s)")
-    fig.suptitle("Dual-band normalized matched-filter change maps", fontsize=15)
-    save_figure(fig, output)
 
 
 def plot_range_time(
@@ -568,7 +577,7 @@ def main() -> None:
         else FeatureConfig()
     )
     samples, sample_rate = read_audio(args.wav)
-    feature_maps = extract_all_feature_maps(samples, sample_rate)
+    feature_maps = extract_stage4_traces(samples, sample_rate)
     recording = compute_recording_features(samples, sample_rate, config, "combined")
     if recording.C is None or recording.dphi is None or recording.top_bins is None:
         raise RuntimeError("Ultrasound feature extraction did not produce correlation maps.")
@@ -582,10 +591,7 @@ def main() -> None:
     range_cm = np.arange(correlation.shape[0]) * RANGE_PER_SAMPLE_CM
     amplitude_db = 20 * np.log10(np.abs(correlation) + EPS)
 
-    plot_dual_band_feature_changes(
-        args.out_dir / "01_dual_band_feature_changes.png",
-        feature_maps,
-    )
+    plot_stage4_feature_changes(args.out_dir, feature_maps)
 
     plot_doppler_velocity(
         args.out_dir / "02_doppler_velocity.png",
@@ -639,6 +645,22 @@ def main() -> None:
         amplitude_change_right=feature_maps["amplitude_right"],
         phase_change_left=feature_maps["phase_left"],
         phase_change_right=feature_maps["phase_right"],
+        amplitude_change_left_trace=feature_maps["amplitude_left_trace"],
+        amplitude_change_right_trace=feature_maps["amplitude_right_trace"],
+        phase_change_left_trace=feature_maps["phase_left_trace"],
+        phase_change_right_trace=feature_maps["phase_right_trace"],
+        amplitude_change_left_selected_bins=feature_maps[
+            "amplitude_left_selected_bins"
+        ],
+        amplitude_change_right_selected_bins=feature_maps[
+            "amplitude_right_selected_bins"
+        ],
+        phase_change_left_selected_bins=feature_maps["phase_left_selected_bins"],
+        phase_change_right_selected_bins=feature_maps["phase_right_selected_bins"],
+        amplitude_change_left_median=feature_maps["amplitude_left_median"],
+        amplitude_change_right_median=feature_maps["amplitude_right_median"],
+        phase_change_left_median=feature_maps["phase_left_median"],
+        phase_change_right_median=feature_maps["phase_right_median"],
     )
     summary = {
         "wav": str(args.wav),

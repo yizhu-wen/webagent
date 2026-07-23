@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Streaming dual-band amplitude/phase-change feature-map extraction.
+"""Streaming source-map extraction for live Stage-4 feature traces.
 
 The completed-recording reference uses zero-phase filtering. A live stream has
 no future samples, so this processor uses the causal form of the same sixth-
 order Butterworth band filters. Chirp references, alignment, normalized matched
 filtering, lag bins, and amplitude/phase change definitions match
-``ultrasonic_feature_maps.py`` and the supplied feature-map demo.
+``ultrasonic_feature_maps.py`` and the supplied feature-line demo. The browser
+uses accumulated map columns for top-10 variable-bin selection, averaging, and
+median normalization while drawing the live lines.
 """
 
 from __future__ import annotations
@@ -46,7 +48,7 @@ FEATURE_EMIT_STRIDE_CHIRPS = 4
 
 
 class StreamingIqProcessor:
-    """Convert browser Float32 mic frames into four live change maps."""
+    """Convert browser Float32 mic frames into Stage-4 source-map columns."""
 
     def __init__(self, tx_wav: Path, sample_rate: int = FS) -> None:
         if not Path(tx_wav).exists():
@@ -154,8 +156,9 @@ class StreamingIqProcessor:
         return self.alignment
 
     @staticmethod
-    def _aggregate(pending: list[np.ndarray]) -> np.ndarray:
-        return np.max(np.stack(pending, axis=0), axis=0)
+    def _sample_latest(pending: list[np.ndarray]) -> np.ndarray:
+        """Downsample for transport without modifying a retained column."""
+        return pending[-1]
 
     def _process_one_chirp(
         self,
@@ -204,10 +207,10 @@ class StreamingIqProcessor:
         if len(self.pending_amplitude_left) < FEATURE_EMIT_STRIDE_CHIRPS:
             return None
 
-        amplitude_left_out = self._aggregate(self.pending_amplitude_left)
-        amplitude_right_out = self._aggregate(self.pending_amplitude_right)
-        phase_left_out = self._aggregate(self.pending_phase_left)
-        phase_right_out = self._aggregate(self.pending_phase_right)
+        amplitude_left_out = self._sample_latest(self.pending_amplitude_left)
+        amplitude_right_out = self._sample_latest(self.pending_amplitude_right)
+        phase_left_out = self._sample_latest(self.pending_phase_left)
+        phase_right_out = self._sample_latest(self.pending_phase_right)
         window_start_sample = int(self.pending_window_start_sample)
         self.pending_amplitude_left.clear()
         self.pending_amplitude_right.clear()
@@ -217,7 +220,7 @@ class StreamingIqProcessor:
 
         feature = {
             "type": "feature_map",
-            "method": "dual_band_normalized_matched_filter_change_maps",
+            "method": "stage4_top10_source_maps",
             "time": time_seconds,
             "timestamp": (
                 self.start_epoch + time_seconds
@@ -231,6 +234,7 @@ class StreamingIqProcessor:
             "window_end_time": (left_start_sample + N_TRI) / FS,
             "timestamp_source": "processed_sample_chirp_start",
             "feature_stride_chirps": FEATURE_EMIT_STRIDE_CHIRPS,
+            "temporal_sampling": "latest_chirp_every_4",
             "lag_count": len(LAGS),
             "max_lag": MAX_LAG,
             "range_bin_cm": RANGE_PER_SAMPLE_CM,

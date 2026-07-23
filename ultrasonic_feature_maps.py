@@ -1,9 +1,10 @@
-"""Dual-band ultrasonic matched-filter feature maps.
+"""Dual-band ultrasonic matched-filter features and Stage-4 traces.
 
 This module mirrors the feature path used by ``extract_feature_maps_demo.py``:
 
     mono audio -> left/right band split -> analytic chirp frames
         -> normalized matched filtering -> amplitude/phase change maps
+        -> top-10 variable bins -> mean trace -> median normalization
 
 The batch functions use zero-phase filtering and are intended for completed
 recordings. ``matched_filter_frame`` and ``calculate_change_vectors`` expose the
@@ -35,8 +36,10 @@ FILTER_ORDER = 6
 MAX_LAG = 280
 LAGS = np.arange(MAX_LAG + 1)
 START_TRIM_SEC = 3.0
+TOP_K = 10
 RANGE_PER_SAMPLE_CM = 343.0 / (2 * FS) * 100.0
 EPS = 1e-12
+NORMALIZATION_EPS = 1e-8
 
 
 def _to_float(samples: np.ndarray) -> np.ndarray:
@@ -188,6 +191,36 @@ def calculate_change_vectors(
     return amplitude_change, phase_change
 
 
+def select_most_variable_bins(
+    feature_map: np.ndarray,
+    top_k: int = TOP_K,
+) -> np.ndarray:
+    """Select the reference script's no-event fallback lag bins."""
+    feature_map = np.asarray(feature_map, dtype=np.float64)
+    if feature_map.ndim != 2:
+        raise ValueError(
+            f"Expected a [lag, time] feature map, got {feature_map.shape}"
+        )
+    if not 1 <= top_k <= feature_map.shape[0]:
+        raise ValueError(
+            f"top_k must be between 1 and {feature_map.shape[0]}, got {top_k}"
+        )
+    return np.sort(np.argsort(feature_map.std(axis=1))[::-1][:top_k])
+
+
+def aggregate_and_normalize(
+    feature_map: np.ndarray,
+    top_k: int = TOP_K,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Average the most-variable bins and divide by the full-trace median."""
+    feature_map = np.asarray(feature_map, dtype=np.float64)
+    selected_bins = select_most_variable_bins(feature_map, top_k=top_k)
+    raw_trace = np.mean(feature_map[selected_bins], axis=0)
+    quiet_median = float(np.median(raw_trace))
+    normalized_trace = raw_trace / (quiet_median + NORMALIZATION_EPS)
+    return normalized_trace, selected_bins, quiet_median
+
+
 def extract_complex_range_maps(
     samples: np.ndarray,
     sample_rate: int = FS,
@@ -243,3 +276,27 @@ def extract_all_feature_maps(
         "lags": LAGS.copy(),
     }
 
+
+def extract_stage4_traces(
+    samples: np.ndarray,
+    sample_rate: int = FS,
+    start_trim_sec: float = START_TRIM_SEC,
+    top_k: int = TOP_K,
+) -> dict[str, np.ndarray | float]:
+    """Return the latest reference-format maps and normalized line traces."""
+    feature_maps = extract_all_feature_maps(
+        samples,
+        sample_rate=sample_rate,
+        start_trim_sec=start_trim_sec,
+    )
+    result: dict[str, np.ndarray | float] = dict(feature_maps)
+    for feature in ("amplitude", "phase"):
+        for channel in ("left", "right"):
+            trace, selected_bins, median = aggregate_and_normalize(
+                feature_maps[f"{feature}_{channel}"],
+                top_k=top_k,
+            )
+            result[f"{feature}_{channel}_trace"] = trace
+            result[f"{feature}_{channel}_selected_bins"] = selected_bins
+            result[f"{feature}_{channel}_median"] = median
+    return result

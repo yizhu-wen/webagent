@@ -3,57 +3,6 @@ const { test, expect } = require("@playwright/test");
 const pixelImage =
   "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
-function buildRealtimeFeatureMap() {
-  const amplitudeLeft = [];
-  const amplitudeRight = [];
-  const phaseLeft = [];
-  const phaseRight = [];
-  for (let lag = 0; lag <= 280; lag += 1) {
-    amplitudeLeft.push(lag / 2800);
-    amplitudeRight.push((280 - lag) / 2800);
-    phaseLeft.push((lag / 280) * Math.PI);
-    phaseRight.push(((280 - lag) / 280) * Math.PI);
-  }
-  return {
-    type: "feature_map",
-    time: 4,
-    lag_count: 281,
-    max_lag: 280,
-    amplitude_change_left: amplitudeLeft,
-    amplitude_change_right: amplitudeRight,
-    phase_change_left: phaseLeft,
-    phase_change_right: phaseRight
-  };
-}
-
-test("renders dual-band realtime amplitude and phase change maps", async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate((featureMap) => {
-    window.webAgentSensing.appendRealtimeFeature(featureMap);
-  }, buildRealtimeFeatureMap());
-
-  await expect.poll(() => page.evaluate(() => (
-    window.webAgentSensing.getRealtimeDebugState().featuresReceived
-  ))).toBe(1);
-  const state = await page.evaluate(() => window.webAgentSensing.getRealtimeDebugState());
-  expect(state.latestFeature.amplitude_change_left).toHaveLength(281);
-  expect(state.latestFeature.amplitude_change_right).toHaveLength(281);
-  expect(state.latestFeature.phase_change_left).toHaveLength(281);
-  expect(state.latestFeature.phase_change_right).toHaveLength(281);
-  expect(await page.locator("#realtimeCanvas").getAttribute("height")).toBe("760");
-
-  await page.goto("/experiments/");
-  await page.evaluate((featureMap) => {
-    window.experimentSensing.appendRealtimeFeature(featureMap);
-  }, buildRealtimeFeatureMap());
-  const experimentState = await page.evaluate(() => (
-    window.experimentSensing.getRealtimeDebugState()
-  ));
-  expect(experimentState.latestFeature.amplitude_change_left).toHaveLength(281);
-  expect(experimentState.latestFeature.phase_change_right).toHaveLength(281);
-  expect(await page.locator("[data-realtime-canvas]").getAttribute("height")).toBe("760");
-});
-
 test("renders processed feature figures on the sensing page", async ({ page }) => {
   await page.goto("/");
 

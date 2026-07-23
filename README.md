@@ -102,17 +102,14 @@ http://localhost:8124/
   `/api/analyze-recording` endpoint for post-processing. This backend upload is
   separate from the optional browser download; neither the internal diagnostics
   nor the compatibility stream is included in downloaded session files.
-- After Stop, the Python analysis pipeline calculates a four-panel dual-band
-  feature view using normalized matched filtering: left/right amplitude change
-  and left/right absolute wrapped phase change across 281 lag bins. It also
-  displays a Doppler velocity-time map and derived motion/band-energy traces.
-  When a compatible MLP model is available, it runs the saved audible-only MLP on
-  overlapping 0.5-second windows and displays its predicted event labels and
-  confidence along the recording timeline. These figures are intentionally
-  post-processed rather than real-time.
+- After Stop, Python produces the same Stage-4 amplitude-change and phase-change
+  line charts as `extract_feature_maps_demo.py`, plus a Doppler velocity-time
+  map and derived motion/band-energy traces. When a compatible MLP model is
+  available, it also predicts overlapping 0.5-second windows and displays their
+  labels and confidence.
 - This checkout does not currently contain `models/`. Train or provide
-  `models/signal_event_model_audible_only.joblib` to enable the Stop-time MLP
-  prediction timeline and table. The feature-change, Doppler, and derived-trace
+  `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
+  prediction timeline and table. The Stage-4, Doppler, and derived-feature
   figures do not require the model.
 - The main page, shopping experiment, and travel experiment all use the same realtime `/realtime` backend.
 - Use `Ctrl+C` in the terminal to stop the local server.
@@ -156,25 +153,23 @@ The selected profile is shared across pages through
 operating system, driver, or audio hardware performs no additional processing,
 so use the recorded spectrum to qualify each device.
 
-## Realtime Dual-Band Feature Maps
+## Realtime Stage-4 Feature Lines
 
 The realtime backend follows `ultrasonic_feature_maps.py`, which mirrors the
-supplied `extract_feature_maps_demo.py` method. It splits the mono microphone
-signal into `18.8-20.7 kHz` and `21.3-23.2 kHz` bands, aligns the repeated
-12 ms triangle chirps, and calculates normalized complex matched-filter values
-for lags `0-280`. Consecutive chirps produce four features:
+latest `extract_feature_maps_demo.py`. It splits the microphone signal into
+`18.8-20.7 kHz` and `21.3-23.2 kHz` bands, aligns the repeated 12 ms chirps, and
+calculates normalized complex matched-filter values over lag bins `0-280`.
+Consecutive chirps produce left/right amplitude-change and absolute wrapped
+phase-change maps.
 
-- left and right `abs(diff(abs(C)))` amplitude-change maps
-- left and right `abs(angle(C[t] * conj(C[t-1])))` wrapped phase-change maps
-
-The completed-recording path uses zero-phase filtering. Realtime processing
-uses the causal form of the same sixth-order Butterworth filters because future
-samples are unavailable. Both paths discard the first 3 seconds. The live
-transport calculates every chirp and sends the elementwise maximum of each
-four-chirp group, giving an approximately `20.8 Hz` heatmap update rate while
-retaining short changes. The website displays raw microphone audio plus the
-four lag-time change maps; it no longer reduces the ultrasound response to one
-amplitude and one phase trace.
+For each feature and channel, the live chart selects the 10 lag bins with the
+largest temporal standard deviation, averages those bins, and divides the
+resulting trace by its full-trace median. It displays two panels: amplitude
+change and phase change, with separate blue left-channel and orange
+right-channel lines. The selection and median update from the accumulated live
+session; the completed recording is recalculated offline using the full trace.
+Realtime filtering is causal, while completed-recording processing uses the
+reference script's zero-phase filter.
 
 `SharedArrayBuffer`, a browser DSP worker, and ONNX Runtime Web are not part of
 the current path: live IQ and model processing run in the Python backend. Those
