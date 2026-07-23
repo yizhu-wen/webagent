@@ -92,8 +92,8 @@ http://localhost:8124/
   files together with the received-audio WAV and spectrogram. Click **Download
   session files** when you want to save them. `metadata.json` follows the
   standalone Python recorder's field names and includes the signal parameters,
-  actual duration, recording/scenario names, capture method, detected input
-  type, protocol phases, browser-visible OS information, and event counts.
+  actual duration, recording name, capture method, browser-visible OS
+  information, and event counts.
 - While sensing is active, `keyboard_events.json` records key down/up events,
   dwell time, and keydown-to-keydown flight time. `cursor_events.json` records
   pointer movement, click press/release, and wheel/touchpad scrolling. All `t`

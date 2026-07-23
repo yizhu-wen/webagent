@@ -1291,23 +1291,6 @@
       };
     }
 
-    function detectMetadataInputTag(trackingArtifacts) {
-      const keyEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
-      const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
-      const hasKeyboard = keyEvents.some((event) => event.event === "down");
-      const hasCursor = cursorEvents.length > 0;
-      if (hasKeyboard && hasCursor) {
-        return "Mix";
-      }
-      if (hasKeyboard) {
-        return "Key";
-      }
-      if (hasCursor) {
-        return "Touch";
-      }
-      return "Still";
-    }
-
     function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
       const keyboardEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
       const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
@@ -1319,16 +1302,9 @@
         tx_amplitude: 0.12,
         duration_sec: recordedAudioBuffer.duration,
         recording_name: `recording_${timestamp}`,
-        scenario: "Human",
         capture: diagnostics && diagnostics.recordingCapture
           ? diagnostics.recordingCapture.method
           : recordingCaptureMethod,
-        input: detectMetadataInputTag(trackingArtifacts),
-        phases_sec: [
-          { start: 0, end: 5, label: "SIT STILL  (baseline)" },
-          { start: 5, end: 35, label: "DO ACTIONS (type / touchpad)" },
-          { start: 35, end: 40, label: "SIT STILL  (tail)" }
-        ],
         os: getBrowserOsMetadata(),
         n_key_events: keyboardEvents.length,
         n_cursor_events: cursorEvents.length

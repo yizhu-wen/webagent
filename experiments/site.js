@@ -32,8 +32,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const siteLabel = document.body.dataset.siteLabel || "Shopping behavior";
   const resultLabel = document.body.dataset.resultLabel || "products";
   const recordingFilePrefix = document.body.dataset.recordingPrefix || "shopping_recording";
-  const recordingScenario = document.body.dataset.recordingScenario
-    || siteLabel.replace(/\s+behavior$/i, "");
   const analysisApiUrl = "/api/analyze-recording";
   const targetSampleRate = 48000;
   const maximumSensingDurationSeconds = 40;
@@ -701,23 +699,6 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function detectMetadataInputTag(trackingArtifacts) {
-    const keyEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
-    const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
-    const hasKeyboard = keyEvents.some((event) => event.event === "down");
-    const hasCursor = cursorEvents.length > 0;
-    if (hasKeyboard && hasCursor) {
-      return "Mix";
-    }
-    if (hasKeyboard) {
-      return "Key";
-    }
-    if (hasCursor) {
-      return "Touch";
-    }
-    return "Still";
-  }
-
   function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
     const keyboardEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
     const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
@@ -729,16 +710,9 @@ document.addEventListener("DOMContentLoaded", () => {
       tx_amplitude: 0.12,
       duration_sec: recordedAudioBuffer.duration,
       recording_name: `${recordingFilePrefix}_${timestamp}`,
-      scenario: recordingScenario,
       capture: diagnostics && diagnostics.recordingCapture
         ? diagnostics.recordingCapture.method
         : recordingCaptureMethod,
-      input: detectMetadataInputTag(trackingArtifacts),
-      phases_sec: [
-        { start: 0, end: 5, label: "SIT STILL  (baseline)" },
-        { start: 5, end: 35, label: "DO ACTIONS (type / touchpad)" },
-        { start: 35, end: 40, label: "SIT STILL  (tail)" }
-      ],
       os: getBrowserOsMetadata(),
       n_key_events: keyboardEvents.length,
       n_cursor_events: cursorEvents.length

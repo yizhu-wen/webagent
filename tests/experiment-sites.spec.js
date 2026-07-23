@@ -50,6 +50,27 @@ function expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents) {
   ))).toBe(true);
 }
 
+function expectReferenceMetadataFields(metadata) {
+  expect(Object.keys(metadata)).toEqual([
+    "fs",
+    "chirp_samples",
+    "left_band_hz",
+    "right_band_hz",
+    "tx_amplitude",
+    "duration_sec",
+    "recording_name",
+    "capture",
+    "os",
+    "n_key_events",
+    "n_cursor_events"
+  ]);
+  expect(metadata.fs).toBe(48000);
+  expect(metadata.chirp_samples).toBe(576);
+  expect(metadata.left_band_hz).toEqual([19000, 20500]);
+  expect(metadata.right_band_hz).toEqual([21500, 23000]);
+  expect(metadata.tx_amplitude).toBe(0.12);
+}
+
 test("original page links to the simplified experiment sites", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("a[href='experiments/']")).toHaveText("Open shopping experiment");
@@ -214,8 +235,7 @@ test("simple shopping page captures interaction data", async ({ page }) => {
   const cursorEvents = JSON.parse(fs.readFileSync(await cursorDownload.path(), "utf8"));
   const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
   expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents);
-  expect(metadata.scenario).toBe("Shopping");
-  expect(metadata.input).toBe("Mix");
+  expectReferenceMetadataFields(metadata);
   expect(metadata.n_key_events).toBe(keyboardEvents.length);
   expect(metadata.n_cursor_events).toBe(cursorEvents.length);
   expect(metadata.recording_name).toMatch(/^shopping_recording_\d{8}_\d{6}$/);
@@ -344,8 +364,7 @@ test("travel tourism page captures interaction data", async ({ page }) => {
   const cursorEvents = JSON.parse(fs.readFileSync(await cursorDownload.path(), "utf8"));
   const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
   expectPythonStyleTrackingEvents(keyboardEvents, cursorEvents);
-  expect(metadata.scenario).toBe("Travel");
-  expect(metadata.input).toBe("Mix");
+  expectReferenceMetadataFields(metadata);
   expect(metadata.n_key_events).toBe(keyboardEvents.length);
   expect(metadata.n_cursor_events).toBe(cursorEvents.length);
   expect(metadata.recording_name).toMatch(/^travel_recording_\d{8}_\d{6}$/);

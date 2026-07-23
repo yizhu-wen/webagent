@@ -204,6 +204,19 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
 
   const metadataDownload = downloads.find((item) => item.suggestedFilename() === "metadata.json");
   const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
+  expect(Object.keys(metadata)).toEqual([
+    "fs",
+    "chirp_samples",
+    "left_band_hz",
+    "right_band_hz",
+    "tx_amplitude",
+    "duration_sec",
+    "recording_name",
+    "capture",
+    "os",
+    "n_key_events",
+    "n_cursor_events"
+  ]);
   expect(metadata.fs).toBe(48000);
   expect(metadata.chirp_samples).toBe(576);
   expect(metadata.left_band_hz).toEqual([19000, 20500]);
@@ -212,14 +225,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(metadata.duration_sec).toBeGreaterThan(0);
   expect(metadata.duration_sec).toBeLessThanOrEqual(40);
   expect(metadata.recording_name).toMatch(/^recording_\d{8}_\d{6}$/);
-  expect(metadata.scenario).toBe("Human");
   expect(metadata.capture).toContain("AudioWorklet");
-  expect(metadata.input).toBe("Still");
-  expect(metadata.phases_sec).toEqual([
-    { start: 0, end: 5, label: "SIT STILL  (baseline)" },
-    { start: 5, end: 35, label: "DO ACTIONS (type / touchpad)" },
-    { start: 35, end: 40, label: "SIT STILL  (tail)" }
-  ]);
   expect(typeof metadata.os.system).toBe("string");
   expect(metadata.n_key_events).toBe(0);
   expect(metadata.n_cursor_events).toBe(0);

@@ -229,7 +229,9 @@ Both shopping and travel:
 - On Stop, prepare the following files without downloading them automatically:
   - `keyboard_events.json`
   - `cursor_events.json`
-  - `metadata.json`, using the standalone Python recorder's metadata field names
+  - `metadata.json`, containing only `fs`, `chirp_samples`, `left_band_hz`,
+    `right_band_hz`, `tx_amplitude`, `duration_sec`, `recording_name`, `capture`,
+    `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
   - Doppler, derived-feature, and MLP prediction figures when the Python server endpoint is available
