@@ -1780,19 +1780,13 @@
         drawPanelFrame(rawArea, "Raw microphone audio", "PCM", ["-1", "0", "1"]);
       }
 
-      function heatmapColor(value, maximum, phaseMap) {
+      function heatmapColor(value, maximum) {
         const normalized = Math.max(0, Math.min(1, value / Math.max(maximum, 1e-12)));
-        if (phaseMap) {
-          return [
-            Math.round(255 * Math.pow(normalized, 1.5)),
-            Math.round(220 * Math.sqrt(normalized)),
-            Math.round(55 + 180 * (1 - normalized))
-          ];
-        }
+        const intensity = Math.pow(normalized, 0.65);
         return [
-          Math.round(255 * Math.pow(normalized, 0.7)),
-          Math.round(220 * Math.pow(normalized, 1.4)),
-          Math.round(35 + 155 * (1 - normalized))
+          Math.round(255 + (79 - 255) * intensity),
+          Math.round(253 + (131 - 253) * intensity),
+          Math.round(250 + (204 - 250) * intensity)
         ];
       }
 
@@ -1823,8 +1817,7 @@
               : 0;
             const [red, green, blue] = heatmapColor(
               values && values.length ? Number(values[lagIndex]) || 0 : 0,
-              maximum,
-              phaseMap
+              maximum
             );
             const pixel = (y * area.width + x) * 4;
             image.data[pixel] = red;
