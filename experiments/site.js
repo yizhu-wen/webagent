@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let realtimeWaveformPoints = [];
   let realtimeEventMarkers = [];
   let realtimeDrawPending = false;
-  let realtimeLastStatusMessage = "Start sensing to see live raw audio, amplitude, and phase.";
+  let realtimeLastStatusMessage = "Start sensing to see live dual-band amplitude-change and phase-change maps.";
   let realtimeFramesSent = 0;
   let realtimeFramesReceived = 0;
   let realtimeFeaturesReceived = 0;
@@ -954,34 +954,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const ctx = realtimeCanvas.getContext("2d");
     const width = realtimeCanvas.width;
     const height = realtimeCanvas.height;
-    const margin = { top: 28, right: 18, bottom: 42, left: 74 };
-    const gap = 32;
+    const margin = { top: 28, right: 18, bottom: 46, left: 82 };
+    const gap = 24;
     const plotWidth = width - margin.left - margin.right;
-    const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 2) / 3);
-    const rawArea = {
+    const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 4) / 5);
+    const makeArea = (index) => ({
       left: margin.left,
-      top: margin.top,
+      top: margin.top + index * (panelHeight + gap),
       right: margin.left + plotWidth,
-      bottom: margin.top + panelHeight,
+      bottom: margin.top + index * (panelHeight + gap) + panelHeight,
       width: plotWidth,
       height: panelHeight
-    };
-    const ampArea = {
-      left: margin.left,
-      top: margin.top + panelHeight + gap,
-      right: margin.left + plotWidth,
-      bottom: margin.top + panelHeight + gap + panelHeight,
-      width: plotWidth,
-      height: panelHeight
-    };
-    const phaseArea = {
-      left: margin.left,
-      top: margin.top + (panelHeight + gap) * 2,
-      right: margin.left + plotWidth,
-      bottom: margin.top + (panelHeight + gap) * 2 + panelHeight,
-      width: plotWidth,
-      height: panelHeight
-    };
+    });
+    const rawArea = makeArea(0);
+    const amplitudeLeftArea = makeArea(1);
+    const amplitudeRightArea = makeArea(2);
+    const phaseLeftArea = makeArea(3);
+    const phaseRightArea = makeArea(4);
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#fffdfa";
@@ -994,43 +983,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const visibleMarkers = realtimeEventMarkers.filter((marker) => marker.time >= xMin && marker.time <= xMax);
 
     function xToPx(timeValue) {
-      return ampArea.left + ((timeValue - xMin) / Math.max(1e-6, xMax - xMin)) * ampArea.width;
+      return rawArea.left + ((timeValue - xMin) / Math.max(1e-6, xMax - xMin)) * rawArea.width;
     }
 
-    function drawPanel(area, title, ylabel, color, points, valueKey, fixedMin, fixedMax) {
-      let yMin = fixedMin;
-      let yMax = fixedMax;
-      if (yMin === null || yMax === null) {
-        const values = points.map((point) => point[valueKey]).filter(Number.isFinite);
-        if (values.length) {
-          yMin = Math.min(...values);
-          yMax = Math.max(...values);
-          const pad = Math.max(0.25, (yMax - yMin) * 0.18);
-          yMin -= pad;
-          yMax += pad;
-        } else {
-          yMin = -1;
-          yMax = 1;
-        }
-      }
-      if (Math.abs(yMax - yMin) < 1e-9) {
-        yMax += 1;
-        yMin -= 1;
-      }
-
-      function yToPx(value) {
-        return area.bottom - ((value - yMin) / (yMax - yMin)) * area.height;
-      }
-
+    function drawTimeGrid(area) {
       ctx.save();
-      ctx.strokeStyle = "rgba(31, 41, 51, 0.18)";
-      ctx.fillStyle = "#1f2933";
-      ctx.lineWidth = 1;
-      ctx.font = "16px Arial, sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(title, area.left, area.top - 6);
-
       ctx.fillStyle = "rgba(190, 45, 45, 0.16)";
       for (const region of realtimeStillRegions) {
         const left = xToPx(region.start);
@@ -1049,7 +1006,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ) && seconds > xMin && seconds < xMax;
         ctx.strokeStyle = isPhaseBoundary
           ? "rgba(150, 35, 35, 0.62)"
-          : "rgba(31, 41, 51, 0.14)";
+          : "rgba(46, 36, 28, 0.14)";
         ctx.lineWidth = isPhaseBoundary ? 1.5 : 1;
         ctx.setLineDash(isPhaseBoundary ? [] : [3, 4]);
         ctx.beginPath();
@@ -1058,48 +1015,11 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.stroke();
       }
       ctx.setLineDash([]);
-
-      if (area === rawArea) {
-        ctx.fillStyle = "rgba(145, 25, 25, 0.9)";
-        ctx.font = "bold 11px Arial, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        for (const region of realtimeStillRegions) {
-          ctx.fillText(region.label, xToPx((region.start + region.end) / 2), area.top + 5);
-        }
-      }
-
-      ctx.strokeStyle = "rgba(31, 41, 51, 0.18)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(area.left, area.top);
-      ctx.lineTo(area.left, area.bottom);
-      ctx.lineTo(area.right, area.bottom);
-      ctx.stroke();
-
-      ctx.font = "12px Arial, sans-serif";
-      ctx.fillStyle = "rgba(31, 41, 51, 0.76)";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      for (let tick = 0; tick <= 3; tick += 1) {
-        const ratio = tick / 3;
-        const value = yMin + ratio * (yMax - yMin);
-        const y = area.bottom - ratio * area.height;
-        ctx.strokeStyle = "rgba(31, 41, 51, 0.08)";
-        ctx.beginPath();
-        ctx.moveTo(area.left, y);
-        ctx.lineTo(area.right, y);
-        ctx.stroke();
-        ctx.fillText(value.toFixed(valueKey === "amplitude_norm" ? 2 : 1), area.left - 8, y);
-      }
-
-      ctx.save();
-      ctx.translate(18, area.top + area.height / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = "center";
-      ctx.fillText(ylabel, 0, 0);
       ctx.restore();
+    }
 
+    function drawMarkers(area) {
+      ctx.save();
       for (const marker of visibleMarkers) {
         const x = xToPx(marker.time);
         ctx.strokeStyle = marker.color;
@@ -1113,20 +1033,59 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.translate(x + 2, area.top + 4);
         ctx.rotate(-Math.PI / 2);
         ctx.fillStyle = marker.color;
-        ctx.font = "11px Arial, sans-serif";
+        ctx.font = "11px 'Segoe UI', sans-serif";
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
         ctx.fillText(marker.label, 0, 0);
         ctx.restore();
       }
+      ctx.restore();
+    }
 
-      if (points.length > 1) {
-        ctx.strokeStyle = color;
+    function drawPanelFrame(area, title, ylabel, tickValues) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(46, 36, 28, 0.24)";
+      ctx.strokeRect(area.left, area.top, area.width, area.height);
+      ctx.fillStyle = "#2e241c";
+      ctx.font = "15px 'Segoe UI', sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(title, area.left, area.top - 5);
+      ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let index = 0; index < tickValues.length; index += 1) {
+        const ratio = index / Math.max(1, tickValues.length - 1);
+        const y = area.bottom - ratio * area.height;
+        ctx.fillText(String(tickValues[index]), area.left - 8, y);
+      }
+      ctx.save();
+      ctx.translate(18, area.top + area.height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = "center";
+      ctx.fillText(ylabel, 0, 0);
+      ctx.restore();
+      ctx.restore();
+    }
+
+    function drawRawPanel() {
+      drawTimeGrid(rawArea);
+      ctx.save();
+      ctx.fillStyle = "rgba(145, 25, 25, 0.9)";
+      ctx.font = "bold 11px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (const region of realtimeStillRegions) {
+        ctx.fillText(region.label, xToPx((region.start + region.end) / 2), rawArea.top + 5);
+      }
+      if (visibleWaveformPoints.length > 1) {
+        const yToPx = (value) => rawArea.bottom - ((value + 1) / 2) * rawArea.height;
+        ctx.strokeStyle = "#4f83cc";
         ctx.lineWidth = 1.7;
         ctx.beginPath();
-        points.forEach((point, index) => {
+        visibleWaveformPoints.forEach((point, index) => {
           const x = xToPx(point.time);
-          const y = yToPx(point[valueKey]);
+          const y = yToPx(point.value);
           if (index === 0) {
             ctx.moveTo(x, y);
           } else {
@@ -1135,17 +1094,95 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         ctx.stroke();
       }
+      ctx.restore();
+      drawMarkers(rawArea);
+      drawPanelFrame(rawArea, "Raw microphone audio", "PCM", ["-1", "0", "1"]);
+    }
 
+    function heatmapColor(value, maximum, phaseMap) {
+      const normalized = Math.max(0, Math.min(1, value / Math.max(maximum, 1e-12)));
+      if (phaseMap) {
+        return [
+          Math.round(255 * Math.pow(normalized, 1.5)),
+          Math.round(220 * Math.sqrt(normalized)),
+          Math.round(55 + 180 * (1 - normalized))
+        ];
+      }
+      return [
+        Math.round(255 * Math.pow(normalized, 0.7)),
+        Math.round(220 * Math.pow(normalized, 1.4)),
+        Math.round(35 + 155 * (1 - normalized))
+      ];
+    }
+
+    function maximumAcross(keys, fallback) {
+      let maximum = 0;
+      for (const point of visiblePoints) {
+        for (const key of keys) {
+          for (const value of point[key] || []) {
+            maximum = Math.max(maximum, Number(value) || 0);
+          }
+        }
+      }
+      return maximum > 0 ? maximum : fallback;
+    }
+
+    function drawHeatmap(area, title, key, maximum, phaseMap) {
+      const image = ctx.createImageData(area.width, area.height);
+      let pointIndex = -1;
+      for (let x = 0; x < area.width; x += 1) {
+        const time = xMin + (x / Math.max(1, area.width - 1)) * (xMax - xMin);
+        while (pointIndex + 1 < visiblePoints.length && visiblePoints[pointIndex + 1].time <= time) {
+          pointIndex += 1;
+        }
+        const values = pointIndex >= 0 ? visiblePoints[pointIndex][key] : null;
+        for (let y = 0; y < area.height; y += 1) {
+          const lagIndex = values && values.length
+            ? Math.round(((area.height - 1 - y) / Math.max(1, area.height - 1)) * (values.length - 1))
+            : 0;
+          const [red, green, blue] = heatmapColor(
+            values && values.length ? Number(values[lagIndex]) || 0 : 0,
+            maximum,
+            phaseMap
+          );
+          const pixel = (y * area.width + x) * 4;
+          image.data[pixel] = red;
+          image.data[pixel + 1] = green;
+          image.data[pixel + 2] = blue;
+          image.data[pixel + 3] = 255;
+        }
+      }
+      ctx.putImageData(image, area.left, area.top);
+      drawTimeGrid(area);
+      drawMarkers(area);
+      drawPanelFrame(area, title, "Lag (samples)", ["0", "140", "280"]);
+      ctx.save();
+      ctx.fillStyle = "rgba(46, 36, 28, 0.72)";
+      ctx.font = "10px 'Segoe UI', sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(
+        phaseMap ? `scale 0-${maximum.toFixed(2)} rad` : `scale 0-${maximum.toExponential(1)}`,
+        area.right,
+        area.top - 5
+      );
       ctx.restore();
     }
 
-    drawPanel(rawArea, "Raw audio", "PCM", "#4f83cc", visibleWaveformPoints, "value", -1, 1);
-    drawPanel(ampArea, "Amplitude", "normalized", "#ff9d42", visiblePoints, "amplitude_norm", 0, 1.1);
-    drawPanel(phaseArea, "Phase", "rad", "#5dae70", visiblePoints, "phase", null, null);
+    const amplitudeMaximum = maximumAcross(
+      ["amplitude_change_left", "amplitude_change_right"],
+      1e-3
+    );
+    const phaseMaximum = Math.PI;
+    drawRawPanel();
+    drawHeatmap(amplitudeLeftArea, "Left-band amplitude change", "amplitude_change_left", amplitudeMaximum, false);
+    drawHeatmap(amplitudeRightArea, "Right-band amplitude change", "amplitude_change_right", amplitudeMaximum, false);
+    drawHeatmap(phaseLeftArea, "Left-band wrapped phase change", "phase_change_left", phaseMaximum, true);
+    drawHeatmap(phaseRightArea, "Right-band wrapped phase change", "phase_change_right", phaseMaximum, true);
 
     ctx.save();
-    ctx.fillStyle = "rgba(31, 41, 51, 0.76)";
-    ctx.font = "12px Arial, sans-serif";
+    ctx.fillStyle = "rgba(46, 36, 28, 0.76)";
+    ctx.font = "12px 'Segoe UI', sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (
@@ -1153,14 +1190,14 @@ document.addEventListener("DOMContentLoaded", () => {
       seconds <= xMax + 1e-6;
       seconds += realtimeTimelineTickSeconds
     ) {
-      ctx.fillText(`${seconds}s`, xToPx(seconds), phaseArea.bottom + 12);
+      ctx.fillText(`${seconds}s`, xToPx(seconds), phaseRightArea.bottom + 12);
     }
-    ctx.font = "13px Arial, sans-serif";
+    ctx.font = "13px 'Segoe UI', sans-serif";
     ctx.fillText("Recording time (s)", width / 2, height - 18);
     if (!visiblePoints.length && !visibleWaveformPoints.length) {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "15px Arial, sans-serif";
+      ctx.font = "15px 'Segoe UI', sans-serif";
       ctx.fillText(realtimeLastStatusMessage, width / 2, height / 2);
     }
     ctx.restore();
@@ -1182,9 +1219,12 @@ document.addEventListener("DOMContentLoaded", () => {
       timestamp_source: message.timestamp_source || "",
       window_start_time: Number.isFinite(message.window_start_time) ? message.window_start_time : null,
       window_end_time: Number.isFinite(message.window_end_time) ? message.window_end_time : null,
-      amplitude_norm: Number.isFinite(message.amplitude_norm) ? message.amplitude_norm : 0,
-      phase: Number.isFinite(message.phase) ? message.phase : 0,
-      range_cm: Number.isFinite(message.range_cm) ? message.range_cm : 0
+      amplitude_change_left: Array.isArray(message.amplitude_change_left) ? message.amplitude_change_left : [],
+      amplitude_change_right: Array.isArray(message.amplitude_change_right) ? message.amplitude_change_right : [],
+      phase_change_left: Array.isArray(message.phase_change_left) ? message.phase_change_left : [],
+      phase_change_right: Array.isArray(message.phase_change_right) ? message.phase_change_right : [],
+      lag_count: Number(message.lag_count) || 0,
+      max_lag: Number(message.max_lag) || 0
     });
     if (realtimeFeaturePoints.length > realtimeMaxPoints) {
       realtimeFeaturePoints.splice(0, realtimeFeaturePoints.length - realtimeMaxPoints);
@@ -1287,7 +1327,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    if (message.type === "feature") {
+    if (message.type === "feature_map" || message.type === "feature") {
       appendRealtimeFeature(message);
       return;
     }
@@ -2446,6 +2486,7 @@ document.addEventListener("DOMContentLoaded", () => {
     getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
     getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
     getRealtimePointCount: () => realtimeFeaturePoints.length,
+    appendRealtimeFeature,
     renderGeneratedFigures,
     renderWindowPredictions,
     clearFeatureVisualizations,

@@ -25,6 +25,8 @@ The current design goal is intentionally simple and functional, with minimal vis
 - `analyze_webagent_recording.py`: Stop-time feature visualization and MLP
   inference pipeline used by `/api/analyze-recording`.
 - `realtime_iq.py`: Streaming chirp alignment and live IQ feature extraction.
+- `ultrasonic_feature_maps.py`: Shared reference-format dual-band normalized
+  matched-filter extraction and amplitude/phase change-map definitions.
 - `tx_dual_triangle_chirp_19_205_215_23.wav`: Phase-continuous stereo sensing asset. The left channel sweeps 19.0-20.5 kHz and the right channel sweeps 21.5-23.0 kHz with a 12 ms period.
 - `experiments/index.html`: Simple shopping dummy website.
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
@@ -75,7 +77,8 @@ Matplotlib, scikit-learn, Joblib, and PyTorch.
 real-time IQ WebSocket endpoint on the same public port at
 `ws://localhost:8000/realtime`. On Render, the browser automatically uses
 `wss://<your-service>.onrender.com/realtime`. Click `Start sensing` to stream
-Float32 microphone frames to Python and update the live amplitude/phase chart.
+Float32 microphone frames to Python and update four live dual-band
+amplitude-change/phase-change heatmaps.
 The same control changes to `Stop sensing` while sensing is active.
 For manual debugging, `python realtime_server.py` can still run the older
 standalone WebSocket backend by itself.
@@ -132,9 +135,10 @@ Python figures can be generated.
 - Start sensing decodes the chirp and schedules its loop 50 ms ahead on the same
   48 kHz Web Audio timeline used by microphone capture.
 - Start sensing streams microphone frames to the same-origin `/realtime`
-  WebSocket endpoint and updates the live amplitude/phase chart.
+  WebSocket endpoint and updates the live left/right amplitude-change and
+  phase-change maps.
 - Live IQ feature timestamps come from the processed audio sample index and the
-  center of each 12 ms chirp window after chirp-boundary alignment, not from the
+  start of each 12 ms chirp window after chirp-boundary alignment, not from the
   time Python finishes calculating the feature.
 - Live IQ uses latest-only transport: browser audio frames include timestamp and
   sequence metadata, the browser drops frames when the WebSocket send buffer is
@@ -148,9 +152,10 @@ Python figures can be generated.
   download begins until the user selects that button.
 - Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
   local Python backend for offline processing. The page later displays a
-  Doppler velocity-time map, derived motion/band-energy traces, and an MLP
-  prediction timeline when the required MLP artifact is available. This backend
-  upload is independent of the browser download button.
+  dual-band amplitude/phase change-map figure, Doppler velocity-time map, and
+  derived motion/band-energy traces. It adds an MLP prediction timeline when the
+  required artifact is available. This backend upload is independent of the
+  browser download button.
 - When supplied, the default audible-only MLP predicts every overlapping `0.5`
   second signal window with a `0.25` second stride after Stop. The first and
   final `1.0` second are excluded. A scrollable table shows every window's
@@ -192,16 +197,18 @@ Real-time mode is implemented by:
 - `realtime_server.py`: older standalone local WebSocket server at
   `ws://127.0.0.1:8765`, kept for manual debugging.
 - `realtime_iq.py`: streaming IQ processor that performs causal bandpass,
-  chirp alignment, dechirp/range-bank matching, and live amplitude/phase
-  extraction. Feature messages include chirp-window sample/timing metadata so
-  the browser can place amplitude/phase points on the audio timeline. The
-  startup alignment intentionally uses a short valid-lag FFT correlation window
-  so Render free instances can start producing live features quickly.
+  separate left/right chirp alignment, normalized matched filtering over lags
+  `0-280`, and consecutive-chirp amplitude/phase change extraction. Feature-map
+  messages include chirp-window sample/timing metadata and four 281-value map
+  columns. Every four calculated columns are combined by elementwise maximum
+  for an approximately `20.8 Hz` browser update rate. The first 3 seconds are
+  discarded to match the reference batch extractor.
 
-The real-time backend intentionally sends feature numbers, not matplotlib
-images. The browser draws the live chart so updates stay responsive. The
-existing Stop-time WAV upload and matplotlib figure generation remain available
-for offline validation.
+The real-time backend intentionally sends map columns, not matplotlib images.
+The browser draws raw audio plus left/right amplitude-change and wrapped
+phase-change heatmaps on a fixed recording-time x-axis. The existing Stop-time
+WAV upload and matplotlib figure generation remain available for offline
+validation.
 
 The architecture review's `SharedArrayBuffer`, dedicated browser DSP worker,
 and ONNX Runtime Web path is intentionally deferred. The current application
@@ -243,20 +250,26 @@ Both shopping and travel:
 
 ## Figure Generation
 
-When `models/signal_event_model_audible_only.joblib` is available, the Stop-time
-Python pipeline generates three full-width figures:
+The Stop-time Python pipeline generates these model-independent figures:
+
+- `01_dual_band_feature_changes.png`: the four reference-format left/right
+  amplitude-change and phase-change lag-time maps.
 
 - `02_doppler_velocity.png`: slow-time Doppler energy versus recording time
   and radial velocity.
 - `05_derived_motion_traces.png`: dominant reflection range, phase-derived
   radial velocity, phase motion energy, and audible-band RMS energy.
+
+When `models/signal_event_model_audible_only.joblib` is available, it also
+generates:
+
 - `06_mlp_prediction_timeline.png`: audible-only MLP label and confidence for
   every overlapping `0.5` second analysis window.
 
 The analysis also writes:
 
-- `pipeline_features.npz`: reusable correlation, phase-change, range, and time
-  arrays.
+- `pipeline_features.npz`: reusable legacy correlation arrays plus the four
+  reference-format dual-band change maps, lag bins, and feature timestamps.
 - `window_predictions.json`: one record per window with start/end/center time,
   predicted label, confidence, and every class probability.
 - `analysis_summary.json`: processing configuration and session summary.
@@ -283,8 +296,8 @@ The endpoint `/api/analyze-recording` saves each uploaded sensing session under
 descriptions, the reusable feature archive, and all per-window predictions. A
 plain static server can still capture and explicitly download the browser
 artifacts, but cannot run Python feature extraction or model inference. If the
-default MLP file is missing, `/api/analyze-recording` cannot complete; the
-browser-side artifacts remain available through the download button.
+default MLP file is missing, `/api/analyze-recording` still returns the
+model-independent feature figures and archive but omits predictions.
 
 ## Tracked User Events
 

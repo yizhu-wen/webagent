@@ -40,9 +40,14 @@ from train_signal_event_model import (  # noqa: E402
     sliding_starts,
     window_matrix,
 )
+from ultrasonic_feature_maps import extract_all_feature_maps  # noqa: E402
 
 
 FIGURE_DESCRIPTIONS = {
+    "01_dual_band_feature_changes.png": (
+        "Left/right normalized matched-filter amplitude-change and wrapped "
+        "phase-change maps, using the same 281 lag bins as the live processor."
+    ),
     "02_doppler_velocity.png": (
         "Shows motion speed and direction over time. Energy away from zero indicates "
         "movement; positive and negative velocities indicate opposite radial directions."
@@ -84,6 +89,55 @@ def save_figure(fig: plt.Figure, path: Path) -> None:
     fig.tight_layout()
     fig.savefig(path, dpi=170, bbox_inches="tight", facecolor="white")
     plt.close(fig)
+
+
+def plot_dual_band_feature_changes(
+    output: Path,
+    feature_maps: dict[str, np.ndarray],
+) -> None:
+    """Render the four maps produced by the supplied reference method."""
+    time_seconds = feature_maps["time"]
+    lags = feature_maps["lags"]
+    amplitude = np.concatenate(
+        [
+            feature_maps["amplitude_left"].ravel(),
+            feature_maps["amplitude_right"].ravel(),
+        ]
+    )
+    _amp_min, amp_max = robust_limits(amplitude, 0.0, 99.5)
+    phase = np.concatenate(
+        [
+            feature_maps["phase_left"].ravel(),
+            feature_maps["phase_right"].ravel(),
+        ]
+    )
+    _phase_min, phase_max = robust_limits(phase, 0.0, 99.5)
+    phase_max = min(float(np.pi), phase_max)
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 8), sharex=True, sharey=True)
+    panels = [
+        ("amplitude_left", "Left-band amplitude change", "magma", amp_max, "|Δ normalized amplitude|"),
+        ("amplitude_right", "Right-band amplitude change", "magma", amp_max, "|Δ normalized amplitude|"),
+        ("phase_left", "Left-band phase change", "viridis", phase_max, "|wrapped Δ phase| (rad)"),
+        ("phase_right", "Right-band phase change", "viridis", phase_max, "|wrapped Δ phase| (rad)"),
+    ]
+    for axis, (key, title, cmap, vmax, color_label) in zip(axes.ravel(), panels):
+        image = axis.imshow(
+            feature_maps[key],
+            origin="lower",
+            aspect="auto",
+            extent=[time_seconds[0], time_seconds[-1], lags[0], lags[-1]],
+            cmap=cmap,
+            vmin=0.0,
+            vmax=max(float(vmax), 1e-9),
+        )
+        axis.set_title(title)
+        axis.set_ylabel("Matched-filter lag (samples)")
+        fig.colorbar(image, ax=axis, label=color_label)
+    for axis in axes[-1]:
+        axis.set_xlabel("Recording time (s)")
+    fig.suptitle("Dual-band normalized matched-filter change maps", fontsize=15)
+    save_figure(fig, output)
 
 
 def plot_range_time(
@@ -507,11 +561,14 @@ def plot_mlp_prediction_timeline(
 def main() -> None:
     args = parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    if not args.model.exists():
-        raise FileNotFoundError(f"Missing MLP model: {args.model}")
-    model_artifact = joblib.load(args.model)
-    config = FeatureConfig(**model_artifact["featureConfig"])
+    model_artifact = joblib.load(args.model) if args.model.exists() else None
+    config = (
+        FeatureConfig(**model_artifact["featureConfig"])
+        if model_artifact is not None
+        else FeatureConfig()
+    )
     samples, sample_rate = read_audio(args.wav)
+    feature_maps = extract_all_feature_maps(samples, sample_rate)
     recording = compute_recording_features(samples, sample_rate, config, "combined")
     if recording.C is None or recording.dphi is None or recording.top_bins is None:
         raise RuntimeError("Ultrasound feature extraction did not produce correlation maps.")
@@ -524,6 +581,11 @@ def main() -> None:
     time_seconds = recording.offset_seconds + np.arange(correlation.shape[1]) / FS_SLOW
     range_cm = np.arange(correlation.shape[0]) * RANGE_PER_SAMPLE_CM
     amplitude_db = 20 * np.log10(np.abs(correlation) + EPS)
+
+    plot_dual_band_feature_changes(
+        args.out_dir / "01_dual_band_feature_changes.png",
+        feature_maps,
+    )
 
     plot_doppler_velocity(
         args.out_dir / "02_doppler_velocity.png",
@@ -540,26 +602,29 @@ def main() -> None:
         range_cm,
         top_bins,
     )
-    prediction_summary, prediction_rows = plot_mlp_prediction_timeline(
-        args.out_dir / "06_mlp_prediction_timeline.png",
-        recording,
-        model_artifact,
-        config,
-    )
-    prediction_path = args.out_dir / "window_predictions.json"
-    prediction_path.write_text(
-        json.dumps(
-            {
-                "model": str(args.model),
-                "featureSet": prediction_summary["featureSet"],
-                "windowSeconds": config.window_seconds,
-                "strideSeconds": config.stride_seconds,
-                "predictions": prediction_rows,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    prediction_summary = None
+    prediction_path = None
+    if model_artifact is not None:
+        prediction_summary, prediction_rows = plot_mlp_prediction_timeline(
+            args.out_dir / "06_mlp_prediction_timeline.png",
+            recording,
+            model_artifact,
+            config,
+        )
+        prediction_path = args.out_dir / "window_predictions.json"
+        prediction_path.write_text(
+            json.dumps(
+                {
+                    "model": str(args.model),
+                    "featureSet": prediction_summary["featureSet"],
+                    "windowSeconds": config.window_seconds,
+                    "strideSeconds": config.stride_seconds,
+                    "predictions": prediction_rows,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     np.savez_compressed(
         args.out_dir / "pipeline_features.npz",
@@ -568,6 +633,12 @@ def main() -> None:
         top_bins=top_bins,
         time_seconds=time_seconds,
         range_cm=range_cm,
+        feature_time=feature_maps["time"],
+        feature_lags=feature_maps["lags"],
+        amplitude_change_left=feature_maps["amplitude_left"],
+        amplitude_change_right=feature_maps["amplitude_right"],
+        phase_change_left=feature_maps["phase_left"],
+        phase_change_right=feature_maps["phase_right"],
     )
     summary = {
         "wav": str(args.wav),
@@ -577,8 +648,8 @@ def main() -> None:
         "chirpCount": int(correlation.shape[1]),
         "rangeBinCount": int(correlation.shape[0]),
         "topRangeBinsCm": [float(range_cm[index]) for index in top_bins],
-        "predictionModel": str(args.model),
-        "predictionFile": prediction_path.name,
+        "predictionModel": str(args.model) if model_artifact is not None else None,
+        "predictionFile": prediction_path.name if prediction_path is not None else None,
         "prediction": prediction_summary,
         "featureConfig": asdict(config),
         "figures": FIGURE_DESCRIPTIONS,

@@ -6,8 +6,9 @@ Run from the project root or webagent folder:
     python realtime_server.py
 
 This standalone debug server receives raw Float32 microphone frames at
-ws://127.0.0.1:8765 and returns JSON amplitude/phase/range features for live
-plotting. The deployed app uses server.py's same-origin /realtime endpoint.
+ws://127.0.0.1:8765 and returns JSON left/right amplitude-change and
+phase-change maps for live plotting. The deployed app uses server.py's
+same-origin /realtime endpoint.
 """
 
 from __future__ import annotations
@@ -342,7 +343,7 @@ async def run_server(host: str, port: int, tx_path: Path) -> None:
     )
     sockets = ", ".join(str(sock.getsockname()) for sock in server.sockets or [])
     print(f"Realtime WebSocket server listening on {sockets}")
-    print("Open the website and start sensing to stream live amplitude/phase.")
+    print("Open the website and start sensing to stream live feature-change maps.")
     async with server:
         await server.serve_forever()
 
