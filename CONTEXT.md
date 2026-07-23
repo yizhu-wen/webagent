@@ -253,8 +253,8 @@ Both shopping and travel:
     `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
-  - Stage-4 amplitude/phase, Doppler, derived-feature, and optional MLP
-    prediction figures when the Python server endpoint is available
+  - Stage-4 amplitude/phase, Doppler, and optional MLP prediction figures when
+    the Python server endpoint is available
 - Show `Download session files (N)` when preparation completes. Selecting it is
   the only action that starts the browser downloads.
 - Show the recorded spectrogram on the page after Stop.
@@ -275,9 +275,6 @@ The Stop-time Python pipeline always generates these model-independent figures:
   same action markers.
 - `02_doppler_velocity.png`: slow-time Doppler energy versus recording time
   and radial velocity.
-- `05_derived_motion_traces.png`: dominant reflection range, phase-derived
-  radial velocity, phase motion energy, and audible-band RMS energy.
-
 When `models/signal_event_model_audible_only.joblib` is available, it also
 generates:
 

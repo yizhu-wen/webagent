@@ -105,13 +105,12 @@ http://localhost:8124/
 - After Stop, Python produces the same Stage-4 amplitude-change and phase-change
   line charts as `extract_feature_maps_demo.py`, with time-aligned key,
   pointer-move, scroll, and click markers. It also produces a Doppler
-  velocity-time map and derived motion/band-energy traces. When a compatible
-  MLP model is available, it predicts overlapping 0.5-second windows and
-  displays their labels and confidence.
+  velocity-time map. When a compatible MLP model is available, it predicts
+  overlapping 0.5-second windows and displays their labels and confidence.
 - This checkout does not currently contain `models/`. Train or provide
   `models/signal_event_model_audible_only.joblib` to enable the Stop-time Python
-  prediction timeline and table. The Stage-4, Doppler, and derived-feature
-  figures do not require the model.
+  prediction timeline and table. The Stage-4 and Doppler figures do not require
+  the model.
 - The main page, shopping experiment, and travel experiment all use the same realtime `/realtime` backend.
 - Use `Ctrl+C` in the terminal to stop the local server.
 - For browser microphone access, `localhost` is the recommended local URL.

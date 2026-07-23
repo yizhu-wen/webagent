@@ -37,7 +37,6 @@ from signal_event_cnn import split_feature_matrices  # noqa: E402
 from train_signal_event_model import (  # noqa: E402
     EPS,
     FC,
-    FS,
     FS_SLOW,
     RANGE_PER_SAMPLE_CM,
     SPEED_OF_SOUND,
@@ -65,11 +64,6 @@ FIGURE_DESCRIPTIONS = {
     "02_doppler_velocity.png": (
         "Shows motion speed and direction over time. Energy away from zero indicates "
         "movement; positive and negative velocities indicate opposite radial directions."
-    ),
-    "05_derived_motion_traces.png": (
-        "Compares dominant reflection range, phase-derived radial velocity, motion energy, "
-        "and audible-band energy. Aligned peaks reveal which physical and acoustic changes "
-        "occurred together."
     ),
     "06_mlp_prediction_timeline.png": (
         "Audible-only MLP predictions from overlapping 0.5-second windows. The upper strip "
@@ -614,56 +608,6 @@ def plot_model_inputs(
     save_figure(fig, output)
 
 
-def frame_rms_db(samples: np.ndarray, frame_count: int) -> np.ndarray:
-    frame_size = max(1, int(round(FS / FS_SLOW)))
-    output = np.full(frame_count, np.nan, dtype=np.float64)
-    for index in range(frame_count):
-        start = index * frame_size
-        frame = samples[start : start + frame_size]
-        if frame.size:
-            output[index] = 20 * np.log10(np.sqrt(np.mean(frame**2)) + EPS)
-    return output
-
-
-def plot_derived_traces(
-    output: Path,
-    correlation: np.ndarray,
-    delta_phase: np.ndarray,
-    audible_samples: np.ndarray,
-    time_seconds: np.ndarray,
-    range_cm: np.ndarray,
-    top_bins: np.ndarray,
-) -> None:
-    peak_bins = np.argmax(np.abs(correlation), axis=0)
-    peak_range = range_cm[peak_bins]
-    selected_phase = delta_phase[top_bins]
-    motion_energy = np.mean(np.abs(selected_phase), axis=0)
-    radial_velocity = (
-        np.median(selected_phase, axis=0)
-        * (SPEED_OF_SOUND / FC)
-        / (4 * np.pi)
-        * FS_SLOW
-        * 100
-    )
-    audible_rms = frame_rms_db(audible_samples, correlation.shape[1])
-
-    fig, axes = plt.subplots(4, 1, figsize=(13, 9), sharex=True)
-    traces = [
-        (peak_range, "Dominant reflection range", "Range (cm)", "#176b87"),
-        (radial_velocity, "Phase-derived radial velocity", "Velocity (cm/s)", "#c44536"),
-        (motion_energy, "Phase motion energy", "Mean |dphase| (rad)", "#5f6caf"),
-        (audible_rms, "Audible-band energy", "RMS (dBFS)", "#3a7d44"),
-    ]
-    for axis, (values, title, ylabel, color) in zip(axes, traces):
-        axis.plot(time_seconds[: len(values)], values, color=color, linewidth=1.4)
-        axis.set_title(title, loc="left", fontsize=10, fontweight="bold")
-        axis.set_ylabel(ylabel)
-        axis.grid(True, alpha=0.22)
-    axes[-1].set_xlabel("Time (s)")
-    fig.suptitle("Derived motion and band-energy features", fontsize=14, fontweight="bold")
-    save_figure(fig, output)
-
-
 def contiguous_label_runs(labels: np.ndarray) -> list[tuple[int, int, str]]:
     if not len(labels):
         return []
@@ -842,15 +786,6 @@ def main() -> None:
         args.out_dir / "02_doppler_velocity.png",
         correlation,
         recording.offset_seconds,
-        top_bins,
-    )
-    plot_derived_traces(
-        args.out_dir / "05_derived_motion_traces.png",
-        correlation,
-        delta_phase,
-        recording.audible_samples,
-        time_seconds,
-        range_cm,
         top_bins,
     )
     prediction_summary = None
