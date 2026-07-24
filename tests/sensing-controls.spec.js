@@ -166,7 +166,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   });
   expect(spectrogramFormat.height).toBe(394);
   expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
-  await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(7);
+  await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(5);
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
   expect(fileNames).toContain("keyboard_events.json");
@@ -175,8 +175,10 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(fileNames.some((name) => name.startsWith("os_event_log_"))).toBe(false);
   expect(fileNames.some((name) => /^recording_\d{8}_\d{6}\.wav$/.test(name))).toBe(true);
   expect(fileNames.some((name) => /^recording_spectrogram_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
-  expect(fileNames.some((name) => /^recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
-  expect(fileNames.some((name) => /^recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
+  // The live realtime canvas is no longer downloaded. The processed
+  // micro_doppler_{left,right}_band.png come from the Python backend, which is
+  // absent from this static test server (like the Stage-4 figures).
+  expect(fileNames.some((name) => /_live_micro_doppler_/.test(name))).toBe(false);
   expect(fileNames).toContain("metadata.json");
   expect(fileNames.some((name) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^input_events_amplitude_phase\.png$/.test(name))).toBe(false);

@@ -253,18 +253,19 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
     metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^shopping_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
-    spectrogram: downloads.some((download) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
-    dopplerLeft: downloads.some((download) => /^shopping_recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
-    dopplerRight: downloads.some((download) => /^shopping_recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
+    spectrogram: downloads.some((download) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
     keyboard: true,
     cursor: true,
     metadata: true,
     audio: true,
-    spectrogram: true,
-    dopplerLeft: true,
-    dopplerRight: true
+    spectrogram: true
   });
+  // The live realtime canvas is no longer downloaded; the processed
+  // micro-Doppler figures come from the Python backend (absent in this static
+  // test server, like the Stage-4 figures).
+  const shoppingFileNames = downloads.map((download) => download.suggestedFilename());
+  expect(shoppingFileNames.some((name) => /_live_micro_doppler_/.test(name))).toBe(false);
 
   const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");
   const cursorDownload = downloads.find((item) => item.suggestedFilename() === "cursor_events.json");
@@ -386,18 +387,19 @@ test("travel tourism page captures interaction data", async ({ page }) => {
     cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
     metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^travel_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
-    spectrogram: downloads.some((download) => /^travel_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
-    dopplerLeft: downloads.some((download) => /^travel_recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
-    dopplerRight: downloads.some((download) => /^travel_recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
+    spectrogram: downloads.some((download) => /^travel_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
     keyboard: true,
     cursor: true,
     metadata: true,
     audio: true,
-    spectrogram: true,
-    dopplerLeft: true,
-    dopplerRight: true
+    spectrogram: true
   });
+  // The live realtime canvas is no longer downloaded; the processed
+  // micro-Doppler figures come from the Python backend (absent in this static
+  // test server, like the Stage-4 figures).
+  const travelFileNames = downloads.map((download) => download.suggestedFilename());
+  expect(travelFileNames.some((name) => /_live_micro_doppler_/.test(name))).toBe(false);
 
   const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");
   const cursorDownload = downloads.find((item) => item.suggestedFilename() === "cursor_events.json");

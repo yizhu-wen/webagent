@@ -16,6 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import joblib
 import numpy as np
+from scipy.signal import get_window
 from matplotlib.colors import ListedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
@@ -44,7 +45,17 @@ from train_signal_event_model import (  # noqa: E402
     sliding_starts,
     window_matrix,
 )
-from ultrasonic_feature_maps import extract_stage4_traces  # noqa: E402
+from ultrasonic_feature_maps import (  # noqa: E402
+    CHIRP_DURATION,
+    extract_complex_range_maps,
+    extract_stage4_traces,
+)
+
+DOPPLER_TOP_K = 12
+DOPPLER_WINDOW_CHIRPS = 64
+DOPPLER_HOP_CHIRPS = 8
+DOPPLER_NFFT = 256
+DOPPLER_DB_FLOOR = -30.0
 
 
 FIGURE_DESCRIPTIONS = {
@@ -57,6 +68,18 @@ FIGURE_DESCRIPTIONS = {
         "Median-normalized left/right wrapped phase-change lines made from the "
         "10 matched-filter lag bins with the greatest temporal variation, with "
         "time-aligned key, pointer-move, scroll, and click markers."
+    ),
+    "micro_doppler_left_band.png": (
+        "Offline slow-time micro-Doppler heatmap for the 19-20.5 kHz left band. "
+        "Uses non-causal clutter suppression and the full slow-time resolution, so "
+        "it is the exact reference for the causal live heatmap, with time-aligned "
+        "key, pointer-move, scroll, and click markers."
+    ),
+    "micro_doppler_right_band.png": (
+        "Offline slow-time micro-Doppler heatmap for the 21.5-23 kHz right band. "
+        "Uses non-causal clutter suppression and the full slow-time resolution, so "
+        "it is the exact reference for the causal live heatmap, with time-aligned "
+        "key, pointer-move, scroll, and click markers."
     ),
     "06_mlp_prediction_timeline.png": (
         "Audible-only MLP predictions from overlapping 0.5-second windows. The upper strip "
@@ -378,6 +401,124 @@ def plot_stage4_feature_changes(
             np.asarray(feature_maps[f"{feature}_right_trace"]),
             action_markers,
         )
+
+
+def _select_doppler_motion_bins(complex_map: np.ndarray) -> np.ndarray:
+    """Pick the range bins with the strongest, most variable echo motion.
+
+    Non-causal analogue of the realtime top-12 selection: it scores every lag
+    bin over the whole recording instead of an accumulating running estimate.
+    """
+    amplitude = np.abs(complex_map)
+    top_k = min(DOPPLER_TOP_K, amplitude.shape[0])
+    if amplitude.shape[1] < 2:
+        return np.arange(top_k)
+    change = np.abs(np.diff(amplitude, axis=1))
+    score = np.sqrt(change.var(axis=1)) * amplitude[:, 1:].mean(axis=1)
+    return np.sort(np.argsort(score)[::-1][:top_k])
+
+
+def compute_micro_doppler_band(
+    complex_map: np.ndarray,
+    chirp_time: np.ndarray,
+) -> dict[str, np.ndarray] | None:
+    """Slow-time micro-Doppler spectrogram for one band's complex range map.
+
+    Mirrors the realtime 64-chirp Hann window, 8-chirp hop, and 256-point FFT,
+    but suppresses clutter by removing the global complex mean (non-causal) and
+    keeps the full slow-time resolution, so this is the exact offline reference
+    for the causal, transport-downsampled live heatmap.
+    """
+    frame_count = complex_map.shape[1]
+    if frame_count < DOPPLER_WINDOW_CHIRPS:
+        return None
+
+    moving = complex_map - complex_map.mean(axis=1, keepdims=True)
+    selected_bins = _select_doppler_motion_bins(complex_map)
+    window = get_window("hann", DOPPLER_WINDOW_CHIRPS)
+    frequencies = np.fft.fftshift(np.fft.fftfreq(DOPPLER_NFFT, d=CHIRP_DURATION))
+
+    columns: list[np.ndarray] = []
+    centers: list[float] = []
+    start = 0
+    while start + DOPPLER_WINDOW_CHIRPS <= frame_count:
+        block = moving[selected_bins, start : start + DOPPLER_WINDOW_CHIRPS]
+        block = block * window[np.newaxis, :]
+        spectrum = np.fft.fft(block, n=DOPPLER_NFFT, axis=1)
+        power = np.fft.fftshift(np.sum(np.abs(spectrum) ** 2, axis=0))
+        if float(np.max(power)) <= EPS:
+            column = np.full(DOPPLER_NFFT, DOPPLER_DB_FLOOR)
+        else:
+            column = 10.0 * np.log10(power + EPS)
+            column -= np.max(column)
+            column = np.clip(column, DOPPLER_DB_FLOOR, 0.0)
+        columns.append(column)
+        center_index = min(start + DOPPLER_WINDOW_CHIRPS // 2, frame_count - 1)
+        centers.append(float(chirp_time[center_index]))
+        start += DOPPLER_HOP_CHIRPS
+
+    if not columns:
+        return None
+    return {
+        "frequencies_hz": frequencies,
+        "times": np.asarray(centers),
+        "power_db": np.stack(columns, axis=1),
+        "selected_bins": selected_bins,
+    }
+
+
+def plot_micro_doppler_band(
+    output: Path,
+    band_title: str,
+    doppler: dict[str, np.ndarray],
+    action_markers: list[ActionMarker],
+) -> None:
+    """Render one band's offline micro-Doppler heatmap with action markers."""
+    frequencies = np.asarray(doppler["frequencies_hz"])
+    times = np.asarray(doppler["times"])
+    power_db = np.asarray(doppler["power_db"])
+
+    fig, axis = plt.subplots(figsize=(16, 5.0))
+    image = axis.imshow(
+        power_db,
+        origin="lower",
+        aspect="auto",
+        extent=[
+            float(times[0]),
+            float(times[-1]),
+            float(frequencies[0]),
+            float(frequencies[-1]),
+        ],
+        cmap="turbo",
+        vmin=DOPPLER_DB_FLOOR,
+        vmax=0.0,
+        interpolation="nearest",
+    )
+    axis.axhline(0.0, color="white", linewidth=0.8, alpha=0.55, linestyle=(0, (2, 3)))
+    axis.set_ylabel("Doppler frequency (Hz)", fontsize=13)
+    axis.set_xlabel("time (s)", fontsize=13)
+    axis.tick_params(axis="both", labelsize=11)
+    axis.margins(x=0)
+    action_handles = overlay_action_markers(
+        axis,
+        action_markers,
+        float(times[0]),
+        float(times[-1]),
+    )
+    if action_handles:
+        axis.legend(
+            handles=action_handles,
+            loc="upper right",
+            framealpha=0.92,
+            fontsize=10,
+            ncol=min(4, len(action_handles)),
+        )
+    colorbar = fig.colorbar(image, ax=axis, pad=0.012)
+    colorbar.set_label("Relative power (dB)", fontsize=11)
+    axis.set_title(f"Micro-Doppler - {band_title}", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(output, dpi=130, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_range_time(
@@ -721,6 +862,28 @@ def main() -> None:
     amplitude_db = 20 * np.log10(np.abs(correlation) + EPS)
 
     plot_stage4_feature_changes(args.out_dir, feature_maps, action_markers)
+
+    try:
+        doppler_left_map, doppler_right_map, doppler_chirp_time = (
+            extract_complex_range_maps(samples, sample_rate)
+        )
+        doppler_left = compute_micro_doppler_band(doppler_left_map, doppler_chirp_time)
+        doppler_right = compute_micro_doppler_band(doppler_right_map, doppler_chirp_time)
+        if doppler_left is not None and doppler_right is not None:
+            plot_micro_doppler_band(
+                args.out_dir / "micro_doppler_left_band.png",
+                "Left band (19-20.5 kHz)",
+                doppler_left,
+                action_markers,
+            )
+            plot_micro_doppler_band(
+                args.out_dir / "micro_doppler_right_band.png",
+                "Right band (21.5-23 kHz)",
+                doppler_right,
+                action_markers,
+            )
+    except Exception as exc:  # keep the other figures if Doppler extraction fails
+        print(f"Micro-Doppler figure generation skipped: {exc}", file=sys.stderr)
 
     prediction_summary = None
     prediction_path = None

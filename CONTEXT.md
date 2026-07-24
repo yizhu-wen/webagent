@@ -145,15 +145,17 @@ Python figures can be generated.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop prepares `keyboard_events.json`, `cursor_events.json`, `metadata.json`,
-  the sensed microphone WAV, rendered spectrogram PNG, and standalone left/right
-  live Micro-Doppler PNGs in browser memory.
+  the sensed microphone WAV, and the rendered spectrogram PNG in browser memory.
+  The live Micro-Doppler canvas is on-screen only; the downloaded left/right
+  Micro-Doppler figures are the processed offline versions produced by the
+  Python backend, consistent with the Stage-4 amplitude/phase figures.
 - Stop automatically downloads all prepared session files. There is no separate
   session-download button.
 - Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
   local Python backend for offline processing. The page later displays exact
-  Stage-4 amplitude/phase lines and an MLP prediction timeline when the required
-  artifact is available. This backend upload is independent of the automatic
-  browser downloads.
+  Stage-4 amplitude/phase lines, processed left/right Micro-Doppler heatmaps,
+  and an MLP prediction timeline when the required artifact is available. These
+  processed figures are downloaded alongside the browser-prepared files.
 - When supplied, the default audible-only MLP predicts every overlapping `0.5`
   second signal window with a `0.25` second stride after Stop. The first and
   final `1.0` second are excluded. A scrollable table shows every window's
@@ -255,10 +257,8 @@ Both shopping and travel:
     `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
-  - Standalone left/right live Micro-Doppler PNGs with axes, event markers,
-    still regions, and the shared color scale
-  - Stage-4 amplitude/phase and optional MLP prediction figures when the Python
-    server endpoint is available
+  - Stage-4 amplitude/phase, processed left/right Micro-Doppler heatmaps, and
+    optional MLP prediction figures when the Python server endpoint is available
 - Show the recorded spectrogram on the page after Stop.
 - Show every MLP prediction window in a time-aligned table after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.
@@ -275,6 +275,13 @@ The Stop-time Python pipeline always generates these model-independent figures:
 - `stage4_signal_events_phase_change.png`: median-normalized left/right wrapped
   phase-change lines from each channel's 10 most-variable lag bins, with the
   same action markers.
+- `micro_doppler_left_band.png` and `micro_doppler_right_band.png`: offline
+  slow-time micro-Doppler heatmaps for the 19-20.5 kHz and 21.5-23 kHz bands.
+  They mirror the realtime 64-chirp Hann window, 8-chirp hop, and 256-point
+  slow-time FFT, but use non-causal clutter suppression (global complex-mean
+  removal), top-12 motion bins over the whole recording, and the full slow-time
+  resolution, so they are the exact reference for the causal live heatmap. Both
+  carry the same action markers and the shared -30..0 dB Turbo scale.
 When `models/signal_event_model_audible_only.joblib` is available, it also
 generates:
 

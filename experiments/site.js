@@ -768,26 +768,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }));
   }
 
-  function buildLiveDopplerFigureArtifacts(timestamp) {
-    if (typeof dopplerVisualization.exportFigures !== "function") {
-      return [];
-    }
-    const figures = dopplerVisualization.exportFigures();
-    if (!figures || !figures.left || !figures.right) {
-      return [];
-    }
-    return [
-      {
-        name: `${recordingFilePrefix}_live_micro_doppler_left_${timestamp}.png`,
-        url: figures.left
-      },
-      {
-        name: `${recordingFilePrefix}_live_micro_doppler_right_${timestamp}.png`,
-        url: figures.right
-      }
-    ];
-  }
-
   function formatGeneratedFigureTitle(fileName) {
     return fileName
       .replace(/^\d+_/, "")
@@ -2085,8 +2065,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
     const timestamp = options.timestamp || buildTimestamp();
     const sessionFiles = [
-      ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
-      ...buildLiveDopplerFigureArtifacts(timestamp)
+      ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
     ];
     if (!recordedAudioBuffer) {
       setPreparedSessionFiles(sessionFiles);

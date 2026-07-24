@@ -1370,26 +1370,6 @@
         }));
     }
 
-    function buildLiveDopplerFigureArtifacts(timestamp) {
-      if (typeof dopplerVisualization.exportFigures !== "function") {
-        return [];
-      }
-      const figures = dopplerVisualization.exportFigures();
-      if (!figures || !figures.left || !figures.right) {
-        return [];
-      }
-      return [
-        {
-          name: `recording_live_micro_doppler_left_${timestamp}.png`,
-          url: figures.left
-        },
-        {
-          name: `recording_live_micro_doppler_right_${timestamp}.png`,
-          url: figures.right
-        }
-      ];
-    }
-
     function formatGeneratedFigureTitle(fileName) {
       return fileName
         .replace(/^\d+_/, "")
@@ -2996,8 +2976,7 @@
     async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
       const timestamp = options.timestamp || buildRecordingTimestamp();
       const sessionFiles = [
-        ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
-        ...buildLiveDopplerFigureArtifacts(timestamp)
+        ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
       ];
       if (!recordedAudioBuffer) {
         setPreparedSessionFiles(sessionFiles);
