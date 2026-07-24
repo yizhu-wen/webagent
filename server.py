@@ -108,6 +108,12 @@ class AppHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEBAGENT_DIR), **kwargs)
 
+    def end_headers(self) -> None:
+        # Force revalidation so edited HTML/JS/CSS is picked up on reload
+        # instead of being served stale from the browser cache.
+        self.send_header("Cache-Control", "no-cache, must-revalidate")
+        super().end_headers()
+
     def _send_json(self, status_code: int, payload: dict) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
