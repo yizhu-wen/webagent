@@ -495,25 +495,54 @@ document.addEventListener("DOMContentLoaded", () => {
     link.download = fileName;
     document.body.appendChild(link);
     link.click();
-    link.remove();
+    // Keep the anchor in the DOM briefly so browsers do not cancel
+    // asynchronous data:/http: downloads when the element is removed.
+    window.setTimeout(() => link.remove(), 1000);
   }
 
-  function downloadFileArtifact(file) {
+  async function resolveArtifactBlob(file) {
+    if (file.blob) {
+      return file.blob;
+    }
+    const response = await fetch(file.url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch artifact: ${file.name}`);
+    }
+    return await response.blob();
+  }
+
+  async function downloadFileArtifact(file) {
     if (!file || !file.name || (!file.blob && !file.url)) {
       return false;
     }
 
-    const downloadUrl = file.blob ? URL.createObjectURL(file.blob) : file.url;
-    triggerDownload(downloadUrl, file.name);
-    if (file.blob) {
-      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    // Download every artifact through a blob object URL. data:/http: URLs
+    // triggered directly in a batch are dropped by browsers; blob object
+    // URLs commit reliably.
+    let blob;
+    try {
+      blob = await resolveArtifactBlob(file);
+    } catch (error) {
+      return false;
     }
+
+    const downloadUrl = URL.createObjectURL(blob);
+    triggerDownload(downloadUrl, file.name);
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
     return true;
   }
 
-  function downloadFileArtifacts(files) {
-    return (Array.isArray(files) ? files : [])
-      .reduce((count, file) => count + Number(downloadFileArtifact(file)), 0);
+  async function downloadFileArtifacts(files) {
+    let downloadCount = 0;
+    for (const file of (Array.isArray(files) ? files : [])) {
+      const downloaded = await downloadFileArtifact(file);
+      if (downloaded) {
+        downloadCount += 1;
+        // Stagger downloads so the browser does not throttle the batch.
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+      }
+    }
+    return downloadCount;
   }
 
   function setPreparedSessionFiles(files) {
@@ -521,12 +550,12 @@ document.addEventListener("DOMContentLoaded", () => {
       .filter((file) => file && file.name && (file.blob || file.url));
   }
 
-  function downloadPreparedSessionFiles() {
+  async function downloadPreparedSessionFiles() {
     if (!preparedSessionFiles.length || sensingActive) {
       return 0;
     }
 
-    const downloadCount = downloadFileArtifacts(preparedSessionFiles);
+    const downloadCount = await downloadFileArtifacts(preparedSessionFiles);
     setSensingStatus(
       `Sensing is stopped. Automatic download started for ${downloadCount} session files.`
     );
