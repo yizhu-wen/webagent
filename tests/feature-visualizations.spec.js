@@ -41,7 +41,7 @@ test("renders separate realtime left and right micro-Doppler heatmaps", async ({
     "Live left and right ultrasonic micro-Doppler heatmaps"
   );
 
-  const debugState = await page.evaluate((columns) => {
+  const rendererResult = await page.evaluate((columns) => {
     const renderer = window.WebAgentMicroDoppler.create({
       canvas: document.getElementById("dopplerCanvas"),
       statusNode: document.getElementById("dopplerStatus"),
@@ -52,12 +52,22 @@ test("renders separate realtime left and right micro-Doppler heatmaps", async ({
     });
     columns.forEach((column) => renderer.append(column, null));
     window.__dopplerRendererForTest = renderer;
-    return renderer.getDebugState();
+    const figures = renderer.exportFigures();
+    return {
+      debugState: renderer.getDebugState(),
+      leftFigure: figures.left,
+      rightFigure: figures.right
+    };
   }, [buildDopplerColumn(4), buildDopplerColumn(4.096)]);
 
+  const debugState = rendererResult.debugState;
   expect(debugState.points).toBe(2);
   expect(debugState.latest.leftPower).toHaveLength(256);
   expect(debugState.latest.rightPower).toHaveLength(256);
+  expect(rendererResult.leftFigure).toMatch(/^data:image\/png;base64,/);
+  expect(rendererResult.rightFigure).toMatch(/^data:image\/png;base64,/);
+  expect(rendererResult.leftFigure.length).toBeGreaterThan(10000);
+  expect(rendererResult.rightFigure.length).toBeGreaterThan(10000);
   await expect(page.locator("#dopplerStatus")).toContainText("64-chirp window");
   await page.waitForTimeout(50);
 

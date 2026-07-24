@@ -3,7 +3,7 @@
 This guide shows how to run the ultrasound realtime sensing website locally.
 The site loops a stereo ultrasonic chirp, captures mono microphone audio, streams
 raw microphone frames to Python for live IQ processing, tracks page interactions
-during sensing, and prepares session files for an explicit user-initiated download.
+during sensing, and automatically downloads prepared session files after Stop.
 
 Run the commands below from the cloned repository directory:
 
@@ -89,8 +89,8 @@ http://localhost:8124/
   also capped by sample count, so an exported WAV cannot exceed 40 seconds.
 - Stopping sensing automatically downloads the Python-style
   `keyboard_events.json`, `cursor_events.json`, and `metadata.json` files
-  together with the received-audio WAV, spectrogram, and available processed
-  figures. `metadata.json` follows the
+  together with the received-audio WAV, spectrogram, separate left/right live
+  Micro-Doppler PNGs, and available processed figures. `metadata.json` follows the
   standalone Python recorder's field names and includes the signal parameters,
   actual duration, recording name, capture method, browser-visible OS
   information, and event counts.
@@ -188,6 +188,12 @@ stacked left-band and right-band heatmaps. Time is horizontal, Doppler frequency
 is vertical, and Turbo color represents relative motion power. Event markers
 and the beginning/end still regions share the same 40-second timeline as the
 raw audio and Stage-4 lines.
+
+After Stop, the shared renderer exports standalone `820 x 360` snapshots with
+their own axes, color scale, timeline, still regions, and action markers:
+`<recording-prefix>_live_micro_doppler_left_<timestamp>.png` and
+`<recording-prefix>_live_micro_doppler_right_<timestamp>.png`. Both are included
+in the automatic downloads on the main, shopping, and travel pages.
 
 The sample script selects bins and removes clutter using the complete
 recording. Realtime mode instead maintains exact accumulated statistics up to

@@ -253,13 +253,17 @@ test("simple shopping page captures interaction data", async ({ page }) => {
     cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
     metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^shopping_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
-    spectrogram: downloads.some((download) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
+    spectrogram: downloads.some((download) => /^shopping_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
+    dopplerLeft: downloads.some((download) => /^shopping_recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
+    dopplerRight: downloads.some((download) => /^shopping_recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
     keyboard: true,
     cursor: true,
     metadata: true,
     audio: true,
-    spectrogram: true
+    spectrogram: true,
+    dopplerLeft: true,
+    dopplerRight: true
   });
 
   const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");
@@ -382,13 +386,17 @@ test("travel tourism page captures interaction data", async ({ page }) => {
     cursor: downloads.some((download) => download.suggestedFilename() === "cursor_events.json"),
     metadata: downloads.some((download) => download.suggestedFilename() === "metadata.json"),
     audio: downloads.some((download) => /^travel_recording_\d{8}_\d{6}\.wav$/.test(download.suggestedFilename())),
-    spectrogram: downloads.some((download) => /^travel_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
+    spectrogram: downloads.some((download) => /^travel_recording_spectrogram_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
+    dopplerLeft: downloads.some((download) => /^travel_recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(download.suggestedFilename())),
+    dopplerRight: downloads.some((download) => /^travel_recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(download.suggestedFilename()))
   })).toEqual({
     keyboard: true,
     cursor: true,
     metadata: true,
     audio: true,
-    spectrogram: true
+    spectrogram: true,
+    dopplerLeft: true,
+    dopplerRight: true
   });
 
   const keyboardDownload = downloads.find((item) => item.suggestedFilename() === "keyboard_events.json");

@@ -1370,6 +1370,23 @@
         }));
     }
 
+    function buildLiveDopplerFigureArtifacts(timestamp) {
+      const figures = dopplerVisualization.exportFigures();
+      if (!figures || !figures.left || !figures.right) {
+        return [];
+      }
+      return [
+        {
+          name: `recording_live_micro_doppler_left_${timestamp}.png`,
+          url: figures.left
+        },
+        {
+          name: `recording_live_micro_doppler_right_${timestamp}.png`,
+          url: figures.right
+        }
+      ];
+    }
+
     function formatGeneratedFigureTitle(fileName) {
       return fileName
         .replace(/^\d+_/, "")
@@ -2945,8 +2962,10 @@
     }
 
     async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
+      const timestamp = options.timestamp || buildRecordingTimestamp();
       const sessionFiles = [
-        ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
+        ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
+        ...buildLiveDopplerFigureArtifacts(timestamp)
       ];
       if (!recordedAudioBuffer) {
         setPreparedSessionFiles(sessionFiles);
@@ -2957,7 +2976,6 @@
       }
 
       try {
-        const timestamp = options.timestamp || buildRecordingTimestamp();
         const chirpPeriodEstimate = estimateChirpPeriod(recordedAudioBuffer);
         const diagnostics = buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate);
         const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
@@ -3199,10 +3217,7 @@
         await prepareRecordedAudio(completedRecording, options);
         return true;
       } else {
-        setPreparedSessionFiles((options.trackingArtifacts && options.trackingArtifacts.files) || []);
-        fileStatus.textContent = preparedSessionFiles.length
-          ? "Sensing stopped without microphone audio. Preparing automatic tracking-file downloads."
-          : "Sensing stopped, but no microphone recording was captured.";
+        await prepareRecordedAudio(null, options);
         return false;
       }
     }

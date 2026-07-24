@@ -145,7 +145,8 @@ Python figures can be generated.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop prepares `keyboard_events.json`, `cursor_events.json`, `metadata.json`,
-  the sensed microphone WAV, and rendered spectrogram PNG in browser memory.
+  the sensed microphone WAV, rendered spectrogram PNG, and standalone left/right
+  live Micro-Doppler PNGs in browser memory.
 - Stop automatically downloads all prepared session files. There is no separate
   session-download button.
 - Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
@@ -254,6 +255,8 @@ Both shopping and travel:
     `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
+  - Standalone left/right live Micro-Doppler PNGs with axes, event markers,
+    still regions, and the shared color scale
   - Stage-4 amplitude/phase and optional MLP prediction figures when the Python
     server endpoint is available
 - Show the recorded spectrogram on the page after Stop.

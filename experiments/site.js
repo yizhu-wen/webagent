@@ -739,6 +739,23 @@ document.addEventListener("DOMContentLoaded", () => {
       }));
   }
 
+  function buildLiveDopplerFigureArtifacts(timestamp) {
+    const figures = dopplerVisualization.exportFigures();
+    if (!figures || !figures.left || !figures.right) {
+      return [];
+    }
+    return [
+      {
+        name: `${recordingFilePrefix}_live_micro_doppler_left_${timestamp}.png`,
+        url: figures.left
+      },
+      {
+        name: `${recordingFilePrefix}_live_micro_doppler_right_${timestamp}.png`,
+        url: figures.right
+      }
+    ];
+  }
+
   function formatGeneratedFigureTitle(fileName) {
     return fileName
       .replace(/^\d+_/, "")
@@ -2034,8 +2051,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
+    const timestamp = options.timestamp || buildTimestamp();
     const sessionFiles = [
-      ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
+      ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
+      ...buildLiveDopplerFigureArtifacts(timestamp)
     ];
     if (!recordedAudioBuffer) {
       setPreparedSessionFiles(sessionFiles);
@@ -2047,7 +2066,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      const timestamp = options.timestamp || buildTimestamp();
       const chirpPeriodEstimate = estimateChirpPeriod(recordedAudioBuffer);
       const diagnostics = buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate);
       const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);

@@ -158,18 +158,23 @@
       });
     }
 
-    function draw() {
-      if (!canvas) {
+    function render(targetCanvas, bandDefinitions) {
+      if (!targetCanvas || !bandDefinitions.length) {
         return;
       }
-      const ctx = canvas.getContext("2d");
-      const width = canvas.width;
-      const height = canvas.height;
+      const ctx = targetCanvas.getContext("2d");
+      const width = targetCanvas.width;
+      const height = targetCanvas.height;
       const margin = { top: 32, right: 18, bottom: 50, left: 88 };
       const gap = 32;
       const plotWidth = width - margin.left - margin.right;
       const panelHeight = Math.floor(
-        (height - margin.top - margin.bottom - gap) / 2
+        (
+          height
+          - margin.top
+          - margin.bottom
+          - gap * Math.max(0, bandDefinitions.length - 1)
+        ) / bandDefinitions.length
       );
       const makeArea = (index) => ({
         left: margin.left,
@@ -179,8 +184,9 @@
         width: plotWidth,
         height: panelHeight
       });
-      const leftArea = makeArea(0);
-      const rightArea = makeArea(1);
+      const areas = bandDefinitions.map((_, index) => makeArea(index));
+      const firstArea = areas[0];
+      const lastArea = areas[areas.length - 1];
       const visiblePoints = points.filter(
         (point) => point.time >= 0 && point.time <= timelineDurationSeconds
       );
@@ -202,8 +208,8 @@
       ctx.fillRect(0, 0, width, height);
 
       function xToPx(time) {
-        return leftArea.left
-          + (time / Math.max(timelineDurationSeconds, 1e-6)) * leftArea.width;
+        return firstArea.left
+          + (time / Math.max(timelineDurationSeconds, 1e-6)) * firstArea.width;
       }
 
       function drawHeatmap(area, key, title) {
@@ -332,13 +338,14 @@
         ctx.restore();
       }
 
-      drawHeatmap(leftArea, "leftPower", "Left band (19-20.5 kHz)");
-      drawHeatmap(rightArea, "rightPower", "Right band (21.5-23 kHz)");
+      bandDefinitions.forEach((definition, index) => {
+        drawHeatmap(areas[index], definition.key, definition.title);
+      });
 
       ctx.save();
       const scaleWidth = 120;
-      const scaleLeft = leftArea.right - scaleWidth;
-      const scaleTop = leftArea.top - 22;
+      const scaleLeft = firstArea.right - scaleWidth;
+      const scaleTop = firstArea.top - 22;
       for (let x = 0; x < scaleWidth; x += 1) {
         const [red, green, blue] = turboColor(x / Math.max(1, scaleWidth - 1));
         ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
@@ -349,7 +356,7 @@
       ctx.textBaseline = "bottom";
       ctx.textAlign = "right";
       ctx.fillText(`${dbFloor.toFixed(0)} dB`, scaleLeft - 6, scaleTop + 8);
-      ctx.fillText("0 dB", leftArea.right, scaleTop + 8);
+      ctx.fillText("0 dB", firstArea.right, scaleTop + 8);
 
       ctx.font = "14px 'Segoe UI', sans-serif";
       ctx.textAlign = "center";
@@ -359,7 +366,7 @@
         seconds <= timelineDurationSeconds + 1e-6;
         seconds += timelineTickSeconds
       ) {
-        ctx.fillText(`${seconds}s`, xToPx(seconds), rightArea.bottom + 12);
+        ctx.fillText(`${seconds}s`, xToPx(seconds), lastArea.bottom + 12);
       }
       ctx.font = "15px 'Segoe UI', sans-serif";
       ctx.fillText("Recording time (s)", width / 2, height - 19);
@@ -372,6 +379,30 @@
         ctx.fillText(lastStatusMessage, width / 2, height / 2);
       }
       ctx.restore();
+    }
+
+    function draw() {
+      render(canvas, [
+        { key: "leftPower", title: "Left band (19-20.5 kHz)" },
+        { key: "rightPower", title: "Right band (21.5-23 kHz)" }
+      ]);
+    }
+
+    function exportFigures() {
+      if (!canvas || !canvas.ownerDocument) {
+        return null;
+      }
+      const createFigure = (key, title) => {
+        const figureCanvas = canvas.ownerDocument.createElement("canvas");
+        figureCanvas.width = canvas.width;
+        figureCanvas.height = 360;
+        render(figureCanvas, [{ key, title }]);
+        return figureCanvas.toDataURL("image/png");
+      };
+      return {
+        left: createFigure("leftPower", "Left band (19-20.5 kHz)"),
+        right: createFigure("rightPower", "Right band (21.5-23 kHz)")
+      };
     }
 
     function getDebugState() {
@@ -390,6 +421,7 @@
     return {
       append,
       draw,
+      exportFigures,
       getDebugState,
       queueDraw,
       reset,
