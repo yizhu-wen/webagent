@@ -446,7 +446,7 @@
   </main>
 
   <script src="recording-profile.js"></script>
-  <script src="micro-doppler-visualization.js"></script>
+  <script src="micro-doppler-visualization.js?v=20260723"></script>
   <script>
     const micStatus = document.getElementById("micStatus");
     const fileStatus = document.getElementById("fileStatus");
@@ -1371,6 +1371,9 @@
     }
 
     function buildLiveDopplerFigureArtifacts(timestamp) {
+      if (typeof dopplerVisualization.exportFigures !== "function") {
+        return [];
+      }
       const figures = dopplerVisualization.exportFigures();
       if (!figures || !figures.left || !figures.right) {
         return [];

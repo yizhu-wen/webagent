@@ -740,6 +740,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function buildLiveDopplerFigureArtifacts(timestamp) {
+    if (typeof dopplerVisualization.exportFigures !== "function") {
+      return [];
+    }
     const figures = dopplerVisualization.exportFigures();
     if (!figures || !figures.left || !figures.right) {
       return [];
