@@ -145,17 +145,16 @@ Python figures can be generated.
 - Stop sensing stops playback and recording.
 - Behavioral data is tracked only while sensing is active.
 - Stop prepares `keyboard_events.json`, `cursor_events.json`, `metadata.json`,
-  the sensed microphone WAV, and the rendered spectrogram PNG in browser memory.
-  The live Micro-Doppler canvas is on-screen only; the downloaded left/right
-  Micro-Doppler figures are the processed offline versions produced by the
-  Python backend, consistent with the Stage-4 amplitude/phase figures.
+  the sensed microphone WAV, the rendered spectrogram PNG, one combined Live
+  Python IQ snapshot, and separate live left/right Micro-Doppler snapshots in
+  browser memory.
 - Stop automatically downloads all prepared session files. There is no separate
   session-download button.
 - Stop uploads the recorded WAV, OS-style event log, and internal diagnostics to the
   local Python backend for offline processing. The page later displays exact
   Stage-4 amplitude/phase lines, processed left/right Micro-Doppler heatmaps,
   and an MLP prediction timeline when the required artifact is available. These
-  processed figures are downloaded alongside the browser-prepared files.
+  processed figures remain on-page results and are not downloaded.
 - When supplied, the default audible-only MLP predicts every overlapping `0.5`
   second signal window with a `0.25` second stride after Stop. The first and
   final `1.0` second are excluded. A scrollable table shows every window's
@@ -200,8 +199,8 @@ Real-time mode is implemented by:
   independent left/right chirp alignment, normalized matched filtering over
   lags `0-280`, and consecutive-chirp amplitude/phase change extraction. It
   discards the first 3 seconds like the batch reference. To limit WebSocket
-  traffic, it retains the latest unmodified feature column from each four-chirp
-  group, for an approximately `20.8 Hz` update rate.
+  traffic, it retains the latest unmodified feature column from each two-chirp
+  group, for an approximately `41.67 Hz` update rate.
 
 The backend sends the four 281-bin change columns, not matplotlib images. For
 each feature/channel, the browser applies the latest reference fallback:
@@ -257,8 +256,8 @@ Both shopping and travel:
     `os`, `n_key_events`, and `n_cursor_events`
   - Sensed microphone audio WAV
   - Recorded spectrogram PNG
-  - Stage-4 amplitude/phase, processed left/right Micro-Doppler heatmaps, and
-    optional MLP prediction figures when the Python server endpoint is available
+  - Combined Live Python IQ snapshot
+  - Separate live left/right Micro-Doppler snapshots
 - Show the recorded spectrogram on the page after Stop.
 - Show every MLP prediction window in a time-aligned table after Stop.
 - Use the shared spectrogram generation code in `experiments/site.js`, including axes.

@@ -166,7 +166,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   });
   expect(spectrogramFormat.height).toBe(394);
   expect(spectrogramFormat.background).toEqual([255, 255, 255, 255]);
-  await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(5);
+  await expect.poll(() => downloads.length).toBeGreaterThanOrEqual(8);
 
   const fileNames = downloads.map((download) => download.suggestedFilename());
   expect(fileNames).toContain("keyboard_events.json");
@@ -175,10 +175,13 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(fileNames.some((name) => name.startsWith("os_event_log_"))).toBe(false);
   expect(fileNames.some((name) => /^recording_\d{8}_\d{6}\.wav$/.test(name))).toBe(true);
   expect(fileNames.some((name) => /^recording_spectrogram_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
-  // The live realtime canvas is no longer downloaded. The processed
-  // micro_doppler_{left,right}_band.png come from the Python backend, which is
-  // absent from this static test server (like the Stage-4 figures).
-  expect(fileNames.some((name) => /_live_micro_doppler_/.test(name))).toBe(false);
+  expect(fileNames.some((name) => /^recording_live_python_iq_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
+  expect(fileNames.some((name) => /^recording_live_micro_doppler_left_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
+  expect(fileNames.some((name) => /^recording_live_micro_doppler_right_\d{8}_\d{6}\.png$/.test(name))).toBe(true);
+  expect(fileNames).not.toContain("stage4_signal_events_amplitude_change.png");
+  expect(fileNames).not.toContain("stage4_signal_events_phase_change.png");
+  expect(fileNames).not.toContain("micro_doppler_left_band.png");
+  expect(fileNames).not.toContain("micro_doppler_right_band.png");
   expect(fileNames).toContain("metadata.json");
   expect(fileNames.some((name) => /^recording_diagnostics_\d{8}_\d{6}\.json$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^input_events_amplitude_phase\.png$/.test(name))).toBe(false);
@@ -188,6 +191,18 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(fileNames.some((name) => /^03_key_event_aligned_features_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^04_average_range_profile_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
   expect(fileNames.some((name) => /^05_keydown_zoom_overlay_recording_\d{8}_\d{6}\.png$/.test(name))).toBe(false);
+
+  const liveFigureDownloads = downloads.filter((item) => (
+    /^recording_live_(python_iq|micro_doppler_(left|right))_\d{8}_\d{6}\.png$/
+      .test(item.suggestedFilename())
+  ));
+  expect(liveFigureDownloads).toHaveLength(3);
+  for (const liveFigureDownload of liveFigureDownloads) {
+    const png = fs.readFileSync(await liveFigureDownload.path());
+    expect(png.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    );
+  }
 
   const audioDownload = downloads.find((item) => /^recording_\d{8}_\d{6}\.wav$/.test(item.suggestedFilename()));
   const wav = fs.readFileSync(await audioDownload.path());

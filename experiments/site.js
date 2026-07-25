@@ -755,17 +755,40 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  function buildGeneratedFigureArtifacts(result) {
-    if (!result || !Array.isArray(result.figures)) {
-      return [];
+  function buildLiveFigureArtifacts(timestamp) {
+    const artifacts = [];
+
+    try {
+      drawRealtimeChart();
+      artifacts.push({
+        name: `${recordingFilePrefix}_live_python_iq_${timestamp}.png`,
+        url: realtimeCanvas.toDataURL("image/png")
+      });
+    } catch (error) {
+      // Keep the remaining session files if the live IQ canvas cannot export.
     }
 
-    return result.figures
-      .filter((figure) => figure && figure.url && figure.name)
-      .map((figure) => ({
-        name: figure.name,
-        url: figure.url
-      }));
+    try {
+      if (typeof dopplerVisualization.exportFigures === "function") {
+        const figures = dopplerVisualization.exportFigures();
+        if (figures && figures.left) {
+          artifacts.push({
+            name: `${recordingFilePrefix}_live_micro_doppler_left_${timestamp}.png`,
+            url: figures.left
+          });
+        }
+        if (figures && figures.right) {
+          artifacts.push({
+            name: `${recordingFilePrefix}_live_micro_doppler_right_${timestamp}.png`,
+            url: figures.right
+          });
+        }
+      }
+    } catch (error) {
+      // Keep the live IQ and remaining session files if Doppler export fails.
+    }
+
+    return artifacts;
   }
 
   function formatGeneratedFigureTitle(fileName) {
@@ -2064,13 +2087,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
     const timestamp = options.timestamp || buildTimestamp();
+    const liveFigureFiles = buildLiveFigureArtifacts(timestamp);
     const sessionFiles = [
-      ...((options.trackingArtifacts && options.trackingArtifacts.files) || [])
+      ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
+      ...liveFigureFiles
     ];
     if (!recordedAudioBuffer) {
       setPreparedSessionFiles(sessionFiles);
       setSensingStatus(sessionFiles.length
-        ? "Sensing stopped without microphone audio. Preparing automatic tracking-file downloads."
+        ? "Sensing stopped without microphone audio. Preparing automatic live-figure and tracking-file downloads."
         : "Sensing stopped, but no microphone recording was captured.");
       resetRecordingBuffers();
       return sessionFiles;
@@ -2092,7 +2117,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       setSensingStatus("Sensing stopped. Calculating post-processed signal features...");
 
-      let figureFiles = [];
       try {
         const analysisResult = await requestFigureGeneration(
           wavBlob,
@@ -2102,23 +2126,18 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         renderGeneratedFigures(analysisResult);
         renderWindowPredictions(analysisResult);
-        figureFiles = buildGeneratedFigureArtifacts(analysisResult);
       } catch (error) {
-        figureFiles = [];
+        // Live snapshots and raw session files remain downloadable.
       }
 
-      sessionFiles.push(...figureFiles);
       setPreparedSessionFiles(sessionFiles);
-
-      if (figureFiles.length > 0) {
-        setSensingStatus(`Sensing is stopped. Prepared ${sessionFiles.length} session files, including ${figureFiles.length} processed feature figures. Starting automatic download...`);
-      } else {
-        setSensingStatus(`Sensing is stopped. Prepared ${sessionFiles.length} session files. Starting automatic download... Exact Python figures require serving the app with webagent/server.py.`);
-      }
+      setSensingStatus(
+        `Sensing is stopped. Prepared ${sessionFiles.length} session files, including ${liveFigureFiles.length} live sensing figures. Starting automatic download...`
+      );
     } catch (error) {
       setPreparedSessionFiles(sessionFiles);
       setSensingStatus(sessionFiles.length
-        ? "Sensing stopped. The tracking files are ready, but the recording or spectrogram could not be prepared."
+        ? "Sensing stopped. The live figures and tracking files are ready, but the recording or spectrogram could not be prepared."
         : "Sensing stopped, but failed to prepare the recording or spectrogram.");
     } finally {
       resetRecordingBuffers();

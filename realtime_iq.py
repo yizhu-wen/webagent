@@ -46,7 +46,7 @@ T_TRI = CHIRP_DURATION
 N_TRI = CHIRP_SAMPLES
 ALIGNMENT_CHIRPS = 7
 ALIGN_SEARCH_SECONDS = 1.5
-FEATURE_EMIT_STRIDE_CHIRPS = 4
+FEATURE_EMIT_STRIDE_CHIRPS = 2
 DOPPLER_TOP_K = 12
 DOPPLER_WINDOW_CHIRPS = 64
 DOPPLER_HOP_CHIRPS = 8
@@ -408,7 +408,9 @@ class StreamingIqProcessor:
             "window_end_time": (left_start_sample + N_TRI) / FS,
             "timestamp_source": "processed_sample_chirp_start",
             "feature_stride_chirps": FEATURE_EMIT_STRIDE_CHIRPS,
-            "temporal_sampling": "latest_chirp_every_4",
+            "temporal_sampling": (
+                f"latest_chirp_every_{FEATURE_EMIT_STRIDE_CHIRPS}"
+            ),
             "lag_count": len(LAGS),
             "max_lag": MAX_LAG,
             "range_bin_cm": RANGE_PER_SAMPLE_CM,

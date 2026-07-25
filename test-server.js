@@ -17,6 +17,8 @@ const mimeTypes = {
   ".wav": "audio/wav"
 };
 
+const pixelImage = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+QnqVAAAAAElFTkSuQmCC";
+
 function resolveStaticPath(urlPath) {
   const decodedPath = decodeURIComponent(urlPath.split("?")[0]);
   const normalizedPath = path.normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
@@ -32,6 +34,31 @@ function resolveStaticPath(urlPath) {
 }
 
 const server = http.createServer((request, response) => {
+  if (
+    request.method === "POST"
+    && (request.url || "").split("?")[0] === "/api/analyze-recording"
+  ) {
+    request.resume();
+    request.on("end", () => {
+      const body = JSON.stringify({
+        ok: true,
+        figures: [
+          { name: "stage4_signal_events_amplitude_change.png", url: pixelImage },
+          { name: "stage4_signal_events_phase_change.png", url: pixelImage },
+          { name: "micro_doppler_left_band.png", url: pixelImage },
+          { name: "micro_doppler_right_band.png", url: pixelImage }
+        ],
+        predictions: null
+      });
+      response.writeHead(200, {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      });
+      response.end(body);
+    });
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
     response.end();
