@@ -5,11 +5,11 @@ async function installDurationLimitTimerTestHook(page) {
   await page.addInitScript(() => {
     const nativeSetTimeout = window.setTimeout.bind(window);
     const nativeClearTimeout = window.clearTimeout.bind(window);
-    const durationTimerId = 40000;
+    const durationTimerId = 35000;
     let durationTimerCallback = null;
 
     window.setTimeout = (callback, delay, ...args) => {
-      if (delay === 40000) {
+      if (delay === 35000) {
         durationTimerCallback = () => callback(...args);
         return durationTimerId;
       }
@@ -99,7 +99,7 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
   ))).toBe(40);
 });
 
-test("loops the chirp and automatically stops at the 40-second limit", async ({ page }) => {
+test("loops the chirp and automatically stops at the 35-second limit", async ({ page }) => {
   await installDurationLimitTimerTestHook(page);
   await page.goto("/");
 
@@ -115,6 +115,8 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
 
   await expect(startButton).toHaveText("Start sensing");
   await expect(startButton).toBeVisible();
+  await expect(startButton).toBeDisabled();
+  await page.locator('input[name="collectionActivity"][value="sitting_still"]').check();
   await expect(startButton).toBeEnabled();
   await expect(stopButton).toBeHidden();
   await expect(page.locator("#downloadSessionBtn")).toHaveCount(0);
@@ -124,6 +126,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   await expect(startButton).toHaveText("Stop sensing");
   await expect(startButton).toBeEnabled();
   await expect(startButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('input[name="collectionActivity"]').first()).toBeDisabled();
   await expect.poll(async () => (await sensingState()).loop).toBe(true);
   await expect.poll(async () => (await sensingState()).playbackActive).toBe(true);
   await expect.poll(() => page.evaluate(() => (
@@ -131,11 +134,11 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   )), { timeout: 10000 }).toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getMaximumSensingDurationSeconds()
-  ))).toBe(40);
+  ))).toBe(35);
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.isDurationLimitTimerActive()
   ))).toBe(true);
-  await expect(page.locator("#fileStatus")).toContainText("automatically after 40 seconds");
+  await expect(page.locator("#fileStatus")).toContainText("automatically after 35 seconds");
 
   const downloads = [];
   page.on("download", (download) => {
@@ -213,7 +216,7 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(wav.readUInt32LE(24)).toBe(48000);
   expect(wav.readUInt16LE(34)).toBe(32);
   const wavDurationSeconds = wav.readUInt32LE(40) / (48000 * 4);
-  expect(wavDurationSeconds).toBeLessThanOrEqual(40);
+  expect(wavDurationSeconds).toBeLessThanOrEqual(35);
 
   const metadataDownload = downloads.find((item) => item.suggestedFilename() === "metadata.json");
   const metadata = JSON.parse(fs.readFileSync(await metadataDownload.path(), "utf8"));
@@ -228,7 +231,12 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
     "capture",
     "os",
     "n_key_events",
-    "n_cursor_events"
+    "n_cursor_events",
+    "target_activity",
+    "collection_timing",
+    "typing_sentence_id",
+    "typing_sentence_source",
+    "typing_sentence"
   ]);
   expect(metadata.fs).toBe(48000);
   expect(metadata.chirp_samples).toBe(576);
@@ -236,10 +244,21 @@ test("loops the chirp and automatically stops at the 40-second limit", async ({ 
   expect(metadata.right_band_hz).toEqual([21500, 23000]);
   expect(metadata.tx_amplitude).toBe(0.12);
   expect(metadata.duration_sec).toBeGreaterThan(0);
-  expect(metadata.duration_sec).toBeLessThanOrEqual(40);
+  expect(metadata.duration_sec).toBeLessThanOrEqual(35);
   expect(metadata.recording_name).toMatch(/^recording_\d{8}_\d{6}$/);
   expect(metadata.capture).toContain("AudioWorklet");
   expect(typeof metadata.os.system).toBe("string");
   expect(metadata.n_key_events).toBe(0);
   expect(metadata.n_cursor_events).toBe(0);
+  expect(metadata.target_activity).toBe("sitting_still");
+  expect(metadata.collection_timing).toEqual({
+    duration_sec: 35,
+    initial_still_sec: [0, 5],
+    action_sec: [5, 30],
+    final_still_sec: [30, 35],
+    sitting_still_entire_recording: true
+  });
+  expect(metadata.typing_sentence_id).toBeNull();
+  expect(metadata.typing_sentence_source).toBeNull();
+  expect(metadata.typing_sentence).toBeNull();
 });

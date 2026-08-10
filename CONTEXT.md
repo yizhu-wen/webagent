@@ -220,7 +220,7 @@ suppression, and applies a 64-chirp Hann window with an 8-chirp hop and
 left/right `-30..0 dB` power columns. This gives approximately `10.4 Hz`
 updates, a `0.768 s` analysis window, and `0.384 s` window-center latency after
 the existing 3-second trim. The browser renders separate stacked left and right
-Turbo heatmaps on the same fixed 40-second time axis and overlays tracked event
+Turbo heatmaps on the same fixed 35-second time axis on the main collection page and overlays tracked event
 markers and still regions.
 
 The architecture review's `SharedArrayBuffer`, dedicated browser DSP worker,
@@ -470,7 +470,8 @@ awk '/<script>/{flag=1;next}/<\/script>/{flag=0}flag' index.html | node --check 
 - Keep behavior tracking gated by sensing state. Do not track user behavior while sensing is inactive.
 - Keep Stop responsible for preparing and automatically downloading session
   files on the main and experiment pages.
-- Do not re-add data-collection label or marker controls unless explicitly requested.
+- Keep the seven required data-collection activity controls on the main page;
+  shopping and travel remain unlabeled natural-task experiment pages.
 - The shopping and travel sites share `experiments/site.js`; prefer data attributes and scoped CSS over duplicating logic.
 - Travel-specific visual styling should remain scoped under `body.travel-site`.
 - Travel trip details should stay inline inside the corresponding trip item.

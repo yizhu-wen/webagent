@@ -368,6 +368,7 @@ class AppHandler(SimpleHTTPRequestHandler):
         wav_bytes = self._field_bytes(fields, "recording")
         events_bytes = self._field_bytes(fields, "events")
         diagnostics_bytes = self._field_bytes(fields, "diagnostics")
+        metadata_bytes = self._field_bytes(fields, "metadata")
         if not wav_bytes:
             self._send_json(400, {"ok": False, "error": "Missing recording WAV"})
             return
@@ -378,12 +379,17 @@ class AppHandler(SimpleHTTPRequestHandler):
         wav_path = session_dir / f"{prefix}_{timestamp}.wav"
         events_path = session_dir / f"os_event_log_{timestamp}.txt"
         diagnostics_path = session_dir / f"{prefix}_diagnostics_{timestamp}.json"
+        metadata_path = session_dir / "metadata.json"
         wav_path.write_bytes(wav_bytes)
         events_path.write_bytes(events_bytes)
         if diagnostics_bytes:
             diagnostics_path.write_bytes(diagnostics_bytes)
         else:
             diagnostics_path.write_text("{}", encoding="utf-8")
+        if metadata_bytes:
+            metadata_path.write_bytes(metadata_bytes)
+        else:
+            metadata_path.write_text("{}", encoding="utf-8")
 
         cmd = [
             sys.executable,

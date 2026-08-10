@@ -55,6 +55,18 @@
       display: none !important;
     }
 
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     .app-view {
       text-align: center;
       padding: 24px 12px 8px;
@@ -93,6 +105,8 @@
     .file-prompt {
       margin-top: 14px;
       display: flex;
+      flex-direction: column;
+      align-items: center;
       justify-content: center;
       gap: 10px;
     }
@@ -148,6 +162,288 @@
 
     .recording-profile-control p {
       margin-top: 8px;
+      font-size: 0.86rem;
+    }
+
+    .collection-panel {
+      width: min(760px, 100%);
+      margin: 18px auto 0;
+      padding: 18px;
+      border: 1px solid rgba(46, 36, 28, 0.14);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.72);
+      text-align: left;
+    }
+
+    .collection-panel h4 {
+      margin: 0 0 6px;
+      font-size: 1.08rem;
+    }
+
+    .collection-panel > p {
+      margin: 0 0 14px;
+    }
+
+    .activity-choice-group {
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .activity-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .activity-choice {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      min-height: 68px;
+      padding: 11px 12px;
+      border: 2px solid rgba(46, 36, 28, 0.12);
+      border-radius: 12px;
+      background: #fffdfa;
+      cursor: pointer;
+      transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+
+    .activity-choice:hover {
+      border-color: rgba(46, 36, 28, 0.3);
+    }
+
+    .activity-choice:has(input:focus-visible) {
+      outline: 3px solid rgba(31, 119, 180, 0.28);
+      outline-offset: 2px;
+    }
+
+    .activity-choice:has(input:checked) {
+      border-color: var(--activity-color, #1f77b4);
+      background: color-mix(in srgb, var(--activity-color, #1f77b4) 9%, white);
+      box-shadow: 0 0 0 1px var(--activity-color, #1f77b4);
+    }
+
+    .activity-choice input {
+      flex: 0 0 auto;
+      margin-top: 3px;
+      accent-color: var(--activity-color, #1f77b4);
+    }
+
+    .activity-choice strong,
+    .activity-choice small {
+      display: block;
+    }
+
+    .activity-choice small {
+      margin-top: 3px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .activity-guidance {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(46, 36, 28, 0.05);
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .keyboard-task {
+      margin-top: 14px;
+      padding: 14px;
+      border: 1px solid rgba(214, 39, 40, 0.25);
+      border-radius: 12px;
+      background: rgba(214, 39, 40, 0.05);
+    }
+
+    .keyboard-task label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .keyboard-task select,
+    .keyboard-task textarea {
+      width: 100%;
+      border: 1px solid rgba(46, 36, 28, 0.22);
+      border-radius: 9px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .keyboard-task select {
+      padding: 8px 10px;
+    }
+
+    .keyboard-task textarea {
+      min-height: 112px;
+      padding: 10px 12px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .keyboard-task textarea:disabled {
+      background: rgba(46, 36, 28, 0.06);
+      color: var(--muted);
+    }
+
+    .typing-sentence {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border-left: 4px solid #d62728;
+      background: #ffffff;
+      font-size: 1.02rem;
+      line-height: 1.55;
+    }
+
+    .typing-sentence-source {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .collection-prompt {
+      --phase-color: rgba(145, 25, 25, 0.9);
+      margin-top: 16px;
+      padding: 16px;
+      border: 2px solid rgba(150, 35, 35, 0.62);
+      border-radius: 14px;
+      background: rgba(190, 45, 45, 0.16);
+      text-align: center;
+    }
+
+    .collection-prompt[data-phase="action"] {
+      --phase-color: var(--activity-color, #1f77b4);
+      border-color: var(--activity-color, #1f77b4);
+      background: color-mix(in srgb, var(--activity-color, #1f77b4) 15%, white);
+    }
+
+    .collection-prompt[data-phase="ready"],
+    .collection-prompt[data-phase="complete"] {
+      --phase-color: #5b5148;
+      border-color: rgba(46, 36, 28, 0.2);
+      background: rgba(46, 36, 28, 0.06);
+    }
+
+    .collection-phase-title {
+      color: var(--phase-color);
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .collection-timers {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      margin-top: 6px;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .collection-prompt-instruction {
+      margin: 8px 0 0;
+      color: var(--text) !important;
+    }
+
+    .collection-timeline {
+      --collection-progress: 0%;
+      position: relative;
+      isolation: isolate;
+      display: grid;
+      grid-template-columns: 5fr 25fr 5fr;
+      gap: 4px;
+      margin-top: 14px;
+    }
+
+    .collection-timeline-segment {
+      position: relative;
+      z-index: 1;
+      min-width: 0;
+      padding: 7px 4px;
+      border: 1px solid rgba(46, 36, 28, 0.14);
+      background: rgba(190, 45, 45, 0.16);
+      color: rgba(145, 25, 25, 0.9);
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .collection-timeline-segment:first-child {
+      border-radius: 8px 0 0 8px;
+    }
+
+    .collection-timeline-segment:last-child {
+      border-radius: 0 8px 8px 0;
+    }
+
+    .collection-timeline-segment.action {
+      background: color-mix(in srgb, var(--activity-color, #1f77b4) 13%, white);
+      color: var(--activity-color, #1f77b4);
+    }
+
+    .collection-timeline-segment.active {
+      border-color: currentColor;
+      box-shadow: inset 0 0 0 2px currentColor;
+    }
+
+    .collection-progress-fill {
+      position: absolute;
+      z-index: 2;
+      inset: 0 auto 0 0;
+      width: var(--collection-progress);
+      border-radius: 8px 0 0 8px;
+      background: linear-gradient(90deg, rgba(46, 36, 28, 0.08), rgba(46, 36, 28, 0.22));
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+    }
+
+    .collection-progress-marker {
+      position: absolute;
+      z-index: 3;
+      top: -7px;
+      bottom: -7px;
+      left: var(--collection-progress);
+      width: 4px;
+      border-radius: 999px;
+      background: #2e241c;
+      box-shadow: 0 2px 8px rgba(46, 36, 28, 0.35);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-2px);
+      transition: opacity 160ms ease;
+    }
+
+    .collection-progress-marker::before {
+      content: "";
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      background: #2e241c;
+      box-shadow: 0 2px 7px rgba(46, 36, 28, 0.3);
+      transform: translate(-50%, -50%);
+    }
+
+    .collection-timeline.is-running .collection-progress-fill,
+    .collection-timeline.is-running .collection-progress-marker {
+      opacity: 1;
+    }
+
+    .start-sensing-hint {
+      max-width: 520px;
+      margin: 0;
+      color: var(--muted);
       font-size: 0.86rem;
     }
 
@@ -363,13 +659,17 @@
       .feature-visualization-grid {
         grid-template-columns: 1fr;
       }
+
+      .activity-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
   <body>
   <main class="shell expanded">
     <section class="panel">
-      <div id="appView" class="app-view expanded" aria-live="polite">
+      <div id="appView" class="app-view expanded">
         <div class="checkmark">✓</div>
         <h3>Audio capture ready.</h3>
         <p id="welcomeMessage">Start sensing to loop the ultrasound chirp while capturing microphone audio.</p>
@@ -381,9 +681,82 @@
           <p id="recordingProfileDescription"></p>
           <p id="recordingProfileHint">If Ultrasound (strict) does not work, switch to Compatibility.</p>
         </div>
-        <div id="filePrompt" class="file-prompt hidden">
-          <button id="startSensingBtn" class="prompt-button" type="button">Start sensing</button>
+        <section class="collection-panel" data-collection-panel aria-labelledby="collectionPanelTitle">
+          <h4 id="collectionPanelTitle">Data collection activity</h4>
+          <p>Select exactly one activity before starting a recording.</p>
+          <fieldset id="activityChoiceGroup" class="activity-choice-group">
+            <legend class="visually-hidden">Target activity</legend>
+            <div class="activity-grid">
+              <label class="activity-choice" style="--activity-color: #d62728;">
+                <input type="radio" name="collectionActivity" value="keyboard_activity">
+                <span><strong>Keyboard</strong><small>Type one assigned sentence.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #9467bd;">
+                <input type="radio" name="collectionActivity" value="touchpad_click">
+                <span><strong>Touchpad click</strong><small>Physical clicks only.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #17becf;">
+                <input type="radio" name="collectionActivity" value="touchpad_scroll">
+                <span><strong>Touchpad scroll</strong><small>Scroll up and down naturally.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #1f77b4;">
+                <input type="radio" name="collectionActivity" value="touchpad_pointer_move">
+                <span><strong>Pointer move</strong><small>Move the pointer using the touchpad.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #8c2d2d;">
+                <input type="radio" name="collectionActivity" value="sitting_still">
+                <span><strong>Sitting still</strong><small>Remain naturally still for all 35 seconds.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #ff7f0e;">
+                <input type="radio" name="collectionActivity" value="hand_wave">
+                <span><strong>Hand wave</strong><small>Wave one hand above the keyboard.</small></span>
+              </label>
+              <label class="activity-choice" style="--activity-color: #2ca02c;">
+                <input type="radio" name="collectionActivity" value="body_motion">
+                <span><strong>Body motion</strong><small>Move the upper body while seated.</small></span>
+              </label>
+            </div>
+          </fieldset>
+          <div id="activityGuidance" class="activity-guidance">
+            Choose an activity to see its instructions. Perform only that activity during the action period.
+          </div>
+          <div id="keyboardTask" class="keyboard-task hidden">
+            <label for="typingSentenceSelect">Keyboard run and assigned sentence</label>
+            <select id="typingSentenceSelect"></select>
+            <blockquote id="typingSentenceText" class="typing-sentence"></blockquote>
+            <label for="typingInput">Type here during the TYPE NOW period</label>
+            <textarea id="typingInput" disabled spellcheck="false" autocomplete="off" aria-describedby="typingInputHint"></textarea>
+            <p id="typingInputHint">The box unlocks after the first 5 seconds and locks again for the final 5 seconds.</p>
+          </div>
+          <div id="collectionPrompt" class="collection-prompt" data-phase="ready">
+            <div id="collectionPhaseStatus" class="collection-phase-title" role="status" aria-live="assertive">READY</div>
+            <div class="collection-timers" aria-live="off">
+              <span id="collectionPhaseCountdown">Select an activity</span>
+              <span id="collectionTotalCountdown">35 s total</span>
+            </div>
+            <p id="collectionPromptInstruction" class="collection-prompt-instruction">Select an activity, then press Start sensing.</p>
+            <div
+              id="collectionTimeline"
+              class="collection-timeline"
+              role="progressbar"
+              aria-label="Recording progress: first 5 seconds still, 25 seconds action, final 5 seconds still"
+              aria-valuemin="0"
+              aria-valuemax="35"
+              aria-valuenow="0"
+              aria-valuetext="0 of 35 seconds"
+            >
+              <div id="timelineInitialStill" class="collection-timeline-segment">0–5 s<br>STILL</div>
+              <div id="timelineAction" class="collection-timeline-segment action">5–30 s<br>ACTION</div>
+              <div id="timelineFinalStill" class="collection-timeline-segment">30–35 s<br>STILL</div>
+              <div class="collection-progress-fill" aria-hidden="true"></div>
+              <div class="collection-progress-marker" aria-hidden="true"></div>
+            </div>
+          </div>
+        </section>
+        <div id="filePrompt" class="file-prompt">
+          <button id="startSensingBtn" class="prompt-button" type="button" disabled>Start sensing</button>
           <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
+          <p id="startSensingHint" class="start-sensing-hint">Preparing the microphone and ultrasound chirp…</p>
         </div>
         <div class="event-log-actions">
           <a class="prompt-button experiment-link" href="experiments/">Open shopping experiment</a>
@@ -469,10 +842,95 @@
     const dopplerCanvas = document.getElementById("dopplerCanvas");
     const recordingProfileSelect = document.getElementById("recordingProfile");
     const recordingProfileDescription = document.getElementById("recordingProfileDescription");
+    const activityChoiceGroup = document.getElementById("activityChoiceGroup");
+    const activityInputs = Array.from(document.querySelectorAll('input[name="collectionActivity"]'));
+    const activityGuidance = document.getElementById("activityGuidance");
+    const keyboardTask = document.getElementById("keyboardTask");
+    const typingSentenceSelect = document.getElementById("typingSentenceSelect");
+    const typingSentenceText = document.getElementById("typingSentenceText");
+    const typingInput = document.getElementById("typingInput");
+    const collectionPrompt = document.getElementById("collectionPrompt");
+    const collectionPhaseStatus = document.getElementById("collectionPhaseStatus");
+    const collectionPhaseCountdown = document.getElementById("collectionPhaseCountdown");
+    const collectionTotalCountdown = document.getElementById("collectionTotalCountdown");
+    const collectionPromptInstruction = document.getElementById("collectionPromptInstruction");
+    const collectionTimeline = document.getElementById("collectionTimeline");
+    const timelineInitialStill = document.getElementById("timelineInitialStill");
+    const timelineAction = document.getElementById("timelineAction");
+    const timelineFinalStill = document.getElementById("timelineFinalStill");
+    const startSensingHint = document.getElementById("startSensingHint");
     const recordingProfiles = window.webAgentRecordingProfiles;
     const targetWavSampleRate = 48000;
-    const maximumSensingDurationSeconds = 40;
+    const collectionTiming = Object.freeze({
+      initialStillEndSeconds: 5,
+      actionEndSeconds: 30,
+      durationSeconds: 35
+    });
+    const maximumSensingDurationSeconds = collectionTiming.durationSeconds;
     const maximumSensingDurationMs = maximumSensingDurationSeconds * 1000;
+    const collectionActivities = Object.freeze([
+      {
+        id: "keyboard_activity",
+        label: "Keyboard activity",
+        actionTitle: "TYPE NOW",
+        color: "#d62728",
+        instructions: "Type only the assigned sentence at your normal speed. Correct ordinary mistakes normally; do not use the touchpad or repeat the sentence to fill time."
+      },
+      {
+        id: "touchpad_click",
+        label: "Touchpad click",
+        actionTitle: "CLICK NOW",
+        color: "#9467bd",
+        instructions: "Physically press the touchpad about 8–20 times with natural pauses. Do not tap-to-click, type, scroll, or intentionally move the pointer."
+      },
+      {
+        id: "touchpad_scroll",
+        label: "Touchpad scroll",
+        actionTitle: "SCROLL NOW",
+        color: "#17becf",
+        instructions: "Scroll upward and downward in about 4–10 varied episodes with natural pauses. Do not type, click, or intentionally move the pointer."
+      },
+      {
+        id: "touchpad_pointer_move",
+        label: "Touchpad pointer move",
+        actionTitle: "MOVE POINTER NOW",
+        color: "#1f77b4",
+        instructions: "Move the pointer with the touchpad in varied directions, distances, and speeds for about 5–12 episodes. Do not type, click, or scroll."
+      },
+      {
+        id: "sitting_still",
+        label: "Sitting still",
+        actionTitle: "SIT STILL",
+        color: "#8c2d2d",
+        instructions: "Remain naturally seated and still for the entire recording. Keep your hands resting; normal breathing and tiny involuntary movements are fine."
+      },
+      {
+        id: "hand_wave",
+        label: "Hand wave",
+        actionTitle: "WAVE NOW",
+        color: "#ff7f0e",
+        instructions: "Wave one hand left-to-right and right-to-left above or near the keyboard for about 4–10 episodes. Do not touch the laptop or move your upper body intentionally."
+      },
+      {
+        id: "body_motion",
+        label: "Body motion",
+        actionTitle: "MOVE BODY NOW",
+        color: "#2ca02c",
+        instructions: "While seated, vary upper-body movements such as leaning or turning for about 4–10 episodes. Do not type, use the touchpad, or wave a hand."
+      }
+    ]);
+    const typingSentences = Object.freeze([
+      { id: 1, source: "Pride and Prejudice", text: "Mr. Bennet was among the earliest of those who waited on Mr. Bingley." },
+      { id: 2, source: "Peter Pan", text: "They soon know that they will grow up, and the way Wendy knew was this." },
+      { id: 3, source: "The Time Machine", text: "His grey eyes shone and twinkled, and his usually pale face was flushed and animated." },
+      { id: 4, source: "The Wonderful Wizard of Oz", text: "Uncle Henry never laughed. He worked hard from morning till night and did not know what joy was." },
+      { id: 5, source: "Jane Eyre", text: "There was no possibility of taking a walk that day." },
+      { id: 6, source: "Great Expectations", text: "So, I called myself Pip, and came to be called Pip." },
+      { id: 7, source: "Anne of Green Gables", text: "Mrs. Rachel rapped smartly at the kitchen door and stepped in when bidden to do so." },
+      { id: 8, source: "The Secret Garden", text: "She knew that she was not going to stay at the English clergyman's house where she was taken at first." },
+      { id: 9, source: "Frankenstein", text: "I am by birth a Genevese, and my family is one of the most distinguished of that republic." },
+      { id: 10, source: "The Wind in the Willows", text: "The Mole had been working very hard all the morning, spring-cleaning his little home." }
+    ]);
     let micStream = null;
     let pendingFileUrl = "";
     let pendingFileName = "";
@@ -494,6 +952,12 @@
     let sensingStopInProgress = false;
     let sensingDurationTimerId = null;
     let sensingDurationLimitReached = false;
+    let selectedActivityId = "";
+    let selectedTypingSentenceId = 1;
+    let activeCollectionSession = null;
+    let collectionStartedAtPerformanceMs = null;
+    let collectionPromptAnimationFrameId = null;
+    let collectionPromptPhaseKey = "ready";
     let preparedSessionFiles = [];
     let realtimeSocket = null;
     let realtimeStreamingActive = false;
@@ -624,8 +1088,8 @@
       timelineDurationSeconds: maximumSensingDurationSeconds,
       timelineTickSeconds: 5,
       stillRegions: [
-        { start: 0, end: 5, label: "STILL" },
-        { start: 35, end: 40, label: "STILL" }
+        { start: 0, end: collectionTiming.initialStillEndSeconds, label: "STILL" },
+        { start: collectionTiming.actionEndSeconds, end: collectionTiming.durationSeconds, label: "STILL" }
       ],
       maxPoints: 2400,
       maxWaveformPoints: 10000,
@@ -922,6 +1386,279 @@
       });
     }
 
+    function getCollectionActivity(activityId = selectedActivityId) {
+      return collectionActivities.find((activity) => activity.id === activityId) || null;
+    }
+
+    function getTypingSentence(sentenceId = selectedTypingSentenceId) {
+      const numericId = Number(sentenceId);
+      return typingSentences.find((sentence) => sentence.id === numericId) || typingSentences[0];
+    }
+
+    function updateTypingSentenceDisplay() {
+      const sentence = getTypingSentence();
+      selectedTypingSentenceId = sentence.id;
+      typingSentenceSelect.value = String(sentence.id);
+      typingSentenceText.replaceChildren();
+      typingSentenceText.append(document.createTextNode(sentence.text));
+      const source = document.createElement("cite");
+      source.className = "typing-sentence-source";
+      source.textContent = `Sentence ${sentence.id} — ${sentence.source}`;
+      typingSentenceText.append(source);
+    }
+
+    function getCollectionPhase(activityId, elapsedSeconds) {
+      const activity = getCollectionActivity(activityId);
+      const elapsed = Math.min(
+        collectionTiming.durationSeconds,
+        Math.max(0, Number.isFinite(elapsedSeconds) ? elapsedSeconds : 0)
+      );
+      const timelineIndex = elapsed < collectionTiming.initialStillEndSeconds
+        ? 0
+        : elapsed < collectionTiming.actionEndSeconds
+          ? 1
+          : 2;
+
+      if (activity && activity.id === "sitting_still") {
+        return {
+          key: "all-still",
+          style: "still",
+          title: "SIT STILL",
+          instruction: "Remain naturally seated and still for the entire recording.",
+          phaseRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+          totalRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+          timelineIndex
+        };
+      }
+
+      if (elapsed < collectionTiming.initialStillEndSeconds) {
+        return {
+          key: "initial-still",
+          style: "still",
+          title: "SIT STILL",
+          instruction: "Keep your hands resting. The activity period will begin after this countdown.",
+          phaseRemainingSeconds: collectionTiming.initialStillEndSeconds - elapsed,
+          totalRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+          timelineIndex: 0
+        };
+      }
+
+      if (elapsed < collectionTiming.actionEndSeconds) {
+        return {
+          key: "action",
+          style: "action",
+          title: activity ? activity.actionTitle : "PERFORM ACTION",
+          instruction: activity ? activity.instructions : "Perform only the selected activity.",
+          phaseRemainingSeconds: collectionTiming.actionEndSeconds - elapsed,
+          totalRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+          timelineIndex: 1
+        };
+      }
+
+      return {
+        key: "final-still",
+        style: "still",
+        title: "STOP ACTION — SIT STILL",
+        instruction: "Stop the activity now. Sit naturally still until recording finishes.",
+        phaseRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+        totalRemainingSeconds: collectionTiming.durationSeconds - elapsed,
+        timelineIndex: 2
+      };
+    }
+
+    function setTimelineActiveSegment(activeIndex = -1) {
+      [timelineInitialStill, timelineAction, timelineFinalStill].forEach((segment, index) => {
+        segment.classList.toggle("active", index === activeIndex);
+      });
+    }
+
+    function setCollectionProgress(elapsedSeconds, visible = true) {
+      const elapsed = Math.min(
+        collectionTiming.durationSeconds,
+        Math.max(0, Number.isFinite(elapsedSeconds) ? elapsedSeconds : 0)
+      );
+      const progressPercent = (elapsed / collectionTiming.durationSeconds) * 100;
+      collectionTimeline.style.setProperty("--collection-progress", `${progressPercent}%`);
+      collectionTimeline.classList.toggle("is-running", visible);
+      collectionTimeline.setAttribute("aria-valuenow", elapsed.toFixed(2));
+      collectionTimeline.setAttribute(
+        "aria-valuetext",
+        `${elapsed.toFixed(1)} of ${collectionTiming.durationSeconds} seconds`
+      );
+    }
+
+    function setTypingInputEnabled(enabled, { focus = false } = {}) {
+      const shouldEnable = Boolean(enabled && activeCollectionSession && activeCollectionSession.activityId === "keyboard_activity");
+      typingInput.disabled = !shouldEnable;
+      if (shouldEnable && focus) {
+        typingInput.focus({ preventScroll: true });
+      } else if (!shouldEnable && document.activeElement === typingInput) {
+        typingInput.blur();
+      }
+    }
+
+    function renderReadyCollectionPrompt() {
+      const activity = getCollectionActivity();
+      collectionPromptPhaseKey = "ready";
+      collectionPrompt.dataset.phase = "ready";
+      collectionPhaseStatus.textContent = "READY";
+      collectionPhaseCountdown.textContent = activity ? "Ready to record" : "Select an activity";
+      collectionTotalCountdown.textContent = `${collectionTiming.durationSeconds} s total`;
+      collectionPromptInstruction.textContent = activity
+        ? `Press Start sensing. First sit still for ${collectionTiming.initialStillEndSeconds} seconds.`
+        : "Select an activity, then press Start sensing.";
+      setTimelineActiveSegment(-1);
+      setCollectionProgress(0, false);
+      setTypingInputEnabled(false);
+    }
+
+    function updateCollectionPrompt(elapsedSeconds) {
+      if (!activeCollectionSession) {
+        return;
+      }
+      const phase = getCollectionPhase(activeCollectionSession.activityId, elapsedSeconds);
+      const phaseChanged = phase.key !== collectionPromptPhaseKey;
+      collectionPromptPhaseKey = phase.key;
+      collectionPrompt.dataset.phase = phase.style;
+      collectionPhaseStatus.textContent = phase.title;
+      collectionPhaseCountdown.textContent = `${Math.max(0, Math.ceil(phase.phaseRemainingSeconds))} s in this phase`;
+      collectionTotalCountdown.textContent = `${Math.max(0, Math.ceil(phase.totalRemainingSeconds))} s total remaining`;
+      collectionPromptInstruction.textContent = phase.instruction;
+      setTimelineActiveSegment(phase.timelineIndex);
+      setCollectionProgress(elapsedSeconds, true);
+      setTypingInputEnabled(phase.key === "action", { focus: phaseChanged && phase.key === "action" });
+    }
+
+    function clearCollectionPromptTimer() {
+      if (collectionPromptAnimationFrameId !== null) {
+        window.cancelAnimationFrame(collectionPromptAnimationFrameId);
+        collectionPromptAnimationFrameId = null;
+      }
+      collectionStartedAtPerformanceMs = null;
+    }
+
+    function scheduleCollectionPromptUpdate() {
+      if (collectionStartedAtPerformanceMs === null || !sensingSessionActive) {
+        collectionPromptAnimationFrameId = null;
+        return;
+      }
+      const elapsedSeconds = (performance.now() - collectionStartedAtPerformanceMs) / 1000;
+      updateCollectionPrompt(elapsedSeconds);
+      collectionPromptAnimationFrameId = window.requestAnimationFrame(scheduleCollectionPromptUpdate);
+    }
+
+    function startCollectionPromptTimer() {
+      clearCollectionPromptTimer();
+      collectionPromptPhaseKey = "";
+      collectionStartedAtPerformanceMs = performance.now();
+      updateCollectionPrompt(0);
+      collectionPromptAnimationFrameId = window.requestAnimationFrame(scheduleCollectionPromptUpdate);
+    }
+
+    function stopCollectionPromptTimer({ complete = false } = {}) {
+      const stoppedAtSeconds = collectionStartedAtPerformanceMs === null
+        ? 0
+        : (performance.now() - collectionStartedAtPerformanceMs) / 1000;
+      clearCollectionPromptTimer();
+      setTypingInputEnabled(false);
+      if (complete) {
+        collectionPromptPhaseKey = "complete";
+        collectionPrompt.dataset.phase = "complete";
+        collectionPhaseStatus.textContent = "RECORDING COMPLETE";
+        collectionPhaseCountdown.textContent = "0 s remaining";
+        collectionTotalCountdown.textContent = "Session files are being prepared";
+        collectionPromptInstruction.textContent = "Keep the selected activity for review until preparation finishes.";
+        setTimelineActiveSegment(-1);
+        setCollectionProgress(stoppedAtSeconds, true);
+      }
+    }
+
+    function snapshotCollectionSession() {
+      const activity = getCollectionActivity();
+      if (!activity) {
+        return null;
+      }
+      const sentence = activity.id === "keyboard_activity" ? getTypingSentence() : null;
+      activeCollectionSession = Object.freeze({
+        activityId: activity.id,
+        activityLabel: activity.label,
+        activityColor: activity.color,
+        typingSentenceId: sentence ? sentence.id : null,
+        typingSentenceSource: sentence ? sentence.source : null,
+        typingSentence: sentence ? sentence.text : null
+      });
+      typingInput.value = "";
+      return activeCollectionSession;
+    }
+
+    function releaseCollectionSession({ showReady = true } = {}) {
+      clearCollectionPromptTimer();
+      activeCollectionSession = null;
+      setTypingInputEnabled(false);
+      if (showReady) {
+        renderReadyCollectionPrompt();
+      }
+    }
+
+    function renderCollectionSelection() {
+      const activity = getCollectionActivity();
+      activityGuidance.textContent = activity
+        ? activity.instructions
+        : "Choose an activity to see its instructions. Perform only that activity during the action period.";
+      keyboardTask.classList.toggle("hidden", !activity || activity.id !== "keyboard_activity");
+      const activityColor = activity ? activity.color : "#1f77b4";
+      collectionPrompt.style.setProperty("--activity-color", activityColor);
+      collectionTimeline.style.setProperty("--activity-color", activityColor);
+      const sittingStill = activity && activity.id === "sitting_still";
+      timelineAction.classList.toggle("action", !sittingStill);
+      timelineAction.innerHTML = sittingStill ? "5–30 s<br>STILL" : "5–30 s<br>ACTION";
+      collectionTimeline.setAttribute(
+        "aria-label",
+        sittingStill
+          ? "Recording progress: remain still for all 35 seconds"
+          : "Recording progress: first 5 seconds still, 25 seconds action, final 5 seconds still"
+      );
+      if (!activeCollectionSession) {
+        renderReadyCollectionPrompt();
+      }
+    }
+
+    function initializeCollectionControls() {
+      typingSentenceSelect.replaceChildren();
+      for (const sentence of typingSentences) {
+        const option = document.createElement("option");
+        option.value = String(sentence.id);
+        option.textContent = `Run ${String(sentence.id).padStart(2, "0")} — ${sentence.source}`;
+        typingSentenceSelect.append(option);
+      }
+      updateTypingSentenceDisplay();
+
+      activityChoiceGroup.addEventListener("change", (event) => {
+        if (activeCollectionSession || sensingSessionActive || recordingSessionActive || playbackStartInProgress) {
+          for (const input of activityInputs) {
+            input.checked = input.value === selectedActivityId;
+          }
+          return;
+        }
+        selectedActivityId = event.target && event.target.name === "collectionActivity"
+          ? event.target.value
+          : selectedActivityId;
+        renderCollectionSelection();
+        setSensingControls(Boolean(pendingFileUrl), false);
+      });
+
+      typingSentenceSelect.addEventListener("change", () => {
+        if (activeCollectionSession || sensingSessionActive || recordingSessionActive || playbackStartInProgress) {
+          updateTypingSentenceDisplay();
+          return;
+        }
+        selectedTypingSentenceId = Number(typingSentenceSelect.value);
+        updateTypingSentenceDisplay();
+      });
+
+      renderCollectionSelection();
+    }
+
     function setInteractionTrackingEnabled(enabled) {
       if (interactionTrackingEnabled === enabled) {
         return;
@@ -1138,6 +1875,15 @@
       })
     };
 
+    window.webAgentCollection = {
+      getActivities: () => collectionActivities.map((activity) => ({ ...activity })),
+      getTypingSentences: () => typingSentences.map((sentence) => ({ ...sentence })),
+      getTiming: () => ({ ...collectionTiming }),
+      getSelectedActivityId: () => selectedActivityId || null,
+      getActiveSession: () => activeCollectionSession ? { ...activeCollectionSession } : null,
+      getPhase: (activityId, elapsedSeconds) => ({ ...getCollectionPhase(activityId, elapsedSeconds) })
+    };
+
     function buildStaticFileUrl(fileName) {
       return new URL(fileName, window.location.href).href;
     }
@@ -1332,10 +2078,11 @@
       };
     }
 
-    function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
+    function buildMetadataPayload(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
       const keyboardEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
       const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
-      const metadata = {
+      const collectionSession = activeCollectionSession;
+      return {
         fs: recordedAudioBuffer.sampleRate,
         chirp_samples: Math.round(appConfig.chirpPeriodSeconds * recordedAudioBuffer.sampleRate),
         left_band_hz: [19000, 20500],
@@ -1348,12 +2095,31 @@
           : recordingCaptureMethod,
         os: getBrowserOsMetadata(),
         n_key_events: keyboardEvents.length,
-        n_cursor_events: cursorEvents.length
+        n_cursor_events: cursorEvents.length,
+        target_activity: collectionSession ? collectionSession.activityId : null,
+        collection_timing: {
+          duration_sec: collectionTiming.durationSeconds,
+          initial_still_sec: [0, collectionTiming.initialStillEndSeconds],
+          action_sec: [collectionTiming.initialStillEndSeconds, collectionTiming.actionEndSeconds],
+          final_still_sec: [collectionTiming.actionEndSeconds, collectionTiming.durationSeconds],
+          sitting_still_entire_recording: Boolean(collectionSession && collectionSession.activityId === "sitting_still")
+        },
+        typing_sentence_id: collectionSession ? collectionSession.typingSentenceId : null,
+        typing_sentence_source: collectionSession ? collectionSession.typingSentenceSource : null,
+        typing_sentence: collectionSession ? collectionSession.typingSentence : null
       };
+    }
 
+    function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp, metadata = null) {
       return {
         name: "metadata.json",
-        blob: new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" })
+        blob: new Blob([
+          JSON.stringify(
+            metadata || buildMetadataPayload(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp),
+            null,
+            2
+          )
+        ], { type: "application/json" })
       };
     }
 
@@ -1499,7 +2265,7 @@
       return rows.length;
     }
 
-    async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp) {
+    async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp, metadata) {
       if (!trackingArtifacts || !trackingArtifacts.osEventLog) {
         return null;
       }
@@ -1515,6 +2281,11 @@
         "diagnostics",
         new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" }),
         `recording_diagnostics_${timestamp}.json`
+      );
+      formData.append(
+        "metadata",
+        new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" }),
+        "metadata.json"
       );
       formData.append("timestamp", timestamp);
       formData.append("prefix", "recording");
@@ -1570,11 +2341,33 @@
     }
 
     function setSensingControls(fileReady, sensingActive) {
-      filePrompt.classList.toggle("hidden", !fileReady && !sensingActive);
-      startSensingBtn.disabled = !fileReady && !sensingActive;
+      const controlsLocked = sensingActive
+        || recordingSessionActive
+        || playbackStartInProgress
+        || sensingStopInProgress
+        || Boolean(activeCollectionSession);
+      filePrompt.classList.remove("hidden");
+      startSensingBtn.disabled = sensingActive
+        ? false
+        : !fileReady || !selectedActivityId || controlsLocked;
       startSensingBtn.textContent = sensingActive ? "Stop sensing" : "Start sensing";
       startSensingBtn.setAttribute("aria-pressed", String(sensingActive));
-      recordingProfileSelect.disabled = sensingActive || recordingSessionActive || playbackStartInProgress;
+      recordingProfileSelect.disabled = controlsLocked;
+      for (const input of activityInputs) {
+        input.disabled = controlsLocked;
+      }
+      typingSentenceSelect.disabled = controlsLocked;
+      if (sensingActive) {
+        startSensingHint.textContent = "Recording in progress. Use Stop sensing only if you need to end this run early.";
+      } else if (!fileReady) {
+        startSensingHint.textContent = "Preparing the microphone and ultrasound chirp…";
+      } else if (!selectedActivityId) {
+        startSensingHint.textContent = "Select one activity above to enable Start sensing.";
+      } else if (controlsLocked) {
+        startSensingHint.textContent = sensingStopInProgress ? "Preparing session files…" : "Starting the selected recording…";
+      } else {
+        startSensingHint.textContent = "Ready. Start sensing will begin with 5 seconds of sitting still.";
+      }
       if (stopSensingBtn) {
         stopSensingBtn.disabled = true;
         stopSensingBtn.hidden = true;
@@ -3019,11 +3812,17 @@
         const fileName = `recording_${timestamp}.wav`;
         const spectrogramUrl = spectrogramCanvas.toDataURL("image/png");
         const spectrogramFileName = `recording_spectrogram_${timestamp}.png`;
+        const metadata = buildMetadataPayload(
+          recordedAudioBuffer,
+          diagnostics,
+          options.trackingArtifacts,
+          timestamp
+        );
 
         sessionFiles.push(
           { name: fileName, blob: wavBlob },
           { name: spectrogramFileName, url: spectrogramUrl },
-          buildMetadataArtifact(recordedAudioBuffer, diagnostics, options.trackingArtifacts, timestamp)
+          buildMetadataArtifact(recordedAudioBuffer, diagnostics, options.trackingArtifacts, timestamp, metadata)
         );
 
         fileStatus.textContent = "Sensing stopped. Calculating post-processed signal features...";
@@ -3032,7 +3831,8 @@
             wavBlob,
             diagnostics,
             options.trackingArtifacts,
-            timestamp
+            timestamp,
+            metadata
           );
           renderGeneratedFigures(analysisResult);
           renderWindowPredictions(analysisResult);
@@ -3067,7 +3867,12 @@
     }
 
     async function startSensing() {
-      if (!pendingFileUrl || sensingSessionActive || sensingStopInProgress) {
+      if (!pendingFileUrl || !selectedActivityId || sensingSessionActive || sensingStopInProgress) {
+        setSensingControls(Boolean(pendingFileUrl), false);
+        return;
+      }
+      if (!snapshotCollectionSession()) {
+        setSensingControls(Boolean(pendingFileUrl), false);
         return;
       }
 
@@ -3075,6 +3880,14 @@
       sensingDurationLimitReached = false;
       startSensingBtn.disabled = true;
       stopSensingBtn.disabled = true;
+      collectionPrompt.dataset.phase = "ready";
+      collectionPhaseStatus.textContent = "STARTING…";
+      collectionPhaseCountdown.textContent = "Loading sensing components";
+      collectionTotalCountdown.textContent = `${collectionTiming.durationSeconds} s recording will begin shortly`;
+      collectionPromptInstruction.textContent = "Get ready to sit still when the countdown appears.";
+      setTimelineActiveSegment(-1);
+      setCollectionProgress(0, false);
+      setSensingControls(Boolean(pendingFileUrl), false);
 
       try {
         fileStatus.textContent = "Loading ultrasound chirp...";
@@ -3094,25 +3907,28 @@
         receivedAudio.currentTime = 0;
         await loadChirpPlaybackBuffer(audioBlob);
 
+        await startRealtimeSession();
         const recordingStarted = await prepareRecordingForPlayback();
         if (!recordingStarted) {
           throw new Error("Recording did not start");
         }
 
-        await startRealtimeSession();
         startChirpPlayback();
         sensingSessionActive = true;
+        startCollectionPromptTimer();
         startSensingDurationTimer();
         beginInteractionTrackingSession();
         setSensingControls(true, true);
         fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing and streaming mono float microphone PCM. Recording stops automatically after ${maximumSensingDurationSeconds} seconds.`;
       } catch (error) {
         clearSensingDurationTimer();
+        stopCollectionPromptTimer();
         sensingSessionActive = false;
         setInteractionTrackingEnabled(false);
         stopRealtimeSession();
         stopChirpPlayback();
         cancelRecordingSession();
+        releaseCollectionSession();
         setSensingControls(Boolean(pendingFileUrl), false);
         fileStatus.textContent = "Could not start sensing.";
       }
@@ -3132,6 +3948,7 @@
       try {
         const timestamp = buildRecordingTimestamp();
         sensingSessionActive = false;
+        stopCollectionPromptTimer({ complete: true });
         const trackingArtifacts = prepareEventLog(timestamp, realtimeSessionStartEpoch);
         setInteractionTrackingEnabled(false);
         startSensingBtn.disabled = true;
@@ -3149,6 +3966,8 @@
       } finally {
         clearSensingDurationTimer();
         sensingStopInProgress = false;
+        releaseCollectionSession();
+        setSensingControls(Boolean(pendingFileUrl), false);
       }
     }
 
@@ -3403,16 +4222,19 @@
 
     receivedAudio.addEventListener("error", () => {
       clearSensingDurationTimer();
+      stopCollectionPromptTimer();
       sensingSessionActive = false;
       setInteractionTrackingEnabled(false);
       setSensingControls(Boolean(pendingFileUrl), false);
       stopChirpPlayback();
       stopRealtimeSession();
+      releaseCollectionSession();
       void stopRecordingSession();
     });
 
     window.addEventListener("pagehide", () => {
       clearSensingDurationTimer();
+      stopCollectionPromptTimer();
       setInteractionTrackingEnabled(false);
       stopChirpPlayback();
       stopRealtimeSession();
@@ -3420,10 +4242,12 @@
       resetRecordingBuffers();
       stopMicrophoneStream();
       revokeReceivedAudioObjectUrl();
+      releaseCollectionSession({ showReady: false });
     });
 
     setupInteractionTracking();
     initializeRecordingProfileControl();
+    initializeCollectionControls();
     drawRealtimeChart();
     void requestMicrophone();
   </script>

@@ -84,9 +84,16 @@ http://localhost:8124/
 
 ## Notes
 
-- Click **Start sensing** to play the ultrasound chirp, capture microphone audio, and stream live mic frames to Python. The same button changes to **Stop sensing** while sensing is active.
-- Every sensing session stops automatically after 40 seconds. Captured PCM is
-  also capped by sample count, so an exported WAV cannot exceed 40 seconds.
+- On the main data-collection page, select one target activity before clicking
+  **Start sensing**. The button stays visible but disabled until the microphone,
+  chirp, and activity selection are ready. It changes to **Stop sensing** while
+  sensing is active.
+- Main-page collection sessions stop automatically after 35 seconds: 5 seconds
+  still, 25 seconds performing the selected activity, and 5 seconds still.
+  `sitting_still` remains still for the full session. Captured PCM is also capped
+  by sample count, so an exported main-page WAV cannot exceed 35 seconds.
+- Keyboard collection provides ten run-specific public-domain sentences and a
+  typing box that is enabled only during the 5–30 second action period.
 - Stopping sensing automatically downloads the Python-style
   `keyboard_events.json`, `cursor_events.json`, and `metadata.json` files
   together with the received-audio WAV, spectrogram, a snapshot of the combined
@@ -96,12 +103,13 @@ http://localhost:8124/
   in the automatic downloads. `metadata.json` follows the
   standalone Python recorder's field names and includes the signal parameters,
   actual duration, recording name, capture method, browser-visible OS
-  information, and event counts.
+  information, event counts, selected activity, phase timing, and the assigned
+  keyboard sentence when applicable.
 - While sensing is active, `keyboard_events.json` records key down/up events,
   dwell time, and keydown-to-keydown flight time. `cursor_events.json` records
   pointer movement, click press/release, and wheel/touchpad scrolling. All `t`
   values are seconds relative to sensing start.
-- The completed WAV, internal diagnostics, and an internal compatibility event stream are also sent to the local
+- The completed WAV, collection metadata, internal diagnostics, and an internal compatibility event stream are also sent to the local
   `/api/analyze-recording` endpoint for post-processing. This backend upload is
   separate from the automatic browser downloads; neither the internal diagnostics
   nor the compatibility stream is included in downloaded session files.
@@ -193,7 +201,7 @@ micro-Doppler processing. It follows the supplied `doppler.py` configuration:
 The website displays this output in a separate **Live Micro-Doppler** panel with
 stacked left-band and right-band heatmaps. Time is horizontal, Doppler frequency
 is vertical, and Turbo color represents relative motion power. Event markers
-and the beginning/end still regions share the same 40-second timeline as the
+and the beginning/end still regions share the same 35-second timeline as the
 raw audio and Stage-4 lines.
 
 Stop exports the accumulated live display as

@@ -45,7 +45,7 @@ test("renders separate realtime left and right micro-Doppler heatmaps", async ({
     const renderer = window.WebAgentMicroDoppler.create({
       canvas: document.getElementById("dopplerCanvas"),
       statusNode: document.getElementById("dopplerStatus"),
-      timelineDurationSeconds: 40,
+      timelineDurationSeconds: 35,
       timelineTickSeconds: 5,
       stillRegions: [],
       getMarkers: () => []

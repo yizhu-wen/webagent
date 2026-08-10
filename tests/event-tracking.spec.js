@@ -5,8 +5,10 @@ test("downloads Python-style keyboard and cursor event files", async ({ page }) 
   await page.goto("/");
   await expect(page.locator("#downloadEventLogBtn")).toHaveCount(0);
   await expect(page.locator("#downloadSessionBtn")).toHaveCount(0);
+  await expect(page.locator("#startSensingBtn")).toBeDisabled();
+  await expect(page.locator("[data-collection-panel]")).toHaveCount(1);
+  await page.locator('input[name="collectionActivity"][value="touchpad_pointer_move"]').check();
   await expect(page.locator("#startSensingBtn")).toBeEnabled();
-  await expect(page.locator("[data-collection-panel]")).toHaveCount(0);
 
   await page.evaluate(() => {
     const spacer = document.createElement("div");
