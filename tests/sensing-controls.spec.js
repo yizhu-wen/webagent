@@ -33,7 +33,7 @@ async function installDurationLimitTimerTestHook(page) {
 }
 
 test("offers strict ultrasonic and compatibility recording profiles", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/collection.html?activity=sitting_still");
 
   const profileSelect = page.locator("#recordingProfile");
   await expect(profileSelect).toHaveValue("ultrasonic");
@@ -62,7 +62,7 @@ test("offers strict ultrasonic and compatibility recording profiles", async ({ p
 });
 
 test("keeps realtime IQ local by default and allows hosted override", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/collection.html?activity=sitting_still");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
   ))).toBe("ws://127.0.0.1:8010/realtime");
@@ -78,7 +78,7 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
     window.webAgentSensing.getRealtimeDebugState().audioEventOffsetMs
   ))).toBe(125);
 
-  await page.goto("http://hosted.test:8010/");
+  await page.goto("http://hosted.test:8010/collection.html?activity=sitting_still");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRealtimeDebugState().realtimeWebSocketUrl
   ))).toBe("ws://hosted.test:8010/realtime");
@@ -101,7 +101,7 @@ test("keeps realtime IQ local by default and allows hosted override", async ({ p
 
 test("loops the chirp and automatically stops at the 35-second limit", async ({ page }) => {
   await installDurationLimitTimerTestHook(page);
-  await page.goto("/");
+  await page.goto("/collection.html?activity=sitting_still");
 
   const startButton = page.locator("#startSensingBtn");
   const stopButton = page.locator("#stopSensingBtn");
@@ -115,8 +115,7 @@ test("loops the chirp and automatically stops at the 35-second limit", async ({ 
 
   await expect(startButton).toHaveText("Start sensing");
   await expect(startButton).toBeVisible();
-  await expect(startButton).toBeDisabled();
-  await page.locator('input[name="collectionActivity"][value="sitting_still"]').check();
+  await expect(page.locator('input[name="collectionActivity"][value="sitting_still"]')).toBeChecked();
   await expect(startButton).toBeEnabled();
   await expect(stopButton).toBeHidden();
   await expect(page.locator("#downloadSessionBtn")).toHaveCount(0);
