@@ -952,8 +952,6 @@
     let micStream = null;
     let pendingFileUrl = "";
     let pendingFileName = "";
-    let pendingFileBlob = null;
-    let receivedAudioObjectUrl = "";
     let audioContext = null;
     let chirpPlaybackBuffer = null;
     let chirpSourceNode = null;
@@ -1095,14 +1093,74 @@
       return `${protocol}//${window.location.host}/realtime`;
     }
 
+    const chirpConfig = Object.freeze({
+      sampleRate: targetWavSampleRate,
+      durationSeconds: 0.012,
+      samplesPerPeriod: 576,
+      amplitude: 0.12,
+      left: Object.freeze({ startHz: 19000, endHz: 20500 }),
+      right: Object.freeze({ startHz: 21500, endHz: 23000 })
+    });
     const appConfig = {
       downloadFileName: "tx_dual_triangle_chirp_19_205_215_23.wav",
-      chirpPeriodSeconds: 0.012,
+      chirpPeriodSeconds: chirpConfig.durationSeconds,
       uploadApiUrl: "/api/upload-recording",
       analysisApiUrl: "/api/analyze-recording",
       realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
       audioEventOffsetMs: getLocalStorageNumber("webagentAudioEventOffsetMs", 80)
     };
+    function triangleInstantaneousFrequency(
+      startHz,
+      endHz,
+      sampleCount = chirpConfig.samplesPerPeriod
+    ) {
+      const half = Math.floor(sampleCount / 2);
+      const downCount = sampleCount - half;
+      const frequencies = new Float64Array(sampleCount);
+
+      for (let index = 0; index < half; index += 1) {
+        frequencies[index] = startHz + ((endHz - startHz) * index / half);
+      }
+      for (let index = 0; index < downCount; index += 1) {
+        frequencies[half + index] = endHz + ((startHz - endHz) * index / downCount);
+      }
+      return frequencies;
+    }
+
+    function phaseContinuousChirp(startHz, endHz, totalSamples, amplitude = 1) {
+      const onePeriod = triangleInstantaneousFrequency(startHz, endHz);
+      const samples = new Float32Array(totalSamples);
+      let phase = 0;
+
+      for (let index = 0; index < totalSamples; index += 1) {
+        const instantaneousFrequency = onePeriod[index % onePeriod.length];
+        phase += 2 * Math.PI * instantaneousFrequency / chirpConfig.sampleRate;
+        samples[index] = amplitude * Math.sin(phase);
+      }
+      return samples;
+    }
+
+    function buildTransmitStereoPeriod() {
+      const left = phaseContinuousChirp(
+        chirpConfig.left.startHz,
+        chirpConfig.left.endHz,
+        chirpConfig.samplesPerPeriod,
+        chirpConfig.amplitude
+      );
+      const right = phaseContinuousChirp(
+        chirpConfig.right.startHz,
+        chirpConfig.right.endHz,
+        chirpConfig.samplesPerPeriod,
+        chirpConfig.amplitude
+      );
+      return Object.freeze({
+        sampleRate: chirpConfig.sampleRate,
+        frameCount: chirpConfig.samplesPerPeriod,
+        channels: Object.freeze([left, right])
+      });
+    }
+
+    const generatedChirpPeriod = buildTransmitStereoPeriod();
 
     const realtimeConfig = {
       frameSize: 2048,
@@ -1877,6 +1935,23 @@
 
     window.webAgentSensing = {
       isPlaybackActive: () => Boolean(chirpSourceNode),
+      getChirpPlaybackInfo: () => chirpPlaybackBuffer ? ({
+        channelCount: chirpPlaybackBuffer.numberOfChannels,
+        frameCount: chirpPlaybackBuffer.length,
+        sampleRate: chirpPlaybackBuffer.sampleRate,
+        durationSeconds: chirpPlaybackBuffer.duration
+      }) : null,
+      getChirpGenerationParameters: () => ({
+        sampleRate: chirpConfig.sampleRate,
+        durationSeconds: chirpConfig.durationSeconds,
+        samplesPerPeriod: chirpConfig.samplesPerPeriod,
+        amplitude: chirpConfig.amplitude,
+        left: { ...chirpConfig.left },
+        right: { ...chirpConfig.right }
+      }),
+      getGeneratedChirpPeriod: () => generatedChirpPeriod.channels.map(
+        (channel) => Array.from(channel)
+      ),
       getRecordingChannelCount: () => recordingChannelCount,
       getRecordedFrameCount: () => recordedFrameCount,
       getTargetSampleRate: () => targetWavSampleRate,
@@ -1920,10 +1995,6 @@
       getActiveSession: () => activeCollectionSession ? { ...activeCollectionSession } : null,
       getPhase: (activityId, elapsedSeconds) => ({ ...getCollectionPhase(activityId, elapsedSeconds) })
     };
-
-    function buildStaticFileUrl(fileName) {
-      return new URL(fileName, window.location.href).href;
-    }
 
     function getMicrophoneConstraints() {
       return recordingProfiles.createMicrophoneRequest(
@@ -2121,10 +2192,10 @@
       const collectionSession = activeCollectionSession;
       return {
         fs: recordedAudioBuffer.sampleRate,
-        chirp_samples: Math.round(appConfig.chirpPeriodSeconds * recordedAudioBuffer.sampleRate),
-        left_band_hz: [19000, 20500],
-        right_band_hz: [21500, 23000],
-        tx_amplitude: 0.12,
+        chirp_samples: chirpConfig.samplesPerPeriod,
+        left_band_hz: [chirpConfig.left.startHz, chirpConfig.left.endHz],
+        right_band_hz: [chirpConfig.right.startHz, chirpConfig.right.endHz],
+        tx_amplitude: chirpConfig.amplitude,
         duration_sec: recordedAudioBuffer.duration,
         recording_name: `recording_${timestamp}`,
         capture: diagnostics && diagnostics.recordingCapture
@@ -2366,15 +2437,6 @@
 
       micStream.getTracks().forEach((track) => track.stop());
       micStream = null;
-    }
-
-    function revokeReceivedAudioObjectUrl() {
-      if (!receivedAudioObjectUrl) {
-        return;
-      }
-
-      URL.revokeObjectURL(receivedAudioObjectUrl);
-      receivedAudioObjectUrl = "";
     }
 
     function setSensingControls(fileReady, sensingActive) {
@@ -3380,10 +3442,16 @@
       recordingSessionActive = false;
     }
 
-    async function loadChirpPlaybackBuffer(audioBlob) {
+    function loadGeneratedChirpPlaybackBuffer() {
       const recordingContext = getRecordingContext();
-      const chirpArrayBuffer = await audioBlob.arrayBuffer();
-      chirpPlaybackBuffer = await recordingContext.decodeAudioData(chirpArrayBuffer.slice(0));
+      chirpPlaybackBuffer = recordingContext.createBuffer(
+        generatedChirpPeriod.channels.length,
+        generatedChirpPeriod.frameCount,
+        generatedChirpPeriod.sampleRate
+      );
+      generatedChirpPeriod.channels.forEach((channel, channelIndex) => {
+        chirpPlaybackBuffer.copyToChannel(channel, channelIndex);
+      });
     }
 
     function startChirpPlayback() {
@@ -3895,7 +3963,6 @@
     function clearPendingFile() {
       pendingFileUrl = "";
       pendingFileName = "";
-      pendingFileBlob = null;
       setSensingControls(false, false);
     }
 
@@ -3930,18 +3997,10 @@
       setSensingControls(Boolean(pendingFileUrl), false);
 
       try {
-        fileStatus.textContent = "Loading cached ultrasound chirp...";
-        if (!pendingFileBlob) {
-          throw new Error("The ultrasound chirp is not loaded. Reload the page and try again.");
-        }
-        const audioBlob = pendingFileBlob;
-
-        revokeReceivedAudioObjectUrl();
-        receivedAudioObjectUrl = URL.createObjectURL(audioBlob);
-        receivedAudio.src = receivedAudioObjectUrl;
+        fileStatus.textContent = "Generating the dual-band ultrasound chirp...";
         receivedAudio.loop = true;
         receivedAudio.currentTime = 0;
-        await loadChirpPlaybackBuffer(audioBlob);
+        loadGeneratedChirpPlaybackBuffer();
 
         const recordingStarted = await prepareRecordingForPlayback();
         if (!recordingStarted) {
@@ -4012,33 +4071,16 @@
       }
     }
 
-    async function requestFileFromServer() {
-      fileStatus.textContent = "Preparing file...";
+    function prepareGeneratedChirp() {
+      fileStatus.textContent = "Preparing the generated ultrasound chirp...";
       clearPendingFile();
       clearSpectrogram();
       clearFeatureVisualizations();
 
-      try {
-        const fileUrl = buildStaticFileUrl(appConfig.downloadFileName);
-        const response = await fetch(fileUrl, { method: "GET", cache: "no-store" });
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
-        }
-        const audioBlob = await response.blob();
-        if (!audioBlob.type.startsWith("audio/")) {
-          throw new Error("The downloaded chirp is not an audio file");
-        }
-
-        pendingFileUrl = fileUrl;
-        pendingFileName = appConfig.downloadFileName;
-        pendingFileBlob = audioBlob;
-        fileStatus.textContent = `Ultrasound chirp ready: ${pendingFileName}.`;
-        setSensingControls(true, false);
-      } catch (error) {
-        clearPendingFile();
-        const detail = error && error.message ? ` ${error.message}` : "";
-        fileStatus.textContent = `Failed to load the ultrasound chirp.${detail}`;
-      }
+      pendingFileUrl = "generated:dual-triangle-chirp";
+      pendingFileName = appConfig.downloadFileName;
+      fileStatus.textContent = "Generated dual-band ultrasound chirp ready.";
+      setSensingControls(true, false);
     }
 
     async function requestMicrophone() {
@@ -4048,7 +4090,7 @@
         return;
       }
 
-      await requestFileFromServer();
+      prepareGeneratedChirp();
     }
 
     async function ensureMicrophoneReady() {
@@ -4322,7 +4364,6 @@
       stopRecordingNodes();
       resetRecordingBuffers();
       stopMicrophoneStream();
-      revokeReceivedAudioObjectUrl();
       releaseCollectionSession({ showReady: false });
     });
 

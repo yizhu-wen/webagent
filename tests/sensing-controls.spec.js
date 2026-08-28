@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 const { test, expect } = require("@playwright/test");
 
 async function installDurationLimitTimerTestHook(page) {
@@ -289,26 +290,57 @@ test("falls back to compatibility capture when strict AudioWorklet startup fails
   await startButton.click();
 });
 
-test("fetches the chirp once and reuses the cached audio when sensing starts", async ({ page }) => {
+test("generates the chirp mathematically without requesting the WAV file", async ({ page }) => {
   let chirpRequestCount = 0;
   await page.route("**/tx_dual_triangle_chirp_19_205_215_23.wav", async (route) => {
     chirpRequestCount += 1;
-    if (chirpRequestCount > 1) {
-      await route.abort();
-      return;
-    }
-    await route.continue();
+    await route.abort();
   });
   await page.goto("/collection.html?activity=keyboard_activity");
 
   const startButton = page.locator("#startSensingBtn");
   await expect(startButton).toBeEnabled();
-  await expect.poll(() => chirpRequestCount).toBe(1);
+  await expect(page.locator("#fileStatus")).toHaveText("Generated dual-band ultrasound chirp ready.");
+  expect(chirpRequestCount).toBe(0);
+
+  const generation = await page.evaluate(() => ({
+    parameters: window.webAgentSensing.getChirpGenerationParameters(),
+    channels: window.webAgentSensing.getGeneratedChirpPeriod()
+  }));
+  expect(generation.parameters).toEqual({
+    sampleRate: 48000,
+    durationSeconds: 0.012,
+    samplesPerPeriod: 576,
+    amplitude: 0.12,
+    left: { startHz: 19000, endHz: 20500 },
+    right: { startHz: 21500, endHz: 23000 }
+  });
+
+  const sourceWav = fs.readFileSync(path.join(
+    __dirname,
+    "..",
+    "tx_dual_triangle_chirp_19_205_215_23.wav"
+  ));
+  const expectedChannels = [[], []];
+  for (let frameIndex = 0; frameIndex < 576; frameIndex += 1) {
+    expectedChannels[0].push(sourceWav.readFloatLE(58 + (frameIndex * 2 * 4)));
+    expectedChannels[1].push(sourceWav.readFloatLE(58 + ((frameIndex * 2 + 1) * 4)));
+  }
+  expect(generation.channels).toEqual(expectedChannels);
+
   await startButton.click();
 
   await expect(startButton).toHaveText("Stop sensing");
   await expect(page.locator("#fileStatus")).toContainText("Sensing started");
-  expect(chirpRequestCount).toBe(1);
+  expect(chirpRequestCount).toBe(0);
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getChirpPlaybackInfo()
+  ))).toEqual({
+    channelCount: 2,
+    frameCount: 576,
+    sampleRate: 48000,
+    durationSeconds: 0.012
+  });
 
   await startButton.click();
 });
