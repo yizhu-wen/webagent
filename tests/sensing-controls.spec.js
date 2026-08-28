@@ -32,10 +32,11 @@ async function installDurationLimitTimerTestHook(page) {
   });
 }
 
-test("offers strict ultrasonic and compatibility recording profiles", async ({ page }) => {
+test("supports strict ultrasonic and compatibility recording profiles", async ({ page }) => {
   await page.goto("/collection.html?activity=sitting_still");
 
   const profileSelect = page.locator("#recordingProfile");
+  await expect(page.locator(".recording-profile-control")).toBeHidden();
   await expect(profileSelect).toHaveValue("ultrasonic");
   await expect(profileSelect.locator("option")).toHaveText([
     "Ultrasound (strict)",
@@ -53,7 +54,10 @@ test("offers strict ultrasonic and compatibility recording profiles", async ({ p
   expect(strictRequest.constraints.audio.noiseSuppression.exact).toBe(false);
   expect(strictRequest.constraints.audio.autoGainControl.exact).toBe(false);
 
-  await profileSelect.selectOption("compatible");
+  await profileSelect.evaluate((select) => {
+    select.value = "compatible";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
   await expect(profileSelect).toHaveValue("compatible");
   await expect(page.locator("#recordingProfileDescription")).toContainText("fallback");
   await expect.poll(() => page.evaluate(() => (
@@ -260,4 +264,51 @@ test("loops the chirp and automatically stops at the 35-second limit", async ({ 
   expect(metadata.typing_sentence_id).toBeNull();
   expect(metadata.typing_sentence_source).toBeNull();
   expect(metadata.typing_sentence).toBeNull();
+});
+
+test("falls back to compatibility capture when strict AudioWorklet startup fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.AudioWorkletNode = undefined;
+  });
+  await page.goto("/collection.html?activity=keyboard_activity");
+
+  const startButton = page.locator("#startSensingBtn");
+  await expect(startButton).toBeEnabled();
+  await startButton.click();
+
+  await expect(startButton).toHaveText("Stop sensing");
+  await expect(page.locator("#micStatus")).toContainText("Compatibility fallback");
+  await expect(page.locator("#fileStatus")).toContainText("Sensing started");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getRecordingProfile().id
+  ))).toBe("compatible");
+  await expect.poll(() => page.evaluate(() => (
+    window.webAgentSensing.getCaptureDiagnostics().method
+  ))).toContain("ScriptProcessorNode");
+
+  await startButton.click();
+});
+
+test("fetches the chirp once and reuses the cached audio when sensing starts", async ({ page }) => {
+  let chirpRequestCount = 0;
+  await page.route("**/tx_dual_triangle_chirp_19_205_215_23.wav", async (route) => {
+    chirpRequestCount += 1;
+    if (chirpRequestCount > 1) {
+      await route.abort();
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/collection.html?activity=keyboard_activity");
+
+  const startButton = page.locator("#startSensingBtn");
+  await expect(startButton).toBeEnabled();
+  await expect.poll(() => chirpRequestCount).toBe(1);
+  await startButton.click();
+
+  await expect(startButton).toHaveText("Stop sensing");
+  await expect(page.locator("#fileStatus")).toContainText("Sensing started");
+  expect(chirpRequestCount).toBe(1);
+
+  await startButton.click();
 });

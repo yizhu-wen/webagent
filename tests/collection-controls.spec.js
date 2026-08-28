@@ -29,7 +29,7 @@ for (const [activityId, label] of expectedActivities) {
     await expect(page.locator("#collectionTimeline")).toBeVisible();
     await expect(page.locator("#collectionTimeline")).toHaveAttribute("aria-valuenow", "0.00");
     await expect(page.locator("#startSensingBtn")).toBeVisible();
-    await expect(page.locator(".activity-choice")).toBeHidden();
+    await expect(page.locator("#activityChoiceGroup")).toBeHidden();
   });
 }
 

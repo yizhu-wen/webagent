@@ -952,6 +952,7 @@
     let micStream = null;
     let pendingFileUrl = "";
     let pendingFileName = "";
+    let pendingFileBlob = null;
     let receivedAudioObjectUrl = "";
     let audioContext = null;
     let chirpPlaybackBuffer = null;
@@ -1003,6 +1004,8 @@
     let recordingLastWorkletSequence = 0;
     let microphoneRequestDetails = null;
     let completedCaptureDiagnostics = null;
+    let lastRecordingStartError = null;
+    let recordingCompatibilityFallbackReason = "";
     let chirpScheduledStartTime = null;
     let chirpScheduledStartFrame = null;
 
@@ -3892,6 +3895,7 @@
     function clearPendingFile() {
       pendingFileUrl = "";
       pendingFileName = "";
+      pendingFileBlob = null;
       setSensingControls(false, false);
     }
 
@@ -3912,6 +3916,8 @@
 
       clearSensingDurationTimer();
       sensingDurationLimitReached = false;
+      lastRecordingStartError = null;
+      recordingCompatibilityFallbackReason = "";
       startSensingBtn.disabled = true;
       stopSensingBtn.disabled = true;
       collectionPrompt.dataset.phase = "ready";
@@ -3924,15 +3930,11 @@
       setSensingControls(Boolean(pendingFileUrl), false);
 
       try {
-        fileStatus.textContent = "Loading ultrasound chirp...";
-        const response = await fetch(pendingFileUrl, { method: "GET" });
-        if (!response.ok) {
-          throw new Error("Audio fetch failed");
+        fileStatus.textContent = "Loading cached ultrasound chirp...";
+        if (!pendingFileBlob) {
+          throw new Error("The ultrasound chirp is not loaded. Reload the page and try again.");
         }
-        const audioBlob = await response.blob();
-        if (!audioBlob.type.startsWith("audio/")) {
-          throw new Error("Not an audio file");
-        }
+        const audioBlob = pendingFileBlob;
 
         revokeReceivedAudioObjectUrl();
         receivedAudioObjectUrl = URL.createObjectURL(audioBlob);
@@ -3941,19 +3943,22 @@
         receivedAudio.currentTime = 0;
         await loadChirpPlaybackBuffer(audioBlob);
 
-        await startRealtimeSession();
         const recordingStarted = await prepareRecordingForPlayback();
         if (!recordingStarted) {
-          throw new Error("Recording did not start");
+          throw lastRecordingStartError || new Error("Recording did not start");
         }
 
         startChirpPlayback();
         sensingSessionActive = true;
+        void startRealtimeSession();
         startCollectionPromptTimer();
         startSensingDurationTimer();
         beginInteractionTrackingSession();
         setSensingControls(true, true);
-        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing and streaming mono float microphone PCM. Recording stops automatically after ${maximumSensingDurationSeconds} seconds.`;
+        const fallbackNotice = recordingCompatibilityFallbackReason
+          ? ` Compatibility capture is active because Ultrasound (strict) could not start: ${recordingCompatibilityFallbackReason}`
+          : "";
+        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing and streaming mono float microphone PCM. Recording stops automatically after ${maximumSensingDurationSeconds} seconds.${fallbackNotice}`;
       } catch (error) {
         clearSensingDurationTimer();
         stopCollectionPromptTimer();
@@ -3964,7 +3969,9 @@
         cancelRecordingSession();
         releaseCollectionSession();
         setSensingControls(Boolean(pendingFileUrl), false);
-        fileStatus.textContent = "Could not start sensing.";
+        const detail = error && error.message ? ` ${error.message}` : "";
+        fileStatus.textContent = `Could not start sensing.${detail}`;
+        console.error("Could not start sensing", error);
       }
     }
 
@@ -4013,18 +4020,24 @@
 
       try {
         const fileUrl = buildStaticFileUrl(appConfig.downloadFileName);
-        const response = await fetch(fileUrl, { method: "HEAD" });
+        const response = await fetch(fileUrl, { method: "GET", cache: "no-store" });
         if (!response.ok) {
-          throw new Error("File not found");
+          throw new Error(`Server returned ${response.status}`);
+        }
+        const audioBlob = await response.blob();
+        if (!audioBlob.type.startsWith("audio/")) {
+          throw new Error("The downloaded chirp is not an audio file");
         }
 
         pendingFileUrl = fileUrl;
         pendingFileName = appConfig.downloadFileName;
+        pendingFileBlob = audioBlob;
         fileStatus.textContent = `Ultrasound chirp ready: ${pendingFileName}.`;
         setSensingControls(true, false);
       } catch (error) {
         clearPendingFile();
-        fileStatus.textContent = "Failed to find file on this site.";
+        const detail = error && error.message ? ` ${error.message}` : "";
+        fileStatus.textContent = `Failed to load the ultrasound chirp.${detail}`;
       }
     }
 
@@ -4104,7 +4117,7 @@
       }
     }
 
-    async function startRecordingSession() {
+    async function startRecordingSession({ allowCompatibilityFallback = true } = {}) {
       if (!micStream) {
         return false;
       }
@@ -4209,12 +4222,46 @@
 
         const contextWarning = audioContextQualification.warnings.join(" ");
         fileStatus.textContent = `Starting sensing with ${profile.label} using ${recordingCaptureMethod}.${contextWarning ? ` ${contextWarning}` : ""}`;
+        lastRecordingStartError = null;
         return true;
       } catch (error) {
         stopRecordingNodes();
         resetRecordingBuffers();
-        const detail = error && error.message ? ` ${error.message}` : "";
-        fileStatus.textContent = `Sensing could not start because raw microphone capture could not start.${detail}`;
+        const errorMessage = error && error.message ? error.message : "Unknown audio capture error.";
+
+        if (allowCompatibilityFallback && activeRecordingProfileId === "ultrasonic") {
+          recordingCompatibilityFallbackReason = errorMessage;
+          activeRecordingProfileId = "compatible";
+          updateRecordingProfileControl();
+
+          const track = getPrimaryAudioTrack();
+          microphoneQualification = recordingProfiles.qualifyMicrophoneTrack(
+            track,
+            activeRecordingProfileId,
+            microphoneRequestDetails ? microphoneRequestDetails.supportedConstraints : undefined
+          );
+          micStatus.textContent = "Ultrasound (strict) was unavailable. Trying Compatibility capture...";
+
+          const fallbackStarted = await startRecordingSession({ allowCompatibilityFallback: false });
+          if (fallbackStarted) {
+            const compatibilityWarnings = microphoneQualification.warnings.join(" ");
+            micStatus.textContent = compatibilityWarnings
+              ? `Microphone is on with Compatibility fallback; ${compatibilityWarnings}`
+              : "Microphone is on with Compatibility fallback.";
+            return true;
+          }
+
+          const fallbackMessage = lastRecordingStartError && lastRecordingStartError.message
+            ? lastRecordingStartError.message
+            : "Unknown compatibility capture error.";
+          lastRecordingStartError = new Error(
+            `Ultrasound (strict) failed: ${errorMessage} Compatibility fallback also failed: ${fallbackMessage}`
+          );
+        } else {
+          lastRecordingStartError = new Error(errorMessage);
+        }
+
+        fileStatus.textContent = `Sensing could not start because raw microphone capture could not start. ${lastRecordingStartError.message}`;
         return false;
       }
     }
