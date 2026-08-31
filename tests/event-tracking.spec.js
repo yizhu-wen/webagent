@@ -9,6 +9,12 @@ test("downloads Python-style keyboard and cursor event files", async ({ page }) 
   await expect(page.locator('input[name="collectionActivity"][value="touchpad_pointer_move"]')).toBeChecked();
   await expect(page.locator("#startSensingBtn")).toBeEnabled();
 
+  const startButtonBox = await page.locator("#startSensingBtn").boundingBox();
+  const originalButtonCenter = {
+    x: startButtonBox.x + startButtonBox.width / 2,
+    y: startButtonBox.y + startButtonBox.height / 2
+  };
+
   await page.evaluate(() => {
     const spacer = document.createElement("div");
     spacer.id = "tracking-scroll-spacer";
@@ -34,6 +40,13 @@ test("downloads Python-style keyboard and cursor event files", async ({ page }) 
   await page.locator("#startSensingBtn").click();
   await expect(page.locator("#startSensingBtn")).toHaveText("Stop sensing");
   await expect(page.locator("#stopSensingBtn")).toBeHidden();
+  const stopButtonBox = await page.locator("#startSensingBtn").boundingBox();
+  const originalCenterStillHitsButton = originalButtonCenter.x >= stopButtonBox.x
+    && originalButtonCenter.x <= stopButtonBox.x + stopButtonBox.width
+    && originalButtonCenter.y >= stopButtonBox.y
+    && originalButtonCenter.y <= stopButtonBox.y + stopButtonBox.height;
+  expect(originalCenterStillHitsButton).toBe(false);
+  expect(stopButtonBox.y).toBeLessThan(60);
   await expect.poll(() => page.evaluate(() => window.interactionTracker.isEnabled())).toBe(true);
 
   await page.evaluate(() => {

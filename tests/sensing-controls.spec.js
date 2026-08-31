@@ -142,7 +142,8 @@ test("loops the chirp and automatically stops at the 35-second limit", async ({ 
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.isDurationLimitTimerActive()
   ))).toBe(true);
-  await expect(page.locator("#fileStatus")).toContainText("automatically after 35 seconds");
+  await expect(page.locator("#fileStatus")).toHaveText("");
+  await expect(page.locator("#fileStatus")).toBeHidden();
 
   const downloads = [];
   page.on("download", (download) => {
@@ -279,7 +280,8 @@ test("falls back to compatibility capture when strict AudioWorklet startup fails
 
   await expect(startButton).toHaveText("Stop sensing");
   await expect(page.locator("#micStatus")).toContainText("Compatibility fallback");
-  await expect(page.locator("#fileStatus")).toContainText("Sensing started");
+  await expect(page.locator("#fileStatus")).toContainText("Compatibility capture is active");
+  await expect(page.locator("#fileStatus")).not.toContainText("Looping");
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getRecordingProfile().id
   ))).toBe("compatible");
@@ -292,7 +294,7 @@ test("falls back to compatibility capture when strict AudioWorklet startup fails
 
 test("generates the chirp mathematically without requesting the WAV file", async ({ page }) => {
   let chirpRequestCount = 0;
-  await page.route("**/tx_dual_triangle_chirp_19_205_215_23.wav", async (route) => {
+  await page.route("**/*.wav", async (route) => {
     chirpRequestCount += 1;
     await route.abort();
   });
@@ -331,7 +333,13 @@ test("generates the chirp mathematically without requesting the WAV file", async
   await startButton.click();
 
   await expect(startButton).toHaveText("Stop sensing");
-  await expect(page.locator("#fileStatus")).toContainText("Sensing started");
+  await expect(page.locator("#nextTypingSentenceBtn")).toBeDisabled();
+  await expect(page.locator("#collectionPhaseStatus")).toBeVisible();
+  await expect(page.locator("#collectionTimers, .collection-timers")).toBeHidden();
+  await expect(page.locator("#collectionPromptInstruction")).toBeHidden();
+  await expect(page.locator("#startSensingHint")).toBeHidden();
+  await expect(page.locator("#fileStatus")).toHaveText("");
+  await expect(page.locator("#fileStatus")).toBeHidden();
   expect(chirpRequestCount).toBe(0);
   await expect.poll(() => page.evaluate(() => (
     window.webAgentSensing.getChirpPlaybackInfo()
@@ -343,4 +351,5 @@ test("generates the chirp mathematically without requesting the WAV file", async
   });
 
   await startButton.click();
+  await expect(page.locator("#nextTypingSentenceBtn")).toBeEnabled();
 });

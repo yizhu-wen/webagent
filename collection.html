@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Guided Data Collection</title>
   <style>
+    html {
+      font-size: 18px;
+    }
+
     :root {
       --bg: #f4efe7;
       --panel: rgba(255, 252, 246, 0.88);
@@ -40,7 +44,7 @@
     }
 
     .shell.expanded {
-      width: min(920px, 100%);
+      width: min(1120px, 100%);
     }
 
     .panel {
@@ -121,8 +125,17 @@
       line-height: 1.6;
     }
 
+    #micStatus:empty {
+      display: none;
+    }
+
+    #fileStatus:empty {
+      display: none;
+    }
+
     .file-prompt {
-      margin-top: 14px;
+      width: 100%;
+      margin: 18px auto;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -138,6 +151,49 @@
       cursor: pointer;
       background: rgba(255, 255, 255, 0.9);
       color: var(--text);
+    }
+
+    #startSensingBtn {
+      display: block;
+      min-width: min(240px, 100%);
+      margin-inline: auto;
+      padding: 15px 28px;
+      border: 1px solid #238636;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #36a852 0%, #238636 100%);
+      box-shadow: 0 12px 24px rgba(35, 134, 54, 0.28);
+      color: #ffffff;
+      font-size: 1.08rem;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    #startSensingBtn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #42b95f 0%, #1f7a31 100%);
+      transform: translateY(-1px);
+    }
+
+    #startSensingBtn:focus-visible {
+      outline: 4px solid rgba(54, 168, 82, 0.28);
+      outline-offset: 3px;
+    }
+
+    #startSensingBtn[aria-pressed="true"] {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      z-index: 1000;
+      width: auto;
+      min-width: 180px;
+      margin: 0;
+      padding: 12px 20px;
+      border-color: #b42318;
+      background: linear-gradient(135deg, #dc4c3f 0%, #b42318 100%);
+      box-shadow: 0 12px 24px rgba(180, 35, 24, 0.25);
+    }
+
+    #startSensingBtn[aria-pressed="true"]:hover:not(:disabled) {
+      transform: none;
     }
 
     .event-log-actions {
@@ -185,7 +241,7 @@
     }
 
     .collection-panel {
-      width: min(760px, 100%);
+      width: 100%;
       margin: 18px auto 0;
       padding: 18px;
       border: 1px solid rgba(46, 36, 28, 0.14);
@@ -297,6 +353,45 @@
       padding: 8px 10px;
     }
 
+    .typing-sentence-controls {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .typing-sentence-controls select {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .next-sentence-button {
+      flex: 0 0 auto;
+      padding: 8px 14px;
+      border: 1px solid #d62728;
+      border-radius: 9px;
+      background: #d62728;
+      color: #ffffff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .next-sentence-button:hover:not(:disabled) {
+      background: #b91f20;
+    }
+
+    .next-sentence-button:focus-visible {
+      outline: 3px solid rgba(214, 39, 40, 0.28);
+      outline-offset: 2px;
+    }
+
+    .next-sentence-button:disabled {
+      border-color: rgba(46, 36, 28, 0.18);
+      background: rgba(46, 36, 28, 0.1);
+      color: var(--muted);
+      cursor: not-allowed;
+    }
+
     .keyboard-task textarea {
       min-height: 112px;
       padding: 10px 12px;
@@ -342,10 +437,30 @@
     }
 
     .collection-prompt[data-phase="ready"],
+    .collection-prompt[data-phase="starting"],
     .collection-prompt[data-phase="complete"] {
       --phase-color: #5b5148;
       border-color: rgba(46, 36, 28, 0.2);
       background: rgba(46, 36, 28, 0.06);
+    }
+
+    .collection-prompt[data-phase="ready"] .collection-phase-title,
+    .collection-prompt[data-phase="ready"] .collection-timers,
+    .collection-prompt[data-phase="ready"] .collection-prompt-instruction {
+      display: none;
+    }
+
+    .collection-prompt[data-phase="ready"] .collection-timeline {
+      margin-top: 0;
+    }
+
+    .collection-prompt[data-phase="starting"] .collection-timers,
+    .collection-prompt[data-phase="starting"] .collection-prompt-instruction,
+    .collection-prompt[data-phase="still"] .collection-timers,
+    .collection-prompt[data-phase="still"] .collection-prompt-instruction,
+    .collection-prompt[data-phase="action"] .collection-timers,
+    .collection-prompt[data-phase="action"] .collection-prompt-instruction {
+      display: none;
     }
 
     .collection-phase-title {
@@ -459,11 +574,106 @@
       opacity: 1;
     }
 
+    .action-schedule {
+      display: grid;
+      grid-template-columns: 5fr 25fr 5fr;
+      gap: 4px;
+      margin-top: 7px;
+    }
+
+    .action-schedule-caption {
+      grid-column: 1 / -1;
+      margin: 0 0 4px;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .action-schedule-markers {
+      --action-count: 1;
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: repeat(var(--action-count), minmax(0, 1fr));
+      align-items: start;
+    }
+
+    .action-schedule-marker {
+      position: relative;
+      display: grid;
+      justify-items: center;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      opacity: 0.62;
+      transition: color 120ms ease, opacity 120ms ease, transform 120ms ease;
+    }
+
+    .action-schedule-marker::before {
+      content: "";
+      position: absolute;
+      top: -12px;
+      width: 1px;
+      height: 10px;
+      background: currentColor;
+    }
+
+    .action-schedule-number {
+      display: grid;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      background: var(--panel);
+      font-weight: 900;
+    }
+
+    .action-schedule-label {
+      min-height: 1em;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 0.78rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .action-schedule-time {
+      margin-top: 3px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .action-schedule-marker.next,
+    .action-schedule-marker.due {
+      color: var(--activity-color, #9467bd);
+      opacity: 1;
+      transform: scale(1.08);
+    }
+
+    .action-schedule-marker.due .action-schedule-number {
+      background: var(--activity-color, #9467bd);
+      color: #ffffff;
+    }
+
+    .action-schedule-marker.completed {
+      color: #238636;
+      opacity: 0.76;
+    }
+
     .start-sensing-hint {
       max-width: 520px;
       margin: 0;
       color: var(--muted);
       font-size: 0.86rem;
+    }
+
+    .start-sensing-hint:empty {
+      display: none;
     }
 
     .experiment-link {
@@ -682,6 +892,55 @@
       .activity-grid {
         grid-template-columns: 1fr;
       }
+
+      .action-schedule-marker {
+        font-size: 0.56rem;
+      }
+
+      .action-schedule-number {
+        width: 14px;
+        height: 14px;
+      }
+
+      .action-schedule-label,
+      .action-schedule-time {
+        transform: rotate(-65deg);
+        transform-origin: 50% 0;
+      }
+
+      .action-schedule.has-action-labels .action-schedule-number {
+        display: none;
+      }
+
+      .action-schedule.has-action-labels .action-schedule-label {
+        display: grid;
+        width: 20px;
+        height: 20px;
+        margin-top: 0;
+        place-items: center;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        background: var(--panel);
+        color: currentColor;
+        font-size: 0.82rem;
+        transform: none;
+      }
+
+      .action-schedule-time {
+        font-size: 0.58rem;
+      }
+
+      .action-schedule {
+        margin-bottom: 42px;
+      }
+
+      #startSensingBtn[aria-pressed="true"] {
+        top: 12px;
+        right: 12px;
+        min-width: 150px;
+        padding: 11px 16px;
+        font-size: 0.92rem;
+      }
     }
   </style>
 </head>
@@ -691,8 +950,7 @@
       <div id="appView" class="app-view expanded">
         <a class="collection-back" href="index.html">← Choose another activity</a>
         <h3 id="activityPageTitle">Data collection task</h3>
-        <p id="welcomeMessage">Follow the task guide below, then start the recording when you are ready.</p>
-        <p id="micStatus">Requesting microphone access...</p>
+        <p id="micStatus" role="status" aria-live="polite"></p>
         <p id="fileStatus"></p>
         <div class="recording-profile-control">
           <label for="recordingProfile">Recording profile</label>
@@ -702,7 +960,6 @@
         </div>
         <section class="collection-panel" data-collection-panel aria-labelledby="collectionPanelTitle">
           <h4 id="collectionPanelTitle">Data collection activity</h4>
-          <p id="activityPageSummary">Review the instructions before starting.</p>
           <fieldset id="activityChoiceGroup" class="activity-choice-group activity-selector-hidden" aria-hidden="true">
             <legend class="visually-hidden">Target activity</legend>
             <div class="activity-grid">
@@ -732,7 +989,7 @@
               </label>
               <label class="activity-choice" style="--activity-color: #2ca02c;">
                 <input type="radio" name="collectionActivity" value="body_motion">
-                <span><strong>Body motion</strong><small>Move the upper body while seated.</small></span>
+                <span><strong>Walking</strong><small>Walk left and right past the laptop 7 times.</small></span>
               </label>
             </div>
           </fieldset>
@@ -741,19 +998,27 @@
           </div>
           <div id="keyboardTask" class="keyboard-task hidden">
             <label for="typingSentenceSelect">Keyboard run and assigned sentence</label>
-            <select id="typingSentenceSelect"></select>
+            <div class="typing-sentence-controls">
+              <select id="typingSentenceSelect"></select>
+              <button id="nextTypingSentenceBtn" class="next-sentence-button" type="button">Next sentence</button>
+            </div>
             <blockquote id="typingSentenceText" class="typing-sentence"></blockquote>
             <label for="typingInput">Type here during the TYPE NOW period</label>
             <textarea id="typingInput" disabled spellcheck="false" autocomplete="off" aria-describedby="typingInputHint"></textarea>
             <p id="typingInputHint">The box unlocks after the first 5 seconds and locks again for the final 5 seconds.</p>
           </div>
+          <div id="filePrompt" class="file-prompt">
+            <button id="startSensingBtn" class="prompt-button" type="button" disabled>Start sensing</button>
+            <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
+            <p id="startSensingHint" class="start-sensing-hint">Preparing the microphone and ultrasound chirp…</p>
+          </div>
           <div id="collectionPrompt" class="collection-prompt" data-phase="ready">
-            <div id="collectionPhaseStatus" class="collection-phase-title" role="status" aria-live="assertive">READY</div>
+            <div id="collectionPhaseStatus" class="collection-phase-title" role="status" aria-live="assertive"></div>
             <div class="collection-timers" aria-live="off">
-              <span id="collectionPhaseCountdown">Select an activity</span>
-              <span id="collectionTotalCountdown">35 s total</span>
+              <span id="collectionPhaseCountdown"></span>
+              <span id="collectionTotalCountdown"></span>
             </div>
-            <p id="collectionPromptInstruction" class="collection-prompt-instruction">Select an activity, then press Start sensing.</p>
+            <p id="collectionPromptInstruction" class="collection-prompt-instruction"></p>
             <div
               id="collectionTimeline"
               class="collection-timeline"
@@ -770,13 +1035,12 @@
               <div class="collection-progress-fill" aria-hidden="true"></div>
               <div class="collection-progress-marker" aria-hidden="true"></div>
             </div>
+            <div id="actionSchedule" class="action-schedule hidden">
+              <p id="actionScheduleCaption" class="action-schedule-caption"></p>
+              <div id="actionScheduleMarkers" class="action-schedule-markers" role="list" aria-label="Scheduled activity timestamps"></div>
+            </div>
           </div>
         </section>
-        <div id="filePrompt" class="file-prompt">
-          <button id="startSensingBtn" class="prompt-button" type="button" disabled>Start sensing</button>
-          <button id="stopSensingBtn" class="prompt-button hidden" type="button" disabled hidden aria-hidden="true" tabindex="-1">Stop</button>
-          <p id="startSensingHint" class="start-sensing-hint">Preparing the microphone and ultrasound chirp…</p>
-        </div>
 
         <audio id="receivedAudio" class="audio-player hidden" loop></audio>
         <div id="realtimePanel" class="realtime-panel data-output-hidden">
@@ -859,12 +1123,12 @@
     const recordingProfileSelect = document.getElementById("recordingProfile");
     const recordingProfileDescription = document.getElementById("recordingProfileDescription");
     const activityPageTitle = document.getElementById("activityPageTitle");
-    const activityPageSummary = document.getElementById("activityPageSummary");
     const activityChoiceGroup = document.getElementById("activityChoiceGroup");
     const activityInputs = Array.from(document.querySelectorAll('input[name="collectionActivity"]'));
     const activityGuidance = document.getElementById("activityGuidance");
     const keyboardTask = document.getElementById("keyboardTask");
     const typingSentenceSelect = document.getElementById("typingSentenceSelect");
+    const nextTypingSentenceBtn = document.getElementById("nextTypingSentenceBtn");
     const typingSentenceText = document.getElementById("typingSentenceText");
     const typingInput = document.getElementById("typingInput");
     const collectionPrompt = document.getElementById("collectionPrompt");
@@ -876,6 +1140,9 @@
     const timelineInitialStill = document.getElementById("timelineInitialStill");
     const timelineAction = document.getElementById("timelineAction");
     const timelineFinalStill = document.getElementById("timelineFinalStill");
+    const actionSchedule = document.getElementById("actionSchedule");
+    const actionScheduleCaption = document.getElementById("actionScheduleCaption");
+    const actionScheduleMarkers = document.getElementById("actionScheduleMarkers");
     const startSensingHint = document.getElementById("startSensingHint");
     const recordingProfiles = window.webAgentRecordingProfiles;
     const targetWavSampleRate = 48000;
@@ -883,6 +1150,72 @@
       initialStillEndSeconds: 5,
       actionEndSeconds: 30,
       durationSeconds: 35
+    });
+    function createTimedActions(actionDefinitions) {
+      const actionDuration = collectionTiming.actionEndSeconds - collectionTiming.initialStillEndSeconds;
+      return Object.freeze(actionDefinitions.map((definition, index) => Object.freeze({
+        ...definition,
+        timestamp: Number((
+          collectionTiming.initialStillEndSeconds
+          + ((index + 0.5) * actionDuration / actionDefinitions.length)
+        ).toFixed(1))
+      })));
+    }
+
+    const fourDirectionCycle = Object.freeze([
+      Object.freeze({ label: "↑", direction: "up" }),
+      Object.freeze({ label: "↓", direction: "down" }),
+      Object.freeze({ label: "←", direction: "left" }),
+      Object.freeze({ label: "→", direction: "right" })
+    ]);
+    const activityActionSchedules = Object.freeze({
+      touchpad_click: Object.freeze({
+        caption: "18 physical clicks — click once at each timestamp",
+        timelineLabel: "18 CLICKS",
+        ariaSummary: "18 scheduled physical clicks",
+        items: createTimedActions(Array.from({ length: 18 }, () => ({
+          label: "",
+          detail: "Physical touchpad click"
+        })))
+      }),
+      touchpad_scroll: Object.freeze({
+        caption: "12 scrolls — ↑ ↓ ← →, repeated 3 times",
+        timelineLabel: "12 SCROLLS",
+        ariaSummary: "12 scheduled scrolls in up, down, left, right order, repeated 3 times",
+        items: createTimedActions(Array.from({ length: 12 }, (_, index) => {
+          const action = fourDirectionCycle[index % fourDirectionCycle.length];
+          return { label: action.label, detail: `Scroll ${action.direction}` };
+        }))
+      }),
+      touchpad_pointer_move: Object.freeze({
+        caption: "12 pointer moves — ↑ ↓ ← →, repeated 3 times",
+        timelineLabel: "12 MOVES",
+        ariaSummary: "12 scheduled pointer movements in up, down, left, right order, repeated 3 times",
+        items: createTimedActions(Array.from({ length: 12 }, (_, index) => {
+          const action = fourDirectionCycle[index % fourDirectionCycle.length];
+          return { label: action.label, detail: `Move the pointer ${action.direction}` };
+        }))
+      }),
+      hand_wave: Object.freeze({
+        caption: "10 waves — odd: right hand R→L→R; even: left hand L→R→L",
+        timelineLabel: "10 WAVES",
+        ariaSummary: "10 scheduled hand waves alternating right-hand and left-hand back-and-forth movements",
+        items: createTimedActions(Array.from({ length: 10 }, (_, index) => (
+          index % 2 === 0
+            ? { label: "R", detail: "Right hand: right-to-left, then left-to-right" }
+            : { label: "L", detail: "Left hand: left-to-right, then right-to-left" }
+        )))
+      }),
+      body_motion: Object.freeze({
+        caption: "7 walks — L R L R L R L",
+        timelineLabel: "7 WALKS",
+        ariaSummary: "7 scheduled walks alternating left and right, starting and ending on the left",
+        items: createTimedActions(Array.from({ length: 7 }, (_, index) => (
+          index % 2 === 0
+            ? { label: "L", detail: "Walk to the left side of the laptop" }
+            : { label: "R", detail: "Walk to the right side of the laptop" }
+        )))
+      })
     });
     const maximumSensingDurationSeconds = collectionTiming.durationSeconds;
     const maximumSensingDurationMs = maximumSensingDurationSeconds * 1000;
@@ -899,21 +1232,21 @@
         label: "Touchpad click",
         actionTitle: "CLICK NOW",
         color: "#9467bd",
-        instructions: "Physically press the touchpad about 8–20 times with natural pauses. Do not tap-to-click, type, scroll, or intentionally move the pointer."
+        instructions: "Make exactly 18 physical touchpad clicks: click once at each numbered timestamp on the progress bar. Do not tap-to-click, type, scroll, or intentionally move the pointer."
       },
       {
         id: "touchpad_scroll",
         label: "Touchpad scroll",
         actionTitle: "SCROLL NOW",
         color: "#17becf",
-        instructions: "Scroll upward and downward in about 4–10 varied episodes with natural pauses. Do not type, click, or intentionally move the pointer."
+        instructions: "Make exactly 12 two-finger scroll gestures: up, down, left, right, then repeat that four-direction cycle 2 more times. Start one gesture at each numbered timestamp. Do not type or click."
       },
       {
         id: "touchpad_pointer_move",
         label: "Touchpad pointer move",
         actionTitle: "MOVE POINTER NOW",
         color: "#1f77b4",
-        instructions: "Move the pointer with the touchpad in varied directions, distances, and speeds for about 5–12 episodes. Do not type, click, or scroll."
+        instructions: "Make exactly 12 touchpad pointer movements: up, down, left, right, then repeat that four-direction cycle 2 more times. Start one movement at each numbered timestamp. Do not type, click, or scroll."
       },
       {
         id: "sitting_still",
@@ -927,14 +1260,14 @@
         label: "Hand wave",
         actionTitle: "WAVE NOW",
         color: "#ff7f0e",
-        instructions: "Wave one hand left-to-right and right-to-left above or near the keyboard for about 4–10 episodes. Do not touch the laptop or move your upper body intentionally."
+        instructions: "Complete exactly 10 wave episodes. Odd-numbered waves use the right hand: right-to-left, then left-to-right. Even-numbered waves use the left hand: left-to-right, then right-to-left. Repeat the two-wave pair 5 times."
       },
       {
         id: "body_motion",
-        label: "Body motion",
-        actionTitle: "MOVE BODY NOW",
+        label: "Walking",
+        actionTitle: "WALK NOW",
         color: "#2ca02c",
-        instructions: "While seated, vary upper-body movements such as leaning or turning for about 4–10 episodes. Do not type, use the touchpad, or wave a hand."
+        instructions: "Start standing in front of the computer. During the action period, walk a few steps to the left side of the laptop, turn around, then walk to the right side. Continue in this order: left, right, left, right, left, right, left. Start each of the 7 walks at its labeled timestamp."
       }
     ]);
     const typingSentences = Object.freeze([
@@ -1102,7 +1435,7 @@
       right: Object.freeze({ startHz: 21500, endHz: 23000 })
     });
     const appConfig = {
-      downloadFileName: "tx_dual_triangle_chirp_19_205_215_23.wav",
+      chirpSignalName: "mathematically generated 12 ms dual-band chirp",
       chirpPeriodSeconds: chirpConfig.durationSeconds,
       uploadApiUrl: "/api/upload-recording",
       analysisApiUrl: "/api/analyze-recording",
@@ -1474,6 +1807,27 @@
       return typingSentences.find((sentence) => sentence.id === numericId) || typingSentences[0];
     }
 
+    function collectionControlsAreLocked() {
+      return Boolean(
+        activeCollectionSession
+        || sensingSessionActive
+        || recordingSessionActive
+        || playbackStartInProgress
+        || sensingStopInProgress
+      );
+    }
+
+    function updateNextTypingSentenceButton() {
+      const currentIndex = typingSentences.findIndex(
+        (sentence) => sentence.id === selectedTypingSentenceId
+      );
+      const isLastSentence = currentIndex === typingSentences.length - 1;
+      nextTypingSentenceBtn.disabled = collectionControlsAreLocked() || isLastSentence;
+      nextTypingSentenceBtn.title = isLastSentence
+        ? "This is the final assigned sentence."
+        : `Advance to sentence ${typingSentences[currentIndex + 1].id}.`;
+    }
+
     function updateTypingSentenceDisplay() {
       const sentence = getTypingSentence();
       selectedTypingSentenceId = sentence.id;
@@ -1484,6 +1838,7 @@
       source.className = "typing-sentence-source";
       source.textContent = `Sentence ${sentence.id} — ${sentence.source}`;
       typingSentenceText.append(source);
+      updateNextTypingSentenceButton();
     }
 
     function getCollectionPhase(activityId, elapsedSeconds) {
@@ -1551,6 +1906,73 @@
       });
     }
 
+    function getActivityActionSchedule(activityId = selectedActivityId) {
+      return activityActionSchedules[activityId] || null;
+    }
+
+    function renderActivityActionSchedule(activityId = selectedActivityId) {
+      const schedule = getActivityActionSchedule(activityId);
+      actionSchedule.classList.toggle("hidden", !schedule);
+      actionSchedule.classList.toggle(
+        "has-action-labels",
+        Boolean(schedule?.items.some((item) => item.label))
+      );
+      if (!schedule) {
+        actionScheduleCaption.textContent = "";
+        actionScheduleMarkers.replaceChildren();
+        return;
+      }
+
+      actionScheduleCaption.textContent = schedule.caption;
+      actionScheduleMarkers.setAttribute("aria-label", schedule.ariaSummary);
+      actionScheduleMarkers.style.setProperty("--action-count", String(schedule.items.length));
+      actionScheduleMarkers.replaceChildren();
+      schedule.items.forEach((item, index) => {
+        const marker = document.createElement("span");
+        marker.className = "action-schedule-marker";
+        marker.setAttribute("role", "listitem");
+        marker.dataset.timestamp = String(item.timestamp);
+        marker.dataset.action = item.detail;
+        marker.title = `${index + 1}. ${item.detail} at ${item.timestamp.toFixed(1)} seconds`;
+
+        const number = document.createElement("span");
+        number.className = "action-schedule-number";
+        number.textContent = String(index + 1);
+
+        const label = document.createElement("span");
+        label.className = "action-schedule-label";
+        label.textContent = item.label;
+
+        const time = document.createElement("span");
+        time.className = "action-schedule-time";
+        time.textContent = `${item.timestamp.toFixed(1)}s`;
+
+        marker.append(number, label, time);
+        actionScheduleMarkers.append(marker);
+      });
+    }
+
+    function updateActivityActionSchedule(elapsedSeconds, visible = false) {
+      const schedule = getActivityActionSchedule();
+      if (!schedule) {
+        return;
+      }
+      const markers = Array.from(actionScheduleMarkers.children);
+      let nextMarkerAssigned = false;
+      markers.forEach((marker, index) => {
+        const timestamp = schedule.items[index].timestamp;
+        const isDue = visible && Math.abs(elapsedSeconds - timestamp) <= 0.45;
+        const isCompleted = visible && elapsedSeconds > timestamp + 0.45;
+        const isNext = !isCompleted && !isDue && !nextMarkerAssigned;
+        marker.classList.toggle("completed", isCompleted);
+        marker.classList.toggle("due", isDue);
+        marker.classList.toggle("next", isNext);
+        if (isDue || isNext) {
+          nextMarkerAssigned = true;
+        }
+      });
+    }
+
     function setCollectionProgress(elapsedSeconds, visible = true) {
       const elapsed = Math.min(
         collectionTiming.durationSeconds,
@@ -1564,6 +1986,9 @@
         "aria-valuetext",
         `${elapsed.toFixed(1)} of ${collectionTiming.durationSeconds} seconds`
       );
+      if (getActivityActionSchedule()) {
+        updateActivityActionSchedule(elapsed, visible);
+      }
     }
 
     function setTypingInputEnabled(enabled, { focus = false } = {}) {
@@ -1577,15 +2002,12 @@
     }
 
     function renderReadyCollectionPrompt() {
-      const activity = getCollectionActivity();
       collectionPromptPhaseKey = "ready";
       collectionPrompt.dataset.phase = "ready";
-      collectionPhaseStatus.textContent = "READY";
-      collectionPhaseCountdown.textContent = activity ? "Ready to record" : "Select an activity";
-      collectionTotalCountdown.textContent = `${collectionTiming.durationSeconds} s total`;
-      collectionPromptInstruction.textContent = activity
-        ? `Press Start sensing. First sit still for ${collectionTiming.initialStillEndSeconds} seconds.`
-        : "Select an activity, then press Start sensing.";
+      collectionPhaseStatus.textContent = "";
+      collectionPhaseCountdown.textContent = "";
+      collectionTotalCountdown.textContent = "";
+      collectionPromptInstruction.textContent = "";
       setTimelineActiveSegment(-1);
       setCollectionProgress(0, false);
       setTypingInputEnabled(false);
@@ -1689,13 +2111,22 @@
       collectionPrompt.style.setProperty("--activity-color", activityColor);
       collectionTimeline.style.setProperty("--activity-color", activityColor);
       const sittingStill = activity && activity.id === "sitting_still";
+      const schedule = activity ? getActivityActionSchedule(activity.id) : null;
       timelineAction.classList.toggle("action", !sittingStill);
-      timelineAction.innerHTML = sittingStill ? "5–30 s<br>STILL" : "5–30 s<br>ACTION";
+      timelineAction.innerHTML = sittingStill
+        ? "5–30 s<br>STILL"
+        : schedule
+          ? `5–30 s<br>${schedule.timelineLabel}`
+          : "5–30 s<br>ACTION";
+      renderActivityActionSchedule(activity ? activity.id : null);
+      updateActivityActionSchedule(0, false);
       collectionTimeline.setAttribute(
         "aria-label",
         sittingStill
           ? "Recording progress: remain still for all 35 seconds"
-          : "Recording progress: first 5 seconds still, 25 seconds action, final 5 seconds still"
+          : schedule
+            ? `Recording progress: first 5 seconds still, ${schedule.ariaSummary}, final 5 seconds still`
+            : "Recording progress: first 5 seconds still, 25 seconds action, final 5 seconds still"
       );
       if (!activeCollectionSession) {
         renderReadyCollectionPrompt();
@@ -1715,7 +2146,6 @@
         selectedInput.checked = true;
       }
       activityPageTitle.textContent = requestedActivity.label;
-      activityPageSummary.textContent = `Complete one guided ${requestedActivity.label.toLowerCase()} recording.`;
       document.title = `${requestedActivity.label} | Data Collection`;
 
       typingSentenceSelect.replaceChildren();
@@ -1748,6 +2178,22 @@
           return;
         }
         selectedTypingSentenceId = Number(typingSentenceSelect.value);
+        updateTypingSentenceDisplay();
+      });
+
+      nextTypingSentenceBtn.addEventListener("click", () => {
+        if (collectionControlsAreLocked()) {
+          updateNextTypingSentenceButton();
+          return;
+        }
+        const currentIndex = typingSentences.findIndex(
+          (sentence) => sentence.id === selectedTypingSentenceId
+        );
+        if (currentIndex < 0 || currentIndex >= typingSentences.length - 1) {
+          updateNextTypingSentenceButton();
+          return;
+        }
+        selectedTypingSentenceId = typingSentences[currentIndex + 1].id;
         updateTypingSentenceDisplay();
       });
 
@@ -1990,6 +2436,12 @@
     window.webAgentCollection = {
       getActivities: () => collectionActivities.map((activity) => ({ ...activity })),
       getTypingSentences: () => typingSentences.map((sentence) => ({ ...sentence })),
+      getActionSchedule: (activityId) => {
+        const schedule = getActivityActionSchedule(activityId);
+        return schedule
+          ? schedule.items.map((item) => ({ ...item }))
+          : [];
+      },
       getTiming: () => ({ ...collectionTiming }),
       getSelectedActivityId: () => selectedActivityId || null,
       getActiveSession: () => activeCollectionSession ? { ...activeCollectionSession } : null,
@@ -2133,7 +2585,8 @@
         },
         playback: {
           engine: "Web Audio AudioBufferSourceNode",
-          chirpFileName: appConfig.downloadFileName,
+          source: "browser_math_generator",
+          chirpSignalName: appConfig.chirpSignalName,
           chirpBufferSampleRate: chirpPlaybackBuffer ? chirpPlaybackBuffer.sampleRate : null,
           chirpBufferLength: chirpPlaybackBuffer ? chirpPlaybackBuffer.length : null,
           chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
@@ -2456,8 +2909,9 @@
         input.disabled = controlsLocked;
       }
       typingSentenceSelect.disabled = controlsLocked;
+      updateNextTypingSentenceButton();
       if (sensingActive) {
-        startSensingHint.textContent = "Recording in progress. Use Stop sensing only if you need to end this run early.";
+        startSensingHint.textContent = "";
       } else if (!fileReady) {
         startSensingHint.textContent = "Preparing the microphone and ultrasound chirp…";
       } else if (!selectedActivityId) {
@@ -2465,7 +2919,7 @@
       } else if (controlsLocked) {
         startSensingHint.textContent = sensingStopInProgress ? "Preparing session files…" : "Starting the selected recording…";
       } else {
-        startSensingHint.textContent = "Ready. Start sensing will begin with 5 seconds of sitting still.";
+        startSensingHint.textContent = "";
       }
       if (stopSensingBtn) {
         stopSensingBtn.disabled = true;
@@ -3987,7 +4441,7 @@
       recordingCompatibilityFallbackReason = "";
       startSensingBtn.disabled = true;
       stopSensingBtn.disabled = true;
-      collectionPrompt.dataset.phase = "ready";
+      collectionPrompt.dataset.phase = "starting";
       collectionPhaseStatus.textContent = "STARTING…";
       collectionPhaseCountdown.textContent = "Loading sensing components";
       collectionTotalCountdown.textContent = `${collectionTiming.durationSeconds} s recording will begin shortly`;
@@ -4017,7 +4471,7 @@
         const fallbackNotice = recordingCompatibilityFallbackReason
           ? ` Compatibility capture is active because Ultrasound (strict) could not start: ${recordingCompatibilityFallbackReason}`
           : "";
-        fileStatus.textContent = `Sensing started. Looping ${pendingFileName} while capturing and streaming mono float microphone PCM. Recording stops automatically after ${maximumSensingDurationSeconds} seconds.${fallbackNotice}`;
+        fileStatus.textContent = fallbackNotice.trim();
       } catch (error) {
         clearSensingDurationTimer();
         stopCollectionPromptTimer();
@@ -4078,7 +4532,7 @@
       clearFeatureVisualizations();
 
       pendingFileUrl = "generated:dual-triangle-chirp";
-      pendingFileName = appConfig.downloadFileName;
+      pendingFileName = appConfig.chirpSignalName;
       fileStatus.textContent = "Generated dual-band ultrasound chirp ready.";
       setSensingControls(true, false);
     }
@@ -4103,7 +4557,7 @@
         const profile = recordingProfiles.getProfile(activeRecordingProfileId);
         micStatus.textContent = microphoneQualification && microphoneQualification.warnings.length
           ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
-          : `Microphone is on with ${profile.label}.`;
+          : "";
         return true;
       }
 
@@ -4129,7 +4583,7 @@
           const profile = recordingProfiles.getProfile(activeRecordingProfileId);
           micStatus.textContent = microphoneQualification.warnings.length
             ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
-            : `Microphone is on with ${profile.label}.`;
+            : "";
           return true;
         }
       } catch (error) {

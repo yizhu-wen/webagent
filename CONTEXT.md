@@ -27,7 +27,7 @@ The current design goal is intentionally simple and functional, with minimal vis
 - `realtime_iq.py`: Streaming chirp alignment and live IQ feature extraction.
 - `ultrasonic_feature_maps.py`: Shared reference-format matched-filter maps,
   top-10 variable-bin selection, mean aggregation, and median normalization.
-- `tx_dual_triangle_chirp_19_205_215_23.wav`: Phase-continuous stereo sensing asset. The left channel sweeps 19.0-20.5 kHz and the right channel sweeps 21.5-23.0 kHz with a 12 ms period.
+- The browser mathematically generates a phase-continuous stereo sensing period at runtime. The left channel sweeps 19.0-20.5 kHz and the right channel sweeps 21.5-23.0 kHz with a 12 ms period.
 - `experiments/index.html`: Simple shopping dummy website.
 - `experiments/travel/index.html`: Simple travel and tourism dummy website.
 - `experiments/site.js`: Shared experiment-site behavior for sensing,
@@ -130,7 +130,7 @@ Python figures can be generated.
 - Defaults to the `Ultrasound (strict)` recording profile. The selectable
   `Compatibility` profile preserves operation on browsers that cannot verify
   disabled speech processing or start an AudioWorklet.
-- Loads `tx_dual_triangle_chirp_19_205_215_23.wav`, a 30-second phase-continuous stereo dual-band chirp asset with a 12 ms period.
+- Generates and loops a phase-continuous stereo dual-band chirp in the browser from the canonical math parameters, with a 12 ms period and no transmit-WAV request.
 - Start sensing decodes the chirp and schedules its loop 50 ms ahead on the same
   48 kHz Web Audio timeline used by microphone capture.
 - Start sensing streams microphone frames to the same-origin `/realtime`
