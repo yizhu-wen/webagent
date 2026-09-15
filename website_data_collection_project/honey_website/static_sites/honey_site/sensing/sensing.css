@@ -1,0 +1,58 @@
+#ultrasoundSensing {
+  margin: 18px auto 0;
+  padding: 16px 20px;
+  width: min(1180px, calc(100% - 32px));
+  border: 1px solid var(--accent, #45a29e);
+  border-radius: 12px;
+  background: var(--nav-bg, #1f2833);
+  color: var(--fg, #c5c6c7);
+  font-size: 14px;
+}
+#ultrasoundSensing .sensing-controls { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; }
+#ultrasoundSensing strong { color: var(--heading, white); font-size: 16px; }
+#ultrasoundSensing button, #ultrasoundSensing select {
+  border-radius: 6px; padding: 8px 12px; border: 1px solid #45a29e;
+  background: #101820; color: #e7fffc; font: inherit;
+}
+#ultrasoundSensing #startSensingBtn { background: #326d69; font-weight: 600; }
+#ultrasoundSensing #startSensingBtn[aria-pressed="true"] { background: #974231; border-color: #f49c8a; }
+#ultrasoundSensing button { cursor: pointer; }
+#ultrasoundSensing button:disabled { opacity: .5; cursor: default; }
+#ultrasoundSensing button:focus-visible, #ultrasoundSensing summary:focus-visible { outline: 2px solid #66fcf1; outline-offset: 3px; }
+#ultrasoundSensing p { margin: 7px 0; }
+#ultrasoundSensing p:empty { display: none; }
+#ultrasoundSensing summary { cursor: pointer; margin-top: 10px; color: #9ee0d8; }
+#ultrasoundSensing .recording-profile-control { margin-top: 16px; }
+#ultrasoundSensing .hidden, #ultrasoundSensing [hidden] { display: none !important; }
+
+/* Only the heading and the session buttons are on show. The status lines stay
+   in the DOM but off-screen: the code writes to them unconditionally and they
+   are role="status" live regions, so assistive technology still announces
+   microphone and export problems. */
+#ultrasoundSensing #startSensingHint,
+#ultrasoundSensing #micStatus,
+#ultrasoundSensing #fileStatus {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* The settings and chart disclosure is hidden rather than removed, because the
+   export renders the archived spectrogram and micro-Doppler PNGs from these
+   canvases. Their drawing surfaces come from width/height attributes, so they
+   are unaffected by not being displayed. */
+#ultrasoundSensing > details { display: none; }
+/* The panel is not shown on the home page. */
+#ultrasoundSensing[hidden] { display: none; }
+#ultrasoundSensing canvas { display: block; width: 100%; height: auto; background: white; border-radius: 6px; }
+#ultrasoundSensing .realtime-panel, #ultrasoundSensing .spectrogram-panel, #ultrasoundSensing .feature-visualization-panel { margin-top: 20px; }
+#ultrasoundSensing .feature-visualization-grid img { max-width: 100%; }
+#ultrasoundSensing .window-prediction-table-wrap { max-height: 300px; overflow: auto; }
+#ultrasoundSensing table { width: 100%; border-collapse: collapse; }
+#ultrasoundSensing td, #ultrasoundSensing th { padding: 6px; text-align: left; }
+@media (max-width: 600px) { #ultrasoundSensing { padding: 12px; } #ultrasoundSensing #filePrompt { display: flex; gap: 8px; flex-wrap: wrap; } }

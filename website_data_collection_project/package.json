@@ -1,0 +1,24 @@
+{
+  "name": "website-data-collection-project",
+  "version": "1.0.0",
+  "description": "Instrumented task website with ultrasound sensing, plus agent data collection.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yizhu-wen/webagent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/yizhu-wen/webagent/issues"
+  },
+  "homepage": "https://github.com/yizhu-wen/webagent#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

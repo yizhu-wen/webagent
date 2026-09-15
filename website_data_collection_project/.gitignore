@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+data_collection/app_paths.json
+data_collection/results/
+honey_website/honey_local.sqlite3
+*.stdout.log
+*.stderr.log
+har/
+log/
+temp/
+videos/
+
+# Browser test harness
+node_modules/
+playwright-report/
+test-results/
+
+# Collected ultrasound recordings and locally generated artifacts
+ultrasound/uploads/

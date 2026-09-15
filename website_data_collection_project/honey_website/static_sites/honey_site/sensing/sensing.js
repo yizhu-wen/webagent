@@ -1,0 +1,3357 @@
+import "./recording-profile.js";
+import "./micro-doppler-visualization.js";
+const sensingPanel = document.createElement("div");
+sensingPanel.innerHTML = '<section id="ultrasoundSensing" aria-label="Ultrasound sensing">\n  <div class="sensing-controls">\n    <strong>Ultrasound sensing</strong>\n    <div id="filePrompt">\n      <button id="startSensingBtn" type="button" disabled>Start sensing</button>\n      <button id="stopSensingBtn" type="button" hidden disabled>Stop</button>\n      <button id="downloadSensingSession" type="button" disabled>Download last session</button>\n    </div>\n    <span id="startSensingHint" role="status"></span>\n  </div>\n  <p id="micStatus" role="status">Microphone access is requested when sensing starts.</p>\n  <p id="fileStatus" role="status"></p>\n  <details>\n    <summary>Recording settings and signal charts</summary>\n    <div class="recording-profile-control">\n      <label for="recordingProfile">Recording profile</label>\n      <select id="recordingProfile" aria-describedby="recordingProfileDescription"></select>\n      <p id="recordingProfileDescription"></p>\n    </div>\n        <audio id="receivedAudio" class="audio-player hidden" loop></audio>\n        <div id="realtimePanel" class="realtime-panel">\n          <h4>Live Python IQ</h4>\n          <p id="realtimeStatus">Start the backend server to see live Stage-4 amplitude-change and phase-change lines.</p>\n          <div class="realtime-chart-wrap">\n            <canvas id="realtimeCanvas" class="realtime-canvas" width="820" height="620"></canvas>\n          </div>\n        </div>\n        <div id="dopplerPanel" class="realtime-panel">\n          <h4>Live Micro-Doppler</h4>\n          <p id="dopplerStatus">Start sensing to see live left/right micro-Doppler heatmaps.</p>\n          <div class="realtime-chart-wrap">\n            <canvas\n              id="dopplerCanvas"\n              class="realtime-canvas"\n              width="820"\n              height="520"\n              role="img"\n              aria-label="Live left and right ultrasonic micro-Doppler heatmaps"\n            ></canvas>\n          </div>\n        </div>\n        <div id="spectrogramPanel" class="spectrogram-panel hidden">\n          <h4>Recorded Spectrogram</h4>\n          <p id="spectrogramStatus">Generating spectrogram...</p>\n          <div class="spectrogram-scroll">\n            <canvas id="spectrogramCanvas" class="spectrogram-canvas" width="820" height="394"></canvas>\n          </div>\n        </div>\n        <div id="featureVisualizationPanel" class="feature-visualization-panel hidden">\n          <h4>Processed feature visualizations</h4>\n          <p id="featureVisualizationStatus">Calculated after sensing stops.</p>\n          <div id="featureVisualizationGrid" class="feature-visualization-grid"></div>\n          <div id="windowPredictionSection" class="window-prediction-section hidden">\n            <h5>Prediction for every signal window</h5>\n            <p id="windowPredictionStatus"></p>\n            <div class="window-prediction-table-wrap">\n              <table class="window-prediction-table">\n                <thead>\n                  <tr>\n                    <th scope="col">Window</th>\n                    <th scope="col">Start</th>\n                    <th scope="col">End</th>\n                    <th scope="col">Predicted label</th>\n                    <th scope="col">Confidence</th>\n                  </tr>\n                </thead>\n                <tbody id="windowPredictionBody"></tbody>\n              </table>\n            </div>\n          </div>\n        </div>\n\n  </details>\n</section>';
+document.querySelector("nav").after(sensingPanel.firstElementChild);
+    const ultrasoundSensingPanel = document.getElementById("ultrasoundSensing");
+    const micStatus = document.getElementById("micStatus");
+    const fileStatus = document.getElementById("fileStatus");
+    const filePrompt = document.getElementById("filePrompt");
+    const startSensingBtn = document.getElementById("startSensingBtn");
+    const stopSensingBtn = document.getElementById("stopSensingBtn");
+    const receivedAudio = document.getElementById("receivedAudio");
+    const spectrogramPanel = document.getElementById("spectrogramPanel");
+    const spectrogramStatus = document.getElementById("spectrogramStatus");
+    const spectrogramCanvas = document.getElementById("spectrogramCanvas");
+    const featureVisualizationPanel = document.getElementById("featureVisualizationPanel");
+    const featureVisualizationStatus = document.getElementById("featureVisualizationStatus");
+    const featureVisualizationGrid = document.getElementById("featureVisualizationGrid");
+    const windowPredictionSection = document.getElementById("windowPredictionSection");
+    const windowPredictionStatus = document.getElementById("windowPredictionStatus");
+    const windowPredictionBody = document.getElementById("windowPredictionBody");
+    const realtimeStatus = document.getElementById("realtimeStatus");
+    const realtimeCanvas = document.getElementById("realtimeCanvas");
+    const dopplerStatus = document.getElementById("dopplerStatus");
+    const dopplerCanvas = document.getElementById("dopplerCanvas");
+    const recordingProfileSelect = document.getElementById("recordingProfile");
+    const recordingProfileDescription = document.getElementById("recordingProfileDescription");
+    const startSensingHint = document.getElementById("startSensingHint");
+    const recordingProfiles = window.webAgentRecordingProfiles;
+    const targetWavSampleRate = 48000;
+    const maximumSensingDurationSeconds = 40;
+    const maximumSensingDurationMs = maximumSensingDurationSeconds * 1000;
+    let micStream = null;
+    let pendingFileUrl = "";
+    let pendingFileName = "";
+    let audioContext = null;
+    let chirpPlaybackBuffer = null;
+    let chirpSourceNode = null;
+    let recordingSourceNode = null;
+    let recordingProcessorNode = null;
+    let recordingWorkletNode = null;
+    let recordingMonitorNode = null;
+    let audioWorkletModuleReady = false;
+    let recordingBufferChunks = [];
+    let recordingChannelCount = 0;
+    let recordedFrameCount = 0;
+    let recordingSessionActive = false;
+    let playbackStartInProgress = false;
+    let sensingSessionActive = false;
+    let sensingStopInProgress = false;
+    let sensingDurationTimerId = null;
+    let sensingDurationLimitReached = false;
+    let activeCollectionSession = null;
+    let sessionProgressTimer = null;
+    let preparedSessionFiles = [];
+    let preparedSessionArchiveName = "";
+    let realtimeSocket = null;
+    let realtimeStreamingActive = false;
+    let realtimeSessionStartEpoch = null;
+    let realtimeFrameSequence = 0;
+    let realtimeFeaturePoints = [];
+    let realtimeWaveformPoints = [];
+    let realtimeEventMarkers = [];
+    let realtimeDrawPending = false;
+    let realtimeLastStatusMessage = "Start the backend server to see live Stage-4 amplitude-change and phase-change lines.";
+    let realtimeFramesSent = 0;
+    let realtimeFramesReceived = 0;
+    let realtimeFeaturesReceived = 0;
+    let realtimeDopplerColumnsReceived = 0;
+    let realtimeFramesDroppedBeforeSend = 0;
+    let activeRecordingProfileId = recordingProfiles.normalizeProfileId(getLocalStorageItem("webagentRecordingProfile"));
+    let microphoneQualification = null;
+    let audioContextQualification = null;
+    let recordingCaptureMethod = "not-started";
+    let recordingCaptureFrameSize = 0;
+    let recordingChunksCaptured = 0;
+    let recordingClippedSamples = 0;
+    let recordingPeakAmplitude = 0;
+    let recordingWorkletFrameGaps = 0;
+    let recordingLastWorkletSequence = 0;
+    let microphoneRequestDetails = null;
+    let completedCaptureDiagnostics = null;
+    let lastRecordingStartError = null;
+    let recordingCompatibilityFallbackReason = "";
+    let chirpScheduledStartTime = null;
+    let chirpScheduledStartFrame = null;
+
+    function getLocalStorageItem(key) {
+      try {
+        return window.localStorage.getItem(key) || "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function getLocalStorageNumber(key, fallbackValue) {
+      const rawValue = getLocalStorageItem(key).trim();
+      if (!rawValue) {
+        return fallbackValue;
+      }
+      const parsedValue = Number(rawValue);
+      return Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+    }
+
+    function setLocalStorageItem(key, value) {
+      try {
+        window.localStorage.setItem(key, value);
+      } catch (error) {
+        // Storage may be unavailable in private or restricted browser contexts.
+      }
+    }
+
+    function updateRecordingProfileControl() {
+      const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+      recordingProfileSelect.value = profile.id;
+      recordingProfileDescription.textContent = profile.description;
+    }
+
+    function initializeRecordingProfileControl() {
+      recordingProfileSelect.replaceChildren();
+      for (const profile of recordingProfiles.list()) {
+        const option = document.createElement("option");
+        option.value = profile.id;
+        option.textContent = profile.label;
+        recordingProfileSelect.appendChild(option);
+      }
+      updateRecordingProfileControl();
+
+      recordingProfileSelect.addEventListener("change", async () => {
+        if (sensingSessionActive || recordingSessionActive || playbackStartInProgress) {
+          updateRecordingProfileControl();
+          return;
+        }
+
+        activeRecordingProfileId = recordingProfiles.normalizeProfileId(recordingProfileSelect.value);
+        setLocalStorageItem("webagentRecordingProfile", activeRecordingProfileId);
+        updateRecordingProfileControl();
+        microphoneQualification = null;
+        microphoneRequestDetails = null;
+        stopMicrophoneStream();
+
+        if (audioContext) {
+          stopRecordingNodes();
+          stopChirpPlayback();
+          try {
+            await audioContext.close();
+          } catch (error) {
+            // The context may already be closed.
+          }
+          audioContext = null;
+          audioContextQualification = null;
+          audioWorkletModuleReady = false;
+          chirpPlaybackBuffer = null;
+        }
+
+        micStatus.textContent = "Applying recording profile...";
+        setSensingControls(false, false);
+        prepareGeneratedChirp();
+      });
+    }
+
+    function getRealtimeWebSocketUrl() {
+      const overrideUrl = getLocalStorageItem("webagentRealtimeWebSocketUrl").trim();
+      if (overrideUrl) {
+        return overrideUrl;
+      }
+      if (!window.location.host) {
+        return "ws://127.0.0.1:8000/realtime";
+      }
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${window.location.host}/realtime`;
+    }
+
+    const chirpConfig = Object.freeze({
+      sampleRate: targetWavSampleRate,
+      durationSeconds: 0.012,
+      samplesPerPeriod: 576,
+      amplitude: 0.12,
+      left: Object.freeze({ startHz: 19000, endHz: 20500 }),
+      right: Object.freeze({ startHz: 21500, endHz: 23000 })
+    });
+    const appConfig = {
+      chirpSignalName: "mathematically generated 12 ms dual-band chirp",
+      chirpPeriodSeconds: chirpConfig.durationSeconds,
+      uploadApiUrl: "/api/upload-recording",
+      analysisApiUrl: "/api/analyze-recording",
+      realtimeWebSocketUrl: getRealtimeWebSocketUrl(),
+      audioEventOffsetMs: getLocalStorageNumber("webagentAudioEventOffsetMs", 80)
+    };
+    function triangleInstantaneousFrequency(
+      startHz,
+      endHz,
+      sampleCount = chirpConfig.samplesPerPeriod
+    ) {
+      const half = Math.floor(sampleCount / 2);
+      const downCount = sampleCount - half;
+      const frequencies = new Float64Array(sampleCount);
+
+      for (let index = 0; index < half; index += 1) {
+        frequencies[index] = startHz + ((endHz - startHz) * index / half);
+      }
+      for (let index = 0; index < downCount; index += 1) {
+        frequencies[half + index] = endHz + ((startHz - endHz) * index / downCount);
+      }
+      return frequencies;
+    }
+
+    function phaseContinuousChirp(startHz, endHz, totalSamples, amplitude = 1) {
+      const onePeriod = triangleInstantaneousFrequency(startHz, endHz);
+      const samples = new Float32Array(totalSamples);
+      let phase = 0;
+
+      for (let index = 0; index < totalSamples; index += 1) {
+        const instantaneousFrequency = onePeriod[index % onePeriod.length];
+        phase += 2 * Math.PI * instantaneousFrequency / chirpConfig.sampleRate;
+        samples[index] = amplitude * Math.sin(phase);
+      }
+      return samples;
+    }
+
+    function buildTransmitStereoPeriod() {
+      const left = phaseContinuousChirp(
+        chirpConfig.left.startHz,
+        chirpConfig.left.endHz,
+        chirpConfig.samplesPerPeriod,
+        chirpConfig.amplitude
+      );
+      const right = phaseContinuousChirp(
+        chirpConfig.right.startHz,
+        chirpConfig.right.endHz,
+        chirpConfig.samplesPerPeriod,
+        chirpConfig.amplitude
+      );
+      return Object.freeze({
+        sampleRate: chirpConfig.sampleRate,
+        frameCount: chirpConfig.samplesPerPeriod,
+        channels: Object.freeze([left, right])
+      });
+    }
+
+    const generatedChirpPeriod = buildTransmitStereoPeriod();
+
+    const realtimeConfig = {
+      frameSize: 2048,
+      timelineDurationSeconds: maximumSensingDurationSeconds,
+      timelineTickSeconds: 5,
+      stillRegions: [],
+      maxPoints: 2400,
+      maxWaveformPoints: 10000,
+      maxMarkers: 220,
+      waveformPlotHz: 240,
+      maxSocketBufferedBytes: 512 * 1024,
+      audioFrameHeaderBytes: 20
+    };
+    const dopplerVisualization = window.WebAgentMicroDoppler.create({
+      canvas: dopplerCanvas,
+      statusNode: dopplerStatus,
+      timelineDurationSeconds: realtimeConfig.timelineDurationSeconds,
+      timelineTickSeconds: realtimeConfig.timelineTickSeconds,
+      stillRegions: realtimeConfig.stillRegions,
+      maximumPoints: 1000,
+      getMarkers: () => realtimeEventMarkers,
+      initialStatus: "Start sensing to see live left/right micro-Doppler heatmaps."
+    });
+
+    const trackingConfig = {
+      maxCompatibilityEvents: 10000
+    };
+    const trackedEventNames = new Set(["keydown", "pointer_move", "scroll", "click"]);
+    const trackingSessionId = createTrackingId();
+    let trackingStartedAt = null;
+    let trackingStartedEpochSeconds = null;
+    let trackingStartedPerformanceMs = null;
+    const eventLog = [];
+    const keyboardEvents = [];
+    const cursorEvents = [];
+    const keyDownTimes = new Map();
+    let lastKeyDownTime = null;
+    let interactionTrackingEnabled = false;
+    function createTrackingId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `event_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+
+    function getElementDescriptor(element) {
+      if (!(element instanceof Element)) {
+        return null;
+      }
+
+      const descriptor = {
+        tag: element.tagName.toLowerCase()
+      };
+
+      if (element.id) {
+        descriptor.id = element.id;
+      }
+      if (element.classList.length) {
+        descriptor.classes = Array.from(element.classList).slice(0, 5);
+      }
+      if (element.getAttribute("name")) {
+        descriptor.name = element.getAttribute("name");
+      }
+      if (element.getAttribute("type")) {
+        descriptor.type = element.getAttribute("type");
+      }
+      if (element.getAttribute("role")) {
+        descriptor.role = element.getAttribute("role");
+      }
+      if (element.getAttribute("aria-label")) {
+        descriptor.ariaLabel = element.getAttribute("aria-label");
+      }
+      if (element.matches("button, a, input[type='button'], input[type='submit']")) {
+        const visibleLabel = (element.innerText || element.value || "").trim();
+        if (visibleLabel) {
+          descriptor.label = visibleLabel.slice(0, 80);
+        }
+      }
+
+      return descriptor;
+    }
+
+    function getTrackedKeyName(event) {
+      const key = typeof event.key === "string" && event.key.length
+        ? event.key
+        : "Unidentified";
+      if (key.length === 1 && key !== " ") {
+        return key;
+      }
+
+      const codeAliases = {
+        AltLeft: "Key.alt",
+        AltRight: "Key.alt_r",
+        ControlLeft: "Key.ctrl",
+        ControlRight: "Key.ctrl_r",
+        MetaLeft: "Key.cmd",
+        MetaRight: "Key.cmd_r",
+        ShiftLeft: "Key.shift",
+        ShiftRight: "Key.shift_r"
+      };
+      if (codeAliases[event.code]) {
+        return codeAliases[event.code];
+      }
+
+      const keyAliases = {
+        " ": "Key.space",
+        ArrowDown: "Key.down",
+        ArrowLeft: "Key.left",
+        ArrowRight: "Key.right",
+        ArrowUp: "Key.up",
+        Backspace: "Key.backspace",
+        CapsLock: "Key.caps_lock",
+        Delete: "Key.delete",
+        End: "Key.end",
+        Enter: "Key.enter",
+        Escape: "Key.esc",
+        Home: "Key.home",
+        Insert: "Key.insert",
+        PageDown: "Key.page_down",
+        PageUp: "Key.page_up",
+        Tab: "Key.tab"
+      };
+      if (keyAliases[key]) {
+        return keyAliases[key];
+      }
+      return `Key.${key.toLowerCase().replace(/\s+/g, "_")}`;
+    }
+
+    function getRelativeTrackingTime(event) {
+      if (!Number.isFinite(trackingStartedPerformanceMs)) {
+        return 0;
+      }
+      const eventTime = event && Number.isFinite(event.timeStamp)
+        ? event.timeStamp
+        : performance.now();
+      return Math.max(0, (eventTime - trackingStartedPerformanceMs) / 1000);
+    }
+
+    function getPythonButtonName(button) {
+      return {
+        0: "Button.left",
+        1: "Button.middle",
+        2: "Button.right",
+        3: "Button.x1",
+        4: "Button.x2"
+      }[button] || `Button.${button}`;
+    }
+
+    function getScreenPoint(event) {
+      return {
+        x: Number.isFinite(event.screenX) ? event.screenX : event.clientX,
+        y: Number.isFinite(event.screenY) ? event.screenY : event.clientY
+      };
+    }
+
+    function sanitizePipeValue(value) {
+      return String(value ?? "")
+        .replace(/\s+/g, " ")
+        .replace(/\|/g, "/")
+        .trim()
+        .slice(0, 500);
+    }
+
+    function describeTargetForPipe(target) {
+      if (!target) {
+        return "";
+      }
+
+      const parts = [target.tag || "element"];
+      if (target.id) {
+        parts.push(`#${target.id}`);
+      }
+      if (target.name) {
+        parts.push(`name=${target.name}`);
+      }
+      if (target.type) {
+        parts.push(`type=${target.type}`);
+      }
+      if (target.label) {
+        parts.push(`label=${target.label}`);
+      }
+      return sanitizePipeValue(parts.join(" "));
+    }
+
+    function getEpochSeconds(event) {
+      if (Number.isFinite(event.epochSeconds)) {
+        return event.epochSeconds;
+      }
+
+      const parsed = Date.parse(event.timestamp || "");
+      return Number.isFinite(parsed) ? parsed / 1000 : Date.now() / 1000;
+    }
+
+    function getOsEventTag(event) {
+      return event.name.toUpperCase();
+    }
+
+    function getOsEventValue(event) {
+      const props = event.properties || {};
+      return sanitizePipeValue([
+        props.key ? `key=${props.key}` : "",
+        props.code ? `code=${props.code}` : "",
+        Number.isFinite(props.location) ? `location=${props.location}` : "",
+        props.repeat ? "repeat=true" : "",
+        props.altKey ? "altKey=true" : "",
+        props.ctrlKey ? "ctrlKey=true" : "",
+        props.metaKey ? "metaKey=true" : "",
+        props.shiftKey ? "shiftKey=true" : "",
+        props.pointerType ? `pointerType=${props.pointerType}` : "",
+        Number.isFinite(props.button) ? `button=${props.button}` : "",
+        Number.isFinite(props.buttons) ? `buttons=${props.buttons}` : "",
+        typeof props.pressed === "boolean" ? `pressed=${props.pressed}` : "",
+        Number.isFinite(props.pressure) ? `pressure=${props.pressure.toFixed(3)}` : "",
+        Number.isFinite(props.x) ? `x=${props.x}` : "",
+        Number.isFinite(props.y) ? `y=${props.y}` : "",
+        Number.isFinite(props.pageX) ? `pageX=${props.pageX}` : "",
+        Number.isFinite(props.pageY) ? `pageY=${props.pageY}` : "",
+        Number.isFinite(props.dx) ? `dx=${props.dx}` : "",
+        Number.isFinite(props.dy) ? `dy=${props.dy}` : "",
+        Number.isFinite(props.movementX) ? `movementX=${props.movementX.toFixed(1)}` : "",
+        Number.isFinite(props.movementY) ? `movementY=${props.movementY.toFixed(1)}` : "",
+        Number.isFinite(props.deltaX) ? `deltaX=${props.deltaX.toFixed(1)}` : "",
+        Number.isFinite(props.deltaY) ? `deltaY=${props.deltaY.toFixed(1)}` : "",
+        Number.isFinite(props.scrollX) ? `scrollX=${props.scrollX.toFixed(1)}` : "",
+        Number.isFinite(props.scrollY) ? `scrollY=${props.scrollY.toFixed(1)}` : "",
+        describeTargetForPipe(props.target)
+      ].filter(Boolean).join(" "));
+    }
+
+    function buildOsLevelEventLog(events, downloadedEpochSeconds, audioStartEpochSeconds = null) {
+      const startEpoch = Number.isFinite(trackingStartedEpochSeconds)
+        ? trackingStartedEpochSeconds
+        : getEpochSeconds(events[0] || {});
+      const audioStartEpoch = Number.isFinite(audioStartEpochSeconds)
+        ? audioStartEpochSeconds
+        : startEpoch;
+
+      const lines = [
+        `# start_epoch | ${startEpoch.toFixed(6)}`,
+        `# audio_start_epoch | ${audioStartEpoch.toFixed(6)}`,
+        `# audio_event_offset_ms | ${appConfig.audioEventOffsetMs}`,
+        `# downloaded_epoch | ${downloadedEpochSeconds.toFixed(6)}`,
+        `# session_id | ${trackingSessionId}`,
+        "# schema | webagent_os_events_v1",
+        "# format | EVENT | VALUE | EPOCH_SECONDS",
+        "# scope | browser_page_events_not_global_os_hooks"
+      ];
+
+      for (const event of events) {
+        lines.push(`${getOsEventTag(event)} | ${getOsEventValue(event)} | ${getEpochSeconds(event).toFixed(6)}`);
+      }
+
+      return `${lines.join("\n")}\n`;
+    }
+
+    function trackEvent(name, properties = {}) {
+      if (!interactionTrackingEnabled || !trackedEventNames.has(name)) {
+        return;
+      }
+
+      if (eventLog.length >= trackingConfig.maxCompatibilityEvents) {
+        eventLog.shift();
+      }
+
+      const eventDate = new Date();
+      const trackedEvent = {
+        id: createTrackingId(),
+        sessionId: trackingSessionId,
+        name,
+        timestamp: eventDate.toISOString(),
+        epochSeconds: eventDate.getTime() / 1000,
+        page: {
+          path: window.location.pathname,
+          title: document.title,
+          visibilityState: document.visibilityState
+        },
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight
+        },
+        properties
+      };
+      eventLog.push(trackedEvent);
+      recordRealtimeEventMarker(trackedEvent);
+    }
+
+    function trackPointerMove(event) {
+      if (!interactionTrackingEnabled) {
+        return;
+      }
+      const point = getScreenPoint(event);
+      const t = getRelativeTrackingTime(event);
+      cursorEvents.push({ type: "move", x: point.x, y: point.y, t });
+      trackEvent("pointer_move", {
+        pointerType: event.pointerType || "mouse",
+        x: point.x,
+        y: point.y,
+        target: getElementDescriptor(event.target)
+      });
+    }
+
+    function snapshotCollectionSession() {
+      if (activeCollectionSession) return null;
+      activeCollectionSession = {
+        sessionId: createTrackingId(),
+        websiteVersion: location.pathname.split("/")[1],
+        startPath: location.pathname,
+        startedAt: null,
+        routes: []
+      };
+      return activeCollectionSession;
+    }
+
+    function recordTaskRoute() {
+      if (!sensingSessionActive || !activeCollectionSession) return;
+      activeCollectionSession.routes.push({
+        path: location.pathname,
+        t: Math.max(0, (performance.now() - trackingStartedPerformanceMs) / 1000)
+      });
+    }
+    window.addEventListener("honey:routechange", recordTaskRoute);
+
+    // The panel belongs on the task pages, not on the landing page. The router
+    // dispatches honey:routechange after pushState, so location is already the
+    // new route by the time this runs.
+    const versionPrefix = "/" + (location.pathname.split("/")[1] || "");
+
+    function isHomeRoute() {
+      const route = location.pathname.replace(versionPrefix, "") || "/";
+      return route === "/" || route === "/index.html";
+    }
+
+    function updateSensingPanelVisibility() {
+      // A running session stays reachable wherever the task navigates, so that
+      // recording can always be stopped and the archive collected.
+      const busy = sensingSessionActive || sensingStopInProgress || Boolean(activeCollectionSession);
+      ultrasoundSensingPanel.hidden = isHomeRoute() && !busy;
+    }
+    window.addEventListener("honey:routechange", updateSensingPanelVisibility);
+
+    function startCollectionPromptTimer() {
+      activeCollectionSession.startedAt = new Date().toISOString();
+      recordTaskRoute();
+      const update = () => {
+        const elapsed = Math.min(maximumSensingDurationSeconds,
+          Math.max(0, (performance.now() - trackingStartedPerformanceMs) / 1000));
+        startSensingHint.textContent = `Recording · ${elapsed.toFixed(0)} / ${maximumSensingDurationSeconds} seconds`;
+      };
+      update();
+      sessionProgressTimer = setInterval(update, 250);
+    }
+
+    function stopCollectionPromptTimer() {
+      clearInterval(sessionProgressTimer);
+      sessionProgressTimer = null;
+    }
+
+    function releaseCollectionSession() {
+      stopCollectionPromptTimer();
+      activeCollectionSession = null;
+    }
+
+    function setInteractionTrackingEnabled(enabled) {
+      if (interactionTrackingEnabled === enabled) {
+        return;
+      }
+
+      interactionTrackingEnabled = enabled;
+      if (enabled) {
+        const startDate = new Date();
+        trackingStartedAt = trackingStartedAt || startDate.toISOString();
+        trackingStartedEpochSeconds = trackingStartedEpochSeconds ?? startDate.getTime() / 1000;
+        trackingStartedPerformanceMs = trackingStartedPerformanceMs ?? performance.now();
+      }
+    }
+
+    function beginInteractionTrackingSession() {
+      eventLog.length = 0;
+      keyboardEvents.length = 0;
+      cursorEvents.length = 0;
+      keyDownTimes.clear();
+      lastKeyDownTime = null;
+      const startDate = new Date();
+      trackingStartedAt = startDate.toISOString();
+      trackingStartedEpochSeconds = startDate.getTime() / 1000;
+      trackingStartedPerformanceMs = performance.now();
+      setInteractionTrackingEnabled(true);
+    }
+
+    function prepareEventLog(
+      timestampSlug = buildRecordingTimestamp(),
+      audioStartEpochSeconds = null
+    ) {
+      const downloadedAt = new Date();
+      const payload = {
+        keyboardEvents: keyboardEvents.slice(),
+        cursorEvents: cursorEvents.slice()
+      };
+      const downloadedEpochSeconds = downloadedAt.getTime() / 1000;
+      const osEventLog = buildOsLevelEventLog(
+        eventLog.slice(),
+        downloadedEpochSeconds,
+        audioStartEpochSeconds
+      );
+      return {
+        payload,
+        keyboardEvents: payload.keyboardEvents,
+        cursorEvents: payload.cursorEvents,
+        osEventLog,
+        timestampSlug,
+        downloadedEpochSeconds,
+        files: [
+          {
+            name: "keyboard_events.json",
+            blob: new Blob([JSON.stringify(payload.keyboardEvents, null, 2)], { type: "application/json" })
+          },
+          {
+            name: "cursor_events.json",
+            blob: new Blob([JSON.stringify(payload.cursorEvents, null, 2)], { type: "application/json" })
+          }
+        ]
+      };
+    }
+
+    function downloadEventLog(timestampSlug = buildRecordingTimestamp()) {
+      const artifacts = prepareEventLog(timestampSlug);
+      downloadFileArtifacts(artifacts.files);
+      return artifacts;
+    }
+
+    function setupInteractionTracking() {
+      document.addEventListener("pointermove", (event) => {
+        trackPointerMove(event);
+      }, { passive: true, capture: true });
+
+      const trackPointerButton = (event, pressed) => {
+        if (!interactionTrackingEnabled) {
+          return;
+        }
+        const point = getScreenPoint(event);
+        const t = getRelativeTrackingTime(event);
+        const button = getPythonButtonName(event.button);
+        cursorEvents.push({
+          type: "click",
+          x: point.x,
+          y: point.y,
+          button,
+          pressed,
+          t
+        });
+        trackEvent("click", {
+          x: point.x,
+          y: point.y,
+          button,
+          pressed,
+          pointerType: event.pointerType || "mouse",
+          target: getElementDescriptor(event.target)
+        });
+      };
+      document.addEventListener("pointerdown", (event) => {
+        trackPointerButton(event, true);
+      }, true);
+      document.addEventListener("pointerup", (event) => {
+        trackPointerButton(event, false);
+      }, true);
+
+      document.addEventListener("wheel", (event) => {
+        if (!interactionTrackingEnabled) {
+          return;
+        }
+        const point = getScreenPoint(event);
+        const t = getRelativeTrackingTime(event);
+        const dx = -event.deltaX;
+        const dy = -event.deltaY;
+        cursorEvents.push({ type: "scroll", x: point.x, y: point.y, dx, dy, t });
+        trackEvent("scroll", {
+          x: point.x,
+          y: point.y,
+          dx,
+          dy,
+          target: getElementDescriptor(event.target)
+        });
+      }, { passive: true, capture: true });
+
+      document.addEventListener("keydown", (event) => {
+        if (!interactionTrackingEnabled) {
+          return;
+        }
+        const key = getTrackedKeyName(event);
+        const identity = event.code || key;
+        if (event.repeat || keyDownTimes.has(identity)) {
+          return;
+        }
+        const t = getRelativeTrackingTime(event);
+        keyboardEvents.push({
+          event: "down",
+          key,
+          t,
+          flight_sec: lastKeyDownTime === null ? null : t - lastKeyDownTime
+        });
+        keyDownTimes.set(identity, t);
+        lastKeyDownTime = t;
+        trackEvent("keydown", {
+          key,
+          code: event.code || "",
+          target: getElementDescriptor(event.target)
+        });
+      }, true);
+
+      document.addEventListener("keyup", (event) => {
+        if (!interactionTrackingEnabled) {
+          return;
+        }
+        const key = getTrackedKeyName(event);
+        const identity = event.code || key;
+        const t = getRelativeTrackingTime(event);
+        const downTime = keyDownTimes.has(identity) ? keyDownTimes.get(identity) : null;
+        keyDownTimes.delete(identity);
+        keyboardEvents.push({
+          event: "up",
+          key,
+          t,
+          dwell_sec: downTime === null ? null : t - downTime
+        });
+      }, true);
+    }
+
+    window.interactionTracker = {
+      trackEvent,
+      prepareEventLog,
+      downloadEventLog,
+      getEvents: () => eventLog.slice(),
+      getKeyboardEvents: () => keyboardEvents.slice(),
+      getCursorEvents: () => cursorEvents.slice(),
+      getSessionId: () => trackingSessionId,
+      createTrackingId,
+      isEnabled: () => interactionTrackingEnabled,
+      beginSession: beginInteractionTrackingSession,
+      setEnabled: setInteractionTrackingEnabled
+    };
+
+    window.webAgentSensing = {
+      start: startSensing,
+      stop: stopSensing,
+      download: downloadPreparedSessionFiles,
+      isActive: () => sensingSessionActive,
+      getSession: () => activeCollectionSession ? JSON.parse(JSON.stringify(activeCollectionSession)) : null,
+      isPlaybackActive: () => Boolean(chirpSourceNode),
+      getChirpPlaybackInfo: () => chirpPlaybackBuffer ? ({
+        channelCount: chirpPlaybackBuffer.numberOfChannels,
+        frameCount: chirpPlaybackBuffer.length,
+        sampleRate: chirpPlaybackBuffer.sampleRate,
+        durationSeconds: chirpPlaybackBuffer.duration
+      }) : null,
+      getChirpGenerationParameters: () => ({
+        sampleRate: chirpConfig.sampleRate,
+        durationSeconds: chirpConfig.durationSeconds,
+        samplesPerPeriod: chirpConfig.samplesPerPeriod,
+        amplitude: chirpConfig.amplitude,
+        left: { ...chirpConfig.left },
+        right: { ...chirpConfig.right }
+      }),
+      getGeneratedChirpPeriod: () => generatedChirpPeriod.channels.map(
+        (channel) => Array.from(channel)
+      ),
+      getRecordingChannelCount: () => recordingChannelCount,
+      getRecordedFrameCount: () => recordedFrameCount,
+      getTargetSampleRate: () => targetWavSampleRate,
+      getMaximumSensingDurationSeconds: () => maximumSensingDurationSeconds,
+      isDurationLimitTimerActive: () => sensingDurationTimerId !== null,
+      getRecordingProfile: () => recordingProfiles.getProfile(activeRecordingProfileId),
+      getMicrophoneQualification: () => microphoneQualification,
+      getCaptureDiagnostics: () => completedCaptureDiagnostics || getCaptureDiagnostics(),
+      getPreparedSessionFileNames: () => preparedSessionFiles.map((file) => file.name),
+      getPreparedSessionArchiveName: () => preparedSessionArchiveName,
+      getRealtimePointCount: () => realtimeFeaturePoints.length,
+      isRealtimeConnected: () => Boolean(realtimeSocket),
+      renderGeneratedFigures,
+      renderWindowPredictions,
+      clearFeatureVisualizations,
+      getRealtimeDebugState: () => ({
+        connected: Boolean(realtimeSocket),
+        streaming: realtimeStreamingActive,
+        framesSent: realtimeFramesSent,
+        framesReceived: realtimeFramesReceived,
+        featuresReceived: realtimeFeaturesReceived,
+        dopplerColumnsReceived: realtimeDopplerColumnsReceived,
+        framesDroppedBeforeSend: realtimeFramesDroppedBeforeSend,
+        recordedFrameCount,
+        points: realtimeFeaturePoints.length,
+        waveformPoints: realtimeWaveformPoints.length,
+        status: realtimeLastStatusMessage,
+        realtimeWebSocketUrl: appConfig.realtimeWebSocketUrl || null,
+        audioEventOffsetMs: appConfig.audioEventOffsetMs,
+        latestFeature: realtimeFeaturePoints.length ? realtimeFeaturePoints[realtimeFeaturePoints.length - 1] : null,
+        doppler: dopplerVisualization.getDebugState(),
+        latestWaveform: realtimeWaveformPoints.length ? realtimeWaveformPoints[realtimeWaveformPoints.length - 1] : null,
+        markers: realtimeEventMarkers.slice(-8)
+      })
+    };
+
+    function getMicrophoneConstraints() {
+      return recordingProfiles.createMicrophoneRequest(
+        activeRecordingProfileId,
+        targetWavSampleRate
+      ).constraints;
+    }
+
+    function getPrimaryAudioTrack() {
+      if (!micStream) {
+        return null;
+      }
+      return micStream.getAudioTracks().find((track) => track.readyState === "live") || null;
+    }
+
+    function tryCallTrackMethod(track, methodName) {
+      if (!track || typeof track[methodName] !== "function") {
+        return null;
+      }
+
+      try {
+        return track[methodName]();
+      } catch (error) {
+        return { error: error.message };
+      }
+    }
+
+    function estimateChirpPeriod(audioBuffer) {
+      const sampleRate = audioBuffer.sampleRate;
+      const expectedPeriodSamples = Math.round(appConfig.chirpPeriodSeconds * sampleRate);
+      const samples = toMonoChannel(audioBuffer);
+      const analysisLength = Math.min(samples.length, Math.round(sampleRate * 1.5));
+
+      if (analysisLength < expectedPeriodSamples * 4) {
+        return {
+          status: "insufficient_audio",
+          expectedPeriodSamples,
+          expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
+          sampleRate
+        };
+      }
+
+      let energy = 0;
+      for (let index = 0; index < analysisLength; index += 1) {
+        energy += samples[index] * samples[index];
+      }
+      const rms = Math.sqrt(energy / analysisLength);
+      if (rms < 1e-6) {
+        return {
+          status: "too_quiet",
+          expectedPeriodSamples,
+          expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
+          sampleRate,
+          rms
+        };
+      }
+
+      const searchRadius = Math.max(2, Math.round(expectedPeriodSamples * 0.02));
+      let bestLag = expectedPeriodSamples;
+      let bestScore = -Infinity;
+
+      for (let lag = expectedPeriodSamples - searchRadius; lag <= expectedPeriodSamples + searchRadius; lag += 1) {
+        let cross = 0;
+        let energyA = 0;
+        let energyB = 0;
+        const compareLength = analysisLength - lag;
+
+        for (let index = 0; index < compareLength; index += 1) {
+          const a = samples[index];
+          const b = samples[index + lag];
+          cross += a * b;
+          energyA += a * a;
+          energyB += b * b;
+        }
+
+        const score = cross / Math.sqrt((energyA * energyB) + 1e-24);
+        if (score > bestScore) {
+          bestScore = score;
+          bestLag = lag;
+        }
+      }
+
+      return {
+        status: bestScore > 0.05 ? "estimated" : "low_confidence",
+        expectedPeriodSamples,
+        estimatedPeriodSamples: bestLag,
+        deviationSamples: bestLag - expectedPeriodSamples,
+        estimatedPeriodMs: (bestLag / sampleRate) * 1000,
+        expectedPeriodMs: appConfig.chirpPeriodSeconds * 1000,
+        normalizedCorrelation: bestScore,
+        analyzedSamples: analysisLength,
+        sampleRate,
+        rms
+      };
+    }
+
+    function buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate) {
+      const track = getPrimaryAudioTrack();
+      const context = getRecordingContext();
+      const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+      return {
+        schemaVersion: 2,
+        createdAt: new Date().toISOString(),
+        browser: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          crossOriginIsolated: Boolean(window.crossOriginIsolated)
+        },
+        recordingProfile: {
+          id: profile.id,
+          label: profile.label,
+          requireConfirmedDisabledProcessing: profile.requireConfirmedDisabledProcessing,
+          requireAudioWorklet: profile.requireAudioWorklet,
+          requireTargetContextSampleRate: profile.requireTargetContextSampleRate
+        },
+        requestedMicrophoneConstraints: microphoneRequestDetails
+          ? microphoneRequestDetails.constraints.audio
+          : getMicrophoneConstraints().audio,
+        microphoneTrack: {
+          present: Boolean(track),
+          label: track ? track.label : "",
+          readyState: track ? track.readyState : "",
+          enabled: track ? track.enabled : null,
+          muted: track ? track.muted : null,
+          settings: tryCallTrackMethod(track, "getSettings"),
+          capabilities: tryCallTrackMethod(track, "getCapabilities"),
+          constraints: tryCallTrackMethod(track, "getConstraints")
+        },
+        microphoneQualification,
+        audioContext: {
+          sampleRate: context.sampleRate,
+          state: context.state,
+          baseLatency: Number.isFinite(context.baseLatency) ? context.baseLatency : null,
+          outputLatency: Number.isFinite(context.outputLatency) ? context.outputLatency : null,
+          qualification: audioContextQualification
+        },
+        playback: {
+          engine: "Web Audio AudioBufferSourceNode",
+          source: "browser_math_generator",
+          chirpSignalName: appConfig.chirpSignalName,
+          chirpBufferSampleRate: chirpPlaybackBuffer ? chirpPlaybackBuffer.sampleRate : null,
+          chirpBufferLength: chirpPlaybackBuffer ? chirpPlaybackBuffer.length : null,
+          chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
+          scheduledStartTime: chirpScheduledStartTime,
+          scheduledStartFrame: chirpScheduledStartFrame,
+          loop: true
+        },
+        recordingExport: {
+          container: "WAV",
+          encoding: "IEEE_FLOAT",
+          channels: 1,
+          bitsPerSample: 32,
+          sampleRate: recordedAudioBuffer.sampleRate,
+          frameCount: recordedAudioBuffer.length,
+          duration: recordedAudioBuffer.duration
+        },
+        recordingCapture: completedCaptureDiagnostics || getCaptureDiagnostics(),
+        signalCheck: {
+          method: "normalized_autocorrelation_near_12ms_chirp_period",
+          chirpPeriodEstimate
+        },
+        limitations: [
+          "Browser APIs report the stream visible to JavaScript, not every conversion inside the OS mixer or hardware driver.",
+          "If device hardware runs at a different native rate, the browser or OS may resample before JavaScript receives audio.",
+          "The chirp-period signal check is empirical evidence from the exported recording, not direct access to hardware clocks."
+        ]
+      };
+    }
+
+    function getBrowserOsMetadata() {
+      const userAgent = navigator.userAgent || "";
+      let system = "Unknown";
+      if (/Windows/i.test(userAgent)) {
+        system = "Windows";
+      } else if (/Macintosh|Mac OS X/i.test(userAgent)) {
+        system = "Darwin";
+      } else if (/Android/i.test(userAgent)) {
+        system = "Android";
+      } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
+        system = "iOS";
+      } else if (/Linux/i.test(userAgent)) {
+        system = "Linux";
+      }
+
+      return {
+        system,
+        release: null,
+        machine: null,
+        node: null
+      };
+    }
+
+    function buildMetadataPayload(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp) {
+      const keyboardEvents = (trackingArtifacts && trackingArtifacts.keyboardEvents) || [];
+      const cursorEvents = (trackingArtifacts && trackingArtifacts.cursorEvents) || [];
+      const collectionSession = activeCollectionSession;
+      return {
+        fs: recordedAudioBuffer.sampleRate,
+        chirp_samples: chirpConfig.samplesPerPeriod,
+        left_band_hz: [chirpConfig.left.startHz, chirpConfig.left.endHz],
+        right_band_hz: [chirpConfig.right.startHz, chirpConfig.right.endHz],
+        tx_amplitude: chirpConfig.amplitude,
+        duration_sec: recordedAudioBuffer.duration,
+        recording_name: `recording_${timestamp}`,
+        capture: diagnostics && diagnostics.recordingCapture
+          ? diagnostics.recordingCapture.method
+          : recordingCaptureMethod,
+        os: getBrowserOsMetadata(),
+        n_key_events: keyboardEvents.length,
+        n_cursor_events: cursorEvents.length,
+        sensing_session_id: collectionSession?.sessionId,
+        website_version: collectionSession?.websiteVersion,
+        start_path: collectionSession?.startPath,
+        end_path: location.pathname,
+        started_at: collectionSession?.startedAt,
+        audio_start_epoch_seconds: realtimeSessionStartEpoch,
+        event_start_epoch_seconds: trackingStartedEpochSeconds,
+        event_start_performance_ms: trackingStartedPerformanceMs,
+        routes: collectionSession?.routes || [],
+        maximum_duration_sec: maximumSensingDurationSeconds,
+        recording_profile: activeRecordingProfileId
+      };
+    }
+
+    function buildMetadataArtifact(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp, metadata = null) {
+      return {
+        name: "metadata.json",
+        blob: new Blob([
+          JSON.stringify(
+            metadata || buildMetadataPayload(recordedAudioBuffer, diagnostics, trackingArtifacts, timestamp),
+            null,
+            2
+          )
+        ], { type: "application/json" })
+      };
+    }
+
+    function buildLiveFigureArtifacts(timestamp) {
+      const artifacts = [];
+
+      try {
+        drawRealtimeChart();
+        artifacts.push({
+          name: `recording_live_python_iq_${timestamp}.png`,
+          url: realtimeCanvas.toDataURL("image/png")
+        });
+      } catch (error) {
+        // Keep the remaining session files if the live IQ canvas cannot export.
+      }
+
+      try {
+        if (typeof dopplerVisualization.exportFigures === "function") {
+          const figures = dopplerVisualization.exportFigures();
+          if (figures && figures.left) {
+            artifacts.push({
+              name: `recording_live_micro_doppler_left_${timestamp}.png`,
+              url: figures.left
+            });
+          }
+          if (figures && figures.right) {
+            artifacts.push({
+              name: `recording_live_micro_doppler_right_${timestamp}.png`,
+              url: figures.right
+            });
+          }
+        }
+      } catch (error) {
+        // Keep the live IQ and remaining session files if Doppler export fails.
+      }
+
+      return artifacts;
+    }
+
+    function formatGeneratedFigureTitle(fileName) {
+      return fileName
+        .replace(/^\d+_/, "")
+        .replace(/\.png$/i, "")
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase());
+    }
+
+    function clearFeatureVisualizations() {
+      featureVisualizationGrid.replaceChildren();
+      windowPredictionBody.replaceChildren();
+      windowPredictionSection.classList.add("hidden");
+      windowPredictionStatus.textContent = "";
+      featureVisualizationPanel.classList.add("hidden");
+      featureVisualizationStatus.textContent = "Calculated after sensing stops.";
+    }
+
+    function renderGeneratedFigures(result) {
+      clearFeatureVisualizations();
+      if (!result || !Array.isArray(result.figures) || !result.figures.length) {
+        return 0;
+      }
+
+      for (const figure of result.figures) {
+        if (!figure || !figure.url || !figure.name) {
+          continue;
+        }
+        const item = document.createElement("figure");
+        item.className = "feature-visualization-item";
+        const image = document.createElement("img");
+        image.src = figure.url;
+        image.alt = formatGeneratedFigureTitle(figure.name);
+        image.loading = "lazy";
+        const caption = document.createElement("figcaption");
+        const title = document.createElement("strong");
+        title.textContent = formatGeneratedFigureTitle(figure.name);
+        caption.append(title);
+        if (figure.description) {
+          caption.append(document.createElement("br"), figure.description);
+        }
+        item.append(image, caption);
+        featureVisualizationGrid.append(item);
+      }
+
+      featureVisualizationStatus.textContent =
+        "Post-processed from the completed recording using the model feature pipeline.";
+      featureVisualizationPanel.classList.remove("hidden");
+      return featureVisualizationGrid.childElementCount;
+    }
+
+    function getPredictionLabelColor(label) {
+      const colors = {
+        body_motion: "#277da1",
+        click_tap: "#f9844a",
+        hand_wave: "#43aa8b",
+        keydown: "#b8860b",
+        no_event: "#6c757d",
+        pointer_move: "#9b5de5",
+        scroll: "#577590"
+      };
+      return colors[label] || "#455a64";
+    }
+
+    function renderWindowPredictions(result) {
+      const predictionResult = result && result.predictions;
+      const rows = predictionResult && Array.isArray(predictionResult.predictions)
+        ? predictionResult.predictions
+        : [];
+      windowPredictionBody.replaceChildren();
+      if (!rows.length) {
+        windowPredictionSection.classList.add("hidden");
+        return 0;
+      }
+
+      for (const prediction of rows) {
+        const row = document.createElement("tr");
+        const values = [
+          prediction.windowIndex,
+          `${Number(prediction.startSeconds).toFixed(2)} s`,
+          `${Number(prediction.endSeconds).toFixed(2)} s`
+        ];
+        for (const value of values) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        }
+        const labelCell = document.createElement("td");
+        const label = document.createElement("span");
+        label.className = "prediction-label";
+        label.textContent = prediction.predictedLabel;
+        label.style.backgroundColor = getPredictionLabelColor(prediction.predictedLabel);
+        labelCell.append(label);
+        const confidenceCell = document.createElement("td");
+        confidenceCell.textContent = `${(Number(prediction.confidence) * 100).toFixed(1)}%`;
+        row.append(labelCell, confidenceCell);
+        windowPredictionBody.append(row);
+      }
+
+      windowPredictionStatus.textContent =
+        `${rows.length} overlapping ${Number(predictionResult.windowSeconds).toFixed(1)}-second windows, ` +
+        `evaluated every ${Number(predictionResult.strideSeconds).toFixed(2)} seconds.`;
+      windowPredictionSection.classList.remove("hidden");
+      featureVisualizationPanel.classList.remove("hidden");
+      return rows.length;
+    }
+
+    async function requestFigureGeneration(wavBlob, diagnostics, trackingArtifacts, timestamp, metadata) {
+      if (!trackingArtifacts || !trackingArtifacts.osEventLog) {
+        return null;
+      }
+
+      const formData = new FormData();
+      formData.append("recording", wavBlob, `recording_${timestamp}.wav`);
+      formData.append(
+        "events",
+        new Blob([trackingArtifacts.osEventLog], { type: "text/plain" }),
+        `os_event_log_${timestamp}.txt`
+      );
+      formData.append(
+        "diagnostics",
+        new Blob([JSON.stringify(diagnostics, null, 2)], { type: "application/json" }),
+        `recording_diagnostics_${timestamp}.json`
+      );
+      formData.append(
+        "metadata",
+        new Blob([JSON.stringify(metadata, null, 2)], { type: "application/json" }),
+        "metadata.json"
+      );
+      formData.append("timestamp", timestamp);
+      formData.append("prefix", "recording");
+
+      const response = await fetch(appConfig.analysisApiUrl, {
+        method: "POST",
+        body: formData
+      });
+      if (!response.ok) {
+        return null;
+      }
+
+      const result = await response.json();
+      return result && result.ok ? result : null;
+    }
+
+    function buildMicrophoneOnlyStream(sourceStream) {
+      const microphoneTracks = sourceStream
+        .getAudioTracks()
+        .filter((track) => track.readyState === "live" && track.enabled);
+
+      if (!microphoneTracks.length) {
+        throw new Error("No live microphone track");
+      }
+
+      return new MediaStream(microphoneTracks);
+    }
+
+    function hasActiveMicrophoneStream() {
+      if (!micStream) {
+        return false;
+      }
+
+      return micStream.getAudioTracks().some((track) => track.readyState === "live");
+    }
+
+    function stopMicrophoneStream() {
+      if (!micStream) {
+        return;
+      }
+
+      micStream.getTracks().forEach((track) => track.stop());
+      micStream = null;
+    }
+
+    function setSensingControls(fileReady, sensingActive) {
+      const locked = recordingSessionActive || playbackStartInProgress || sensingStopInProgress || Boolean(activeCollectionSession);
+      startSensingBtn.disabled = !sensingActive && (!fileReady || locked);
+      startSensingBtn.textContent = sensingActive ? "Stop sensing" : "Start sensing";
+      startSensingBtn.setAttribute("aria-pressed", String(sensingActive));
+      recordingProfileSelect.disabled = locked;
+      if (!sensingActive) startSensingHint.textContent = sensingStopInProgress
+        ? "Preparing session files…" : locked ? "Starting sensing…" : "Record while completing any task. Stops automatically after 40 seconds.";
+      updateSensingPanelVisibility();
+    }
+
+    function buildRecordingTimestamp() {
+      const now = new Date();
+      return [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0")
+      ].join("") + "_" + [
+        String(now.getHours()).padStart(2, "0"),
+        String(now.getMinutes()).padStart(2, "0"),
+        String(now.getSeconds()).padStart(2, "0")
+      ].join("");
+    }
+
+    function buildRecordingFileName() {
+      return `recording_${buildRecordingTimestamp()}.wav`;
+    }
+
+    function buildSpectrogramFileName() {
+      return `recording_spectrogram_${buildRecordingTimestamp()}.png`;
+    }
+
+    function triggerDownload(downloadUrl, fileName) {
+      const downloadLink = document.createElement("a");
+      downloadLink.href = downloadUrl;
+      downloadLink.download = fileName;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      // Keep the anchor in the DOM briefly so browsers do not cancel
+      // asynchronous data:/http: downloads when the element is removed.
+      window.setTimeout(() => downloadLink.remove(), 1000);
+    }
+
+    const zipCrc32Table = (() => {
+      const table = new Uint32Array(256);
+      for (let index = 0; index < table.length; index += 1) {
+        let value = index;
+        for (let bit = 0; bit < 8; bit += 1) {
+          value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+        }
+        table[index] = value >>> 0;
+      }
+      return table;
+    })();
+
+    function calculateZipCrc32(bytes) {
+      let crc = 0xffffffff;
+      for (const byte of bytes) {
+        crc = zipCrc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+      }
+      return (crc ^ 0xffffffff) >>> 0;
+    }
+
+    function getZipDosDateTime(date = new Date()) {
+      const year = Math.max(1980, date.getFullYear());
+      return {
+        date: (((year - 1980) & 0x7f) << 9)
+          | ((date.getMonth() + 1) << 5)
+          | date.getDate(),
+        time: (date.getHours() << 11)
+          | (date.getMinutes() << 5)
+          | Math.floor(date.getSeconds() / 2)
+      };
+    }
+
+    function sanitizeZipEntryName(name) {
+      return String(name || "artifact")
+        .replaceAll("\\", "/")
+        .split("/")
+        .filter((part) => part && part !== "." && part !== "..")
+        .join("/") || "artifact";
+    }
+
+    function buildCollectionSectionSlug() {
+      const path = activeCollectionSession?.startPath || location.pathname;
+      return String(`ultrasound_${path}`)
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "data_collection";
+    }
+
+    function buildSessionArchiveFileName(timestamp = buildRecordingTimestamp()) {
+      return `${buildCollectionSectionSlug()}_${timestamp}.zip`;
+    }
+
+    async function createStoredZipArchive(files) {
+      const encoder = new TextEncoder();
+      const archiveDateTime = getZipDosDateTime();
+      const localParts = [];
+      const centralParts = [];
+      let localOffset = 0;
+      let centralSize = 0;
+      let fileCount = 0;
+
+      for (const file of (Array.isArray(files) ? files : [])) {
+        if (!file || !file.name || (!file.blob && !file.url)) {
+          continue;
+        }
+        const blob = await resolveArtifactBlob(file);
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const nameBytes = encoder.encode(sanitizeZipEntryName(file.name));
+        if (bytes.length > 0xffffffff || localOffset > 0xffffffff) {
+          throw new Error("Session archive exceeds the ZIP32 size limit");
+        }
+
+        const crc32 = calculateZipCrc32(bytes);
+        const localHeader = new Uint8Array(30 + nameBytes.length);
+        const localView = new DataView(localHeader.buffer);
+        localView.setUint32(0, 0x04034b50, true);
+        localView.setUint16(4, 20, true);
+        localView.setUint16(6, 0x0800, true);
+        localView.setUint16(8, 0, true);
+        localView.setUint16(10, archiveDateTime.time, true);
+        localView.setUint16(12, archiveDateTime.date, true);
+        localView.setUint32(14, crc32, true);
+        localView.setUint32(18, bytes.length, true);
+        localView.setUint32(22, bytes.length, true);
+        localView.setUint16(26, nameBytes.length, true);
+        localView.setUint16(28, 0, true);
+        localHeader.set(nameBytes, 30);
+
+        const centralHeader = new Uint8Array(46 + nameBytes.length);
+        const centralView = new DataView(centralHeader.buffer);
+        centralView.setUint32(0, 0x02014b50, true);
+        centralView.setUint16(4, 20, true);
+        centralView.setUint16(6, 20, true);
+        centralView.setUint16(8, 0x0800, true);
+        centralView.setUint16(10, 0, true);
+        centralView.setUint16(12, archiveDateTime.time, true);
+        centralView.setUint16(14, archiveDateTime.date, true);
+        centralView.setUint32(16, crc32, true);
+        centralView.setUint32(20, bytes.length, true);
+        centralView.setUint32(24, bytes.length, true);
+        centralView.setUint16(28, nameBytes.length, true);
+        centralView.setUint16(30, 0, true);
+        centralView.setUint16(32, 0, true);
+        centralView.setUint16(34, 0, true);
+        centralView.setUint16(36, 0, true);
+        centralView.setUint32(38, 0, true);
+        centralView.setUint32(42, localOffset, true);
+        centralHeader.set(nameBytes, 46);
+
+        localParts.push(localHeader, bytes);
+        centralParts.push(centralHeader);
+        localOffset += localHeader.length + bytes.length;
+        centralSize += centralHeader.length;
+        fileCount += 1;
+      }
+
+      if (!fileCount) {
+        throw new Error("No session artifacts were available for the ZIP archive");
+      }
+      if (fileCount > 0xffff || localOffset + centralSize > 0xffffffff) {
+        throw new Error("Session archive exceeds the ZIP32 entry limit");
+      }
+
+      const endRecord = new Uint8Array(22);
+      const endView = new DataView(endRecord.buffer);
+      endView.setUint32(0, 0x06054b50, true);
+      endView.setUint16(4, 0, true);
+      endView.setUint16(6, 0, true);
+      endView.setUint16(8, fileCount, true);
+      endView.setUint16(10, fileCount, true);
+      endView.setUint32(12, centralSize, true);
+      endView.setUint32(16, localOffset, true);
+      endView.setUint16(20, 0, true);
+
+      return {
+        blob: new Blob([...localParts, ...centralParts, endRecord], { type: "application/zip" }),
+        fileCount
+      };
+    }
+
+    async function resolveArtifactBlob(file) {
+      if (file.blob) {
+        return file.blob;
+      }
+      const response = await fetch(file.url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch artifact: ${file.name}`);
+      }
+      return await response.blob();
+    }
+
+    async function downloadFileArtifact(file) {
+      if (!file || !file.name || (!file.blob && !file.url)) {
+        return false;
+      }
+
+      // Download every artifact through a blob object URL. data:/http: URLs
+      // triggered directly in a batch are dropped by browsers; blob object
+      // URLs commit reliably.
+      let blob;
+      try {
+        blob = await resolveArtifactBlob(file);
+      } catch (error) {
+        return false;
+      }
+
+      const downloadUrl = URL.createObjectURL(blob);
+      triggerDownload(downloadUrl, file.name);
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+      return true;
+    }
+
+    async function downloadFileArtifacts(files) {
+      let downloadCount = 0;
+      for (const file of (Array.isArray(files) ? files : [])) {
+        const downloaded = await downloadFileArtifact(file);
+        if (downloaded) {
+          downloadCount += 1;
+          // Stagger downloads so the browser does not throttle the batch.
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+        }
+      }
+      return downloadCount;
+    }
+
+    function setPreparedSessionFiles(files, timestamp = null) {
+      preparedSessionFiles = (Array.isArray(files) ? files : [])
+        .filter((file) => file && file.name && (file.blob || file.url));
+      preparedSessionArchiveName = preparedSessionFiles.length
+        ? buildSessionArchiveFileName(timestamp || buildRecordingTimestamp())
+        : "";
+    }
+
+    async function downloadPreparedSessionFiles() {
+      document.getElementById("downloadSensingSession").disabled = !preparedSessionFiles.length;
+      if (!preparedSessionFiles.length || sensingSessionActive || recordingSessionActive) {
+        return 0;
+      }
+
+      try {
+        const archive = await createStoredZipArchive(preparedSessionFiles);
+        const downloadUrl = URL.createObjectURL(archive.blob);
+        const archiveName = preparedSessionArchiveName || buildSessionArchiveFileName();
+        triggerDownload(downloadUrl, archiveName);
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60000);
+        fileStatus.textContent =
+          `Sensing stopped. Downloading ${archiveName} with ${archive.fileCount} session files.`;
+        return archive.fileCount;
+      } catch (error) {
+        fileStatus.textContent = "Sensing stopped, but the session ZIP file could not be prepared.";
+        console.error("Could not prepare session ZIP", error);
+        return 0;
+      }
+    }
+
+    function showSpectrogramStatus(message) {
+      spectrogramStatus.textContent = message;
+      spectrogramPanel.classList.remove("hidden");
+    }
+
+    function clearSpectrogram() {
+      const ctx = spectrogramCanvas.getContext("2d");
+      ctx.clearRect(0, 0, spectrogramCanvas.width, spectrogramCanvas.height);
+      spectrogramPanel.classList.add("hidden");
+      spectrogramStatus.textContent = "";
+    }
+
+    function setRealtimeStatus(message) {
+      realtimeLastStatusMessage = message;
+      realtimeStatus.textContent = message;
+      queueRealtimeChartDraw();
+    }
+
+    function resetRealtimeChart() {
+      realtimeFeaturePoints = [];
+      realtimeWaveformPoints = [];
+      realtimeEventMarkers = [];
+      realtimeFrameSequence = 0;
+      realtimeFramesSent = 0;
+      realtimeFramesReceived = 0;
+      realtimeFeaturesReceived = 0;
+      realtimeDopplerColumnsReceived = 0;
+      realtimeFramesDroppedBeforeSend = 0;
+      realtimeSessionStartEpoch = null;
+      drawRealtimeChart();
+      dopplerVisualization.reset(
+        "Waiting for chirp alignment and the first 64-chirp Doppler window."
+      );
+    }
+
+    function queueRealtimeChartDraw() {
+      if (realtimeDrawPending) {
+        return;
+      }
+      realtimeDrawPending = true;
+      window.requestAnimationFrame(() => {
+        realtimeDrawPending = false;
+        drawRealtimeChart();
+      });
+    }
+
+    function drawRealtimeChart() {
+      const ctx = realtimeCanvas.getContext("2d");
+      const width = realtimeCanvas.width;
+      const height = realtimeCanvas.height;
+      const margin = { top: 28, right: 18, bottom: 46, left: 82 };
+      const gap = 24;
+      const plotWidth = width - margin.left - margin.right;
+      const panelHeight = Math.floor((height - margin.top - margin.bottom - gap * 2) / 3);
+      const makeArea = (index) => ({
+        left: margin.left,
+        top: margin.top + index * (panelHeight + gap),
+        right: margin.left + plotWidth,
+        bottom: margin.top + index * (panelHeight + gap) + panelHeight,
+        width: plotWidth,
+        height: panelHeight
+      });
+      const rawArea = makeArea(0);
+      const amplitudeArea = makeArea(1);
+      const phaseArea = makeArea(2);
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#fffdfa";
+      ctx.fillRect(0, 0, width, height);
+
+      const xMin = 0;
+      const xMax = realtimeConfig.timelineDurationSeconds;
+      const visiblePoints = realtimeFeaturePoints.filter((point) => point.time >= xMin && point.time <= xMax);
+      const visibleWaveformPoints = realtimeWaveformPoints.filter((point) => point.time >= xMin && point.time <= xMax);
+      const visibleMarkers = realtimeEventMarkers.filter((marker) => marker.time >= xMin && marker.time <= xMax);
+
+      function xToPx(timeValue) {
+        return rawArea.left + ((timeValue - xMin) / Math.max(1e-6, xMax - xMin)) * rawArea.width;
+      }
+
+      function drawTimeGrid(area) {
+        ctx.save();
+        ctx.fillStyle = "rgba(190, 45, 45, 0.16)";
+        for (const region of realtimeConfig.stillRegions) {
+          const left = xToPx(region.start);
+          const right = xToPx(region.end);
+          ctx.fillRect(left, area.top, right - left, area.height);
+        }
+
+        for (
+          let seconds = xMin;
+          seconds <= xMax + 1e-6;
+          seconds += realtimeConfig.timelineTickSeconds
+        ) {
+          const x = xToPx(seconds);
+          const isPhaseBoundary = realtimeConfig.stillRegions.some(
+            (region) => seconds === region.start || seconds === region.end
+          ) && seconds > xMin && seconds < xMax;
+          ctx.strokeStyle = isPhaseBoundary
+            ? "rgba(150, 35, 35, 0.62)"
+            : "rgba(46, 36, 28, 0.14)";
+          ctx.lineWidth = isPhaseBoundary ? 1.5 : 1;
+          ctx.setLineDash(isPhaseBoundary ? [] : [3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(x, area.top);
+          ctx.lineTo(x, area.bottom);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      function drawMarkers(area) {
+        ctx.save();
+        for (const marker of visibleMarkers) {
+          const x = xToPx(marker.time);
+          ctx.strokeStyle = marker.color;
+          ctx.globalAlpha = 0.28;
+          ctx.beginPath();
+          ctx.moveTo(x, area.top);
+          ctx.lineTo(x, area.bottom);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.save();
+          ctx.translate(x + 2, area.top + 4);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = marker.color;
+          ctx.font = "13px 'Segoe UI', sans-serif";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.fillText(marker.label, 0, 0);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      function drawPanelFrame(area, title, ylabel, tickValues) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(46, 36, 28, 0.24)";
+        ctx.strokeRect(area.left, area.top, area.width, area.height);
+        ctx.fillStyle = "#2e241c";
+        ctx.font = "17px 'Segoe UI', sans-serif";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(title, area.left, area.top - 5);
+        ctx.font = "13px 'Segoe UI', sans-serif";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (let index = 0; index < tickValues.length; index += 1) {
+          const ratio = index / Math.max(1, tickValues.length - 1);
+          const y = area.bottom - ratio * area.height;
+          ctx.fillText(String(tickValues[index]), area.left - 8, y);
+        }
+        ctx.save();
+        ctx.translate(18, area.top + area.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.fillText(ylabel, 0, 0);
+        ctx.restore();
+        ctx.restore();
+      }
+
+      function drawRawPanel() {
+        drawTimeGrid(rawArea);
+        ctx.save();
+        ctx.fillStyle = "rgba(145, 25, 25, 0.9)";
+        ctx.font = "bold 13px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        for (const region of realtimeConfig.stillRegions) {
+          ctx.fillText(region.label, xToPx((region.start + region.end) / 2), rawArea.top + 5);
+        }
+        if (visibleWaveformPoints.length > 1) {
+          const yToPx = (value) => rawArea.bottom - ((value + 1) / 2) * rawArea.height;
+          ctx.strokeStyle = "#4f83cc";
+          ctx.lineWidth = 1.7;
+          ctx.beginPath();
+          visibleWaveformPoints.forEach((point, index) => {
+            const x = xToPx(point.time);
+            const y = yToPx(point.value);
+            if (index === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          });
+          ctx.stroke();
+        }
+        ctx.restore();
+        drawMarkers(rawArea);
+        drawPanelFrame(rawArea, "Raw microphone audio", "PCM", ["-1", "0", "1"]);
+      }
+
+      function median(values) {
+        if (!values.length) {
+          return 0;
+        }
+        const sorted = [...values].sort((left, right) => left - right);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2
+          ? sorted[middle]
+          : (sorted[middle - 1] + sorted[middle]) / 2;
+      }
+
+      function buildStage4Trace(key) {
+        const rows = visiblePoints
+          .map((point) => ({
+            time: point.time,
+            values: Array.isArray(point[key]) ? point[key] : []
+          }))
+          .filter((row) => row.values.length);
+        if (!rows.length) {
+          return { points: [], selectedBins: [], quietMedian: 0 };
+        }
+
+        const lagCount = Math.min(...rows.map((row) => row.values.length));
+        const sums = new Float64Array(lagCount);
+        const squaredSums = new Float64Array(lagCount);
+        for (const row of rows) {
+          for (let lag = 0; lag < lagCount; lag += 1) {
+            const value = Number(row.values[lag]) || 0;
+            sums[lag] += value;
+            squaredSums[lag] += value * value;
+          }
+        }
+        const variability = Array.from({ length: lagCount }, (_, lag) => {
+          const mean = sums[lag] / rows.length;
+          return Math.sqrt(Math.max(0, squaredSums[lag] / rows.length - mean * mean));
+        });
+        const selectedBins = Array.from({ length: lagCount }, (_, lag) => lag)
+          .sort((left, right) => variability[right] - variability[left] || right - left)
+          .slice(0, Math.min(10, lagCount))
+          .sort((left, right) => left - right);
+        const rawTrace = rows.map((row) => (
+          selectedBins.reduce(
+            (total, lag) => total + (Number(row.values[lag]) || 0),
+            0
+          ) / selectedBins.length
+        ));
+        const quietMedian = median(rawTrace);
+        return {
+          points: rows.map((row, index) => ({
+            time: row.time,
+            value: rawTrace[index] / (quietMedian + 1e-8)
+          })),
+          selectedBins,
+          quietMedian
+        };
+      }
+
+      function drawFeatureLine(area, points, color, maximum) {
+        if (!points.length) {
+          return;
+        }
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        points.forEach((point, index) => {
+          const x = xToPx(point.time);
+          const y = area.bottom - (Math.max(0, point.value) / maximum) * area.height;
+          if (index === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawStage4Panel(area, title, ylabel, leftTrace, rightTrace) {
+        const maximumValue = Math.max(
+          1e-8,
+          ...leftTrace.points.map((point) => point.value),
+          ...rightTrace.points.map((point) => point.value)
+        );
+        const maximum = maximumValue * 1.14;
+        drawTimeGrid(area);
+        ctx.save();
+        ctx.strokeStyle = "rgba(46, 36, 28, 0.1)";
+        ctx.setLineDash([3, 4]);
+        for (const ratio of [0.5, 1]) {
+          const y = area.bottom - ratio * area.height;
+          ctx.beginPath();
+          ctx.moveTo(area.left, y);
+          ctx.lineTo(area.right, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+        drawFeatureLine(area, leftTrace.points, "#1f77b4", maximum);
+        drawFeatureLine(area, rightTrace.points, "#ff7f0e", maximum);
+        drawMarkers(area);
+        drawPanelFrame(
+          area,
+          title,
+          ylabel,
+          ["0", (maximum / 2).toFixed(1), maximum.toFixed(1)]
+        );
+        ctx.save();
+        ctx.font = "13px 'Segoe UI', sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#1f77b4";
+        ctx.fillRect(area.right - 154, area.top + 8, 18, 2);
+        ctx.fillStyle = "#2e241c";
+        ctx.textAlign = "left";
+        ctx.fillText("left channel", area.right - 130, area.top + 9);
+        ctx.fillStyle = "#ff7f0e";
+        ctx.fillRect(area.right - 154, area.top + 25, 18, 2);
+        ctx.fillStyle = "#2e241c";
+        ctx.fillText("right channel", area.right - 130, area.top + 26);
+        ctx.restore();
+      }
+
+      const amplitudeLeft = buildStage4Trace("amplitude_change_left");
+      const amplitudeRight = buildStage4Trace("amplitude_change_right");
+      const phaseLeft = buildStage4Trace("phase_change_left");
+      const phaseRight = buildStage4Trace("phase_change_right");
+      drawRawPanel();
+      drawStage4Panel(
+        amplitudeArea,
+        "Amplitude change",
+        "amplitude change",
+        amplitudeLeft,
+        amplitudeRight
+      );
+      drawStage4Panel(
+        phaseArea,
+        "Phase change",
+        "phase change",
+        phaseLeft,
+        phaseRight
+      );
+
+      ctx.save();
+      ctx.fillStyle = "rgba(46, 36, 28, 0.76)";
+      ctx.font = "14px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (
+        let seconds = xMin;
+        seconds <= xMax + 1e-6;
+        seconds += realtimeConfig.timelineTickSeconds
+      ) {
+        ctx.fillText(`${seconds}s`, xToPx(seconds), phaseArea.bottom + 12);
+      }
+      ctx.font = "15px 'Segoe UI', sans-serif";
+      ctx.fillText("Recording time (s)", width / 2, height - 18);
+      if (!visiblePoints.length && !visibleWaveformPoints.length) {
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "17px 'Segoe UI', sans-serif";
+        ctx.fillText(realtimeLastStatusMessage, width / 2, height / 2);
+      }
+      ctx.restore();
+    }
+
+    function appendRealtimeFeature(message) {
+      realtimeFeaturesReceived += 1;
+      const featureTimestamp = Number(message.timestamp);
+      let featureTime = Number(message.time) || 0;
+      if (Number.isFinite(featureTimestamp) && Number.isFinite(realtimeSessionStartEpoch)) {
+        featureTime = featureTimestamp - realtimeSessionStartEpoch;
+      }
+      if (!Number.isFinite(featureTime) || featureTime < 0) {
+        featureTime = Number(message.time) || 0;
+      }
+      realtimeFeaturePoints.push({
+        time: featureTime,
+        timestamp: Number.isFinite(featureTimestamp) ? featureTimestamp : null,
+        timestamp_source: message.timestamp_source || "",
+        window_start_time: Number.isFinite(message.window_start_time) ? message.window_start_time : null,
+        window_end_time: Number.isFinite(message.window_end_time) ? message.window_end_time : null,
+        amplitude_change_left: Array.isArray(message.amplitude_change_left) ? message.amplitude_change_left : [],
+        amplitude_change_right: Array.isArray(message.amplitude_change_right) ? message.amplitude_change_right : [],
+        phase_change_left: Array.isArray(message.phase_change_left) ? message.phase_change_left : [],
+        phase_change_right: Array.isArray(message.phase_change_right) ? message.phase_change_right : [],
+        lag_count: Number(message.lag_count) || 0,
+        max_lag: Number(message.max_lag) || 0
+      });
+      if (realtimeFeaturePoints.length > realtimeConfig.maxPoints) {
+        realtimeFeaturePoints.splice(0, realtimeFeaturePoints.length - realtimeConfig.maxPoints);
+      }
+      queueRealtimeChartDraw();
+    }
+
+    function appendRealtimeDoppler(message) {
+      realtimeDopplerColumnsReceived += 1;
+      dopplerVisualization.append(message, realtimeSessionStartEpoch);
+    }
+
+    function getRealtimeMarkerColor(name) {
+      return {
+        keydown: "#d62728",
+        pointer_move: "#1f77b4",
+        scroll: "#17becf",
+        click: "#9467bd"
+      }[name] || "#9467bd";
+    }
+
+    function getRealtimeMarkerLabel(event) {
+      const name = event.name || "";
+      const props = event.properties || {};
+      if (name === "keydown") {
+        if (props.code && props.code.startsWith("Key") && props.code.length === 4) {
+          return props.code.slice(3);
+        }
+        return props.key || "key";
+      }
+      if (name === "pointer_move") {
+        return "move";
+      }
+      return name;
+    }
+
+    function recordRealtimeEventMarker(event) {
+      if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch)) {
+        return;
+      }
+      const eventTime = event.epochSeconds - realtimeSessionStartEpoch;
+      if (!Number.isFinite(eventTime) || eventTime < 0) {
+        return;
+      }
+      const correctedEventTime = eventTime + appConfig.audioEventOffsetMs / 1000;
+      if (!Number.isFinite(correctedEventTime) || correctedEventTime < 0) {
+        return;
+      }
+      const keepNames = new Set([
+        "keydown",
+        "pointer_move",
+        "scroll",
+        "click"
+      ]);
+      if (!keepNames.has(event.name)) {
+        return;
+      }
+      realtimeEventMarkers.push({
+        time: correctedEventTime,
+        rawTime: eventTime,
+        offsetMs: appConfig.audioEventOffsetMs,
+        name: event.name,
+        pointerType: event.properties && event.properties.pointerType ? event.properties.pointerType : "",
+        x: event.properties && Number.isFinite(event.properties.x) ? event.properties.x : null,
+        y: event.properties && Number.isFinite(event.properties.y) ? event.properties.y : null,
+        dx: event.properties && Number.isFinite(event.properties.dx) ? event.properties.dx : null,
+        dy: event.properties && Number.isFinite(event.properties.dy) ? event.properties.dy : null,
+        label: getRealtimeMarkerLabel(event),
+        color: getRealtimeMarkerColor(event.name)
+      });
+      if (realtimeEventMarkers.length > realtimeConfig.maxMarkers) {
+        realtimeEventMarkers.splice(0, realtimeEventMarkers.length - realtimeConfig.maxMarkers);
+      }
+      queueRealtimeChartDraw();
+      dopplerVisualization.queueDraw();
+    }
+
+    function toMonoChannel(audioBuffer) {
+      const channelCount = audioBuffer.numberOfChannels;
+      const length = audioBuffer.length;
+      if (channelCount === 1) {
+        return audioBuffer.getChannelData(0);
+      }
+
+      const mono = new Float32Array(length);
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        const channelData = audioBuffer.getChannelData(channelIndex);
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] += channelData[sampleIndex];
+        }
+      }
+
+      for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+        mono[sampleIndex] /= channelCount;
+      }
+
+      return mono;
+    }
+
+    function clampPcmSample(sample) {
+      return Math.max(-1, Math.min(1, sample));
+    }
+
+    function toMonoFloat32(inputBuffer) {
+      const channelCount = inputBuffer.numberOfChannels;
+      const length = inputBuffer.length;
+      const mono = new Float32Array(length);
+
+      for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+        const channelData = inputBuffer.getChannelData(channelIndex);
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] += channelData[sampleIndex];
+        }
+      }
+
+      if (channelCount > 1) {
+        for (let sampleIndex = 0; sampleIndex < length; sampleIndex += 1) {
+          mono[sampleIndex] /= channelCount;
+        }
+      }
+
+      return mono;
+    }
+
+    function getRecordingContext() {
+      if (!audioContext) {
+        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+        audioContext = new AudioContextCtor({
+          sampleRate: targetWavSampleRate,
+          latencyHint: profile.latencyHint
+        });
+        audioContextQualification = recordingProfiles.qualifyAudioContext(
+          audioContext,
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
+      }
+      return audioContext;
+    }
+
+    function resetRecordingBuffers() {
+      recordingBufferChunks = [];
+      recordingChannelCount = 0;
+      recordedFrameCount = 0;
+      recordingSessionActive = false;
+    }
+
+    function resetCaptureMetrics() {
+      recordingCaptureMethod = "not-started";
+      recordingCaptureFrameSize = 0;
+      recordingChunksCaptured = 0;
+      recordingClippedSamples = 0;
+      recordingPeakAmplitude = 0;
+      recordingWorkletFrameGaps = 0;
+      recordingLastWorkletSequence = 0;
+      completedCaptureDiagnostics = null;
+    }
+
+    function getCaptureDiagnostics() {
+      return {
+        method: recordingCaptureMethod,
+        frameSize: recordingCaptureFrameSize,
+        maximumDurationSeconds: maximumSensingDurationSeconds,
+        durationLimitReached: sensingDurationLimitReached,
+        chunksCaptured: recordingChunksCaptured,
+        workletFrameGaps: recordingWorkletFrameGaps,
+        clippedSamples: recordingClippedSamples,
+        clippingDetected: recordingClippedSamples > 0,
+        peakAbsoluteAmplitude: recordingPeakAmplitude,
+        socketFramesDroppedBeforeSend: realtimeFramesDroppedBeforeSend
+      };
+    }
+
+    function clearSensingDurationTimer() {
+      if (sensingDurationTimerId === null) {
+        return;
+      }
+      window.clearTimeout(sensingDurationTimerId);
+      sensingDurationTimerId = null;
+    }
+
+    function requestSensingStopAtDurationLimit() {
+      if (sensingDurationLimitReached || sensingStopInProgress) {
+        return;
+      }
+      sensingDurationLimitReached = true;
+      clearSensingDurationTimer();
+      void stopSensing({ durationLimitReached: true });
+    }
+
+    function startSensingDurationTimer() {
+      clearSensingDurationTimer();
+      sensingDurationTimerId = window.setTimeout(() => {
+        sensingDurationTimerId = null;
+        requestSensingStopAtDurationLimit();
+      }, maximumSensingDurationMs);
+    }
+
+    function getMaximumRecordingFrames() {
+      const sampleRate = audioContext && Number.isFinite(audioContext.sampleRate)
+        ? audioContext.sampleRate
+        : targetWavSampleRate;
+      return Math.floor(sampleRate * maximumSensingDurationSeconds);
+    }
+
+    function appendRealtimeWaveform(samples) {
+      if (!realtimeStreamingActive || !Number.isFinite(realtimeSessionStartEpoch) || !samples || !samples.length) {
+        return;
+      }
+      const recordingContext = getRecordingContext();
+      const sampleRate = recordingContext.sampleRate || targetWavSampleRate;
+      const frameEndTime = Date.now() / 1000 - realtimeSessionStartEpoch;
+      const frameStartTime = frameEndTime - samples.length / sampleRate;
+      const stride = Math.max(1, Math.floor(sampleRate / realtimeConfig.waveformPlotHz));
+      for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += stride) {
+        const time = frameStartTime + sampleIndex / sampleRate;
+        if (Number.isFinite(time) && time >= 0) {
+          realtimeWaveformPoints.push({
+            time,
+            value: Math.max(-1, Math.min(1, Number(samples[sampleIndex]) || 0))
+          });
+        }
+      }
+      if (realtimeWaveformPoints.length > realtimeConfig.maxWaveformPoints) {
+        realtimeWaveformPoints.splice(0, realtimeWaveformPoints.length - realtimeConfig.maxWaveformPoints);
+      }
+      queueRealtimeChartDraw();
+    }
+
+    function handleRecordedAudioChunk(chunk, metadata = {}) {
+      if (!(chunk instanceof Float32Array) || !chunk.length) {
+        return;
+      }
+      const remainingFrames = getMaximumRecordingFrames() - recordedFrameCount;
+      if (remainingFrames <= 0) {
+        requestSensingStopAtDurationLimit();
+        return;
+      }
+      const recordedChunk = chunk.length > remainingFrames
+        ? chunk.slice(0, remainingFrames)
+        : chunk;
+      if (!recordingChannelCount) {
+        recordingChannelCount = 1;
+      }
+      if (Number.isFinite(metadata.sequence)) {
+        if (recordingLastWorkletSequence && metadata.sequence > recordingLastWorkletSequence + 1) {
+          recordingWorkletFrameGaps += metadata.sequence - recordingLastWorkletSequence - 1;
+        }
+        recordingLastWorkletSequence = metadata.sequence;
+      }
+      for (let sampleIndex = 0; sampleIndex < recordedChunk.length; sampleIndex += 1) {
+        const absoluteSample = Math.abs(recordedChunk[sampleIndex]);
+        recordingPeakAmplitude = Math.max(recordingPeakAmplitude, absoluteSample);
+        if (absoluteSample >= 0.999) {
+          recordingClippedSamples += 1;
+        }
+      }
+      recordingBufferChunks.push(recordedChunk);
+      recordedFrameCount += recordedChunk.length;
+      recordingChunksCaptured += 1;
+      appendRealtimeWaveform(recordedChunk);
+      sendRealtimeAudioFrame(recordedChunk);
+      if (recordedFrameCount >= getMaximumRecordingFrames()) {
+        requestSensingStopAtDurationLimit();
+      }
+    }
+
+    function handleRealtimeMessage(rawData) {
+      let message = null;
+      try {
+        message = JSON.parse(rawData);
+      } catch (error) {
+        return;
+      }
+
+      if (message.type === "feature_map" || message.type === "feature") {
+        appendRealtimeFeature(message);
+        return;
+      }
+      if (message.type === "doppler") {
+        appendRealtimeDoppler(message);
+        return;
+      }
+      if (message.type === "alignment") {
+        setRealtimeStatus(`Live Python IQ aligned. Peak/base ${Number(message.peak_over_baseline || 0).toFixed(1)}x.`);
+        dopplerVisualization.setStatus(
+          "Chirp aligned. Collecting the first 64 post-trim chirps for Doppler."
+        );
+        return;
+      }
+      if (message.type === "status") {
+        if (message.status === "connected") {
+          setRealtimeStatus("Live backend connected. Waiting for sensing frames...");
+          dopplerVisualization.setStatus(
+            "Live backend connected. Waiting for sensing frames."
+          );
+        } else if (message.status === "started") {
+          const resampleText = message.resampling
+            ? ` Resampling ${message.sample_rate} Hz to ${message.processing_sample_rate} Hz.`
+            : "";
+          setRealtimeStatus(`Live Python IQ running.${resampleText}`);
+          dopplerVisualization.setStatus(
+            `Collecting aligned complex chirps for micro-Doppler.${resampleText}`
+          );
+        } else if (message.status === "frames") {
+          realtimeFramesReceived = Number(message.frames_received) || realtimeFramesReceived;
+          if (!realtimeFeaturesReceived) {
+            const alignedText = message.aligned ? "aligned, waiting for feature points" : "waiting for chirp alignment";
+            const processedText = Number.isFinite(message.frames_processed)
+              ? ` processed ${message.frames_processed};`
+              : "";
+            const dropText = message.dropped_stale_frames
+              ? ` dropped ${message.dropped_stale_frames} stale frames to stay live;`
+              : "";
+            const ageText = Number.isFinite(message.latest_frame_age_ms)
+              ? ` latest age ${message.latest_frame_age_ms} ms;`
+              : "";
+            setRealtimeStatus(`Python received ${realtimeFramesReceived} audio frames;${processedText}${dropText}${ageText} ${alignedText}.`);
+          }
+          if (!realtimeDopplerColumnsReceived) {
+            dopplerVisualization.setStatus(
+              message.aligned
+                ? "Aligned. Doppler begins after the 3-second trim and first 64-chirp window."
+                : "Waiting for chirp alignment before collecting Doppler data."
+            );
+          }
+        } else if (message.status === "stopped") {
+          setRealtimeStatus(`Live Python IQ stopped after ${message.chirps_processed || 0} chirps.`);
+          dopplerVisualization.setStatus(
+            `Micro-Doppler stopped with ${realtimeDopplerColumnsReceived} time columns.`
+          );
+        }
+        return;
+      }
+      if (message.type === "warning" || message.type === "error") {
+        setRealtimeStatus(`Live Python IQ: ${message.message || message.type}`);
+        dopplerVisualization.setStatus(
+          `Live micro-Doppler: ${message.message || message.type}`
+        );
+      }
+    }
+
+    async function startRealtimeSession() {
+      resetRealtimeChart();
+      if (!("WebSocket" in window)) {
+        setRealtimeStatus("Live Python IQ unavailable: WebSocket is not supported.");
+        return false;
+      }
+      return await new Promise((resolve) => {
+        let settled = false;
+        const socket = new WebSocket(appConfig.realtimeWebSocketUrl);
+        socket.binaryType = "arraybuffer";
+        const timeout = window.setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          try {
+            socket.close();
+          } catch (error) {
+            // Ignore close races.
+          }
+          setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+          resolve(false);
+        }, 1200);
+
+        socket.addEventListener("open", () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          window.clearTimeout(timeout);
+          realtimeSocket = socket;
+          realtimeStreamingActive = true;
+          realtimeSessionStartEpoch = Date.now() / 1000;
+          socket.send(JSON.stringify({
+            type: "start",
+            timestamp: realtimeSessionStartEpoch,
+            sample_rate: getRecordingContext().sampleRate,
+            frame_size: realtimeConfig.frameSize,
+            channel_count: 1,
+            source: "browser_microphone",
+            format: "float32"
+          }));
+          setRealtimeStatus("Live Python IQ connected. Aligning chirp...");
+          resolve(true);
+        });
+
+        socket.addEventListener("message", (event) => {
+          if (typeof event.data === "string") {
+            handleRealtimeMessage(event.data);
+          }
+        });
+
+        socket.addEventListener("close", () => {
+          if (realtimeSocket === socket) {
+            realtimeSocket = null;
+          }
+          realtimeStreamingActive = false;
+          if (!settled) {
+            settled = true;
+            window.clearTimeout(timeout);
+            setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+            resolve(false);
+          }
+        });
+
+        socket.addEventListener("error", () => {
+          if (!settled) {
+            settled = true;
+            window.clearTimeout(timeout);
+            try {
+              socket.close();
+            } catch (error) {
+              // Ignore close races.
+            }
+            setRealtimeStatus("Live Python IQ backend not connected. Run: python server.py");
+            resolve(false);
+          }
+        });
+      });
+    }
+
+    function sendRealtimeAudioFrame(samples) {
+      if (!realtimeStreamingActive || !realtimeSocket || realtimeSocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (realtimeSocket.bufferedAmount > realtimeConfig.maxSocketBufferedBytes) {
+        realtimeFramesDroppedBeforeSend += 1;
+        if (!realtimeFeaturesReceived && realtimeFramesDroppedBeforeSend % 25 === 0) {
+          setRealtimeStatus(`Dropped ${realtimeFramesDroppedBeforeSend} mic frames before send to keep live IQ current.`);
+        }
+        return;
+      }
+      realtimeFrameSequence += 1;
+      realtimeFramesSent += 1;
+      if (!realtimeFeaturesReceived && !realtimeFramesReceived && realtimeFramesSent % 25 === 0) {
+        setRealtimeStatus(`Sent ${realtimeFramesSent} mic frames to Python; waiting for live IQ features.`);
+      }
+      try {
+        const payload = new ArrayBuffer(realtimeConfig.audioFrameHeaderBytes + samples.byteLength);
+        const view = new DataView(payload);
+        view.setUint8(0, 0x57); // W
+        view.setUint8(1, 0x41); // A
+        view.setUint8(2, 0x49); // I
+        view.setUint8(3, 0x51); // Q
+        view.setFloat64(4, Date.now() / 1000, true);
+        view.setUint32(12, realtimeFrameSequence, true);
+        view.setUint32(16, samples.length, true);
+        new Float32Array(payload, realtimeConfig.audioFrameHeaderBytes).set(samples);
+        realtimeSocket.send(payload);
+      } catch (error) {
+        setRealtimeStatus("Live Python IQ stream paused after a socket send error.");
+      }
+    }
+
+    function stopRealtimeSession() {
+      realtimeStreamingActive = false;
+      if (!realtimeSocket) {
+        return;
+      }
+      const socket = realtimeSocket;
+      realtimeSocket = null;
+      try {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "stop" }));
+        }
+        socket.close();
+      } catch (error) {
+        // Ignore close races.
+      }
+    }
+
+    function stopRecordingNodes() {
+      if (recordingSourceNode) {
+        recordingSourceNode.disconnect();
+        recordingSourceNode = null;
+      }
+      if (recordingWorkletNode) {
+        recordingWorkletNode.port.onmessage = null;
+        recordingWorkletNode.disconnect();
+        recordingWorkletNode = null;
+      }
+      if (recordingProcessorNode) {
+        recordingProcessorNode.disconnect();
+        recordingProcessorNode.onaudioprocess = null;
+        recordingProcessorNode = null;
+      }
+      if (recordingMonitorNode) {
+        recordingMonitorNode.disconnect();
+        recordingMonitorNode = null;
+      }
+      recordingSessionActive = false;
+    }
+
+    function loadGeneratedChirpPlaybackBuffer() {
+      const recordingContext = getRecordingContext();
+      chirpPlaybackBuffer = recordingContext.createBuffer(
+        generatedChirpPeriod.channels.length,
+        generatedChirpPeriod.frameCount,
+        generatedChirpPeriod.sampleRate
+      );
+      generatedChirpPeriod.channels.forEach((channel, channelIndex) => {
+        chirpPlaybackBuffer.copyToChannel(channel, channelIndex);
+      });
+    }
+
+    function startChirpPlayback() {
+      if (!chirpPlaybackBuffer) {
+        throw new Error("Chirp audio is not decoded");
+      }
+
+      const recordingContext = getRecordingContext();
+      stopChirpPlayback();
+      chirpSourceNode = recordingContext.createBufferSource();
+      chirpSourceNode.buffer = chirpPlaybackBuffer;
+      chirpSourceNode.loop = true;
+      chirpSourceNode.connect(recordingContext.destination);
+      chirpSourceNode.onended = () => {
+        chirpSourceNode = null;
+      };
+      chirpScheduledStartTime = recordingContext.currentTime + 0.05;
+      chirpScheduledStartFrame = Math.round(chirpScheduledStartTime * recordingContext.sampleRate);
+      chirpSourceNode.start(chirpScheduledStartTime);
+      receivedAudio.loop = true;
+    }
+
+    function stopChirpPlayback() {
+      if (!chirpSourceNode) {
+        return;
+      }
+
+      const sourceNode = chirpSourceNode;
+      chirpSourceNode = null;
+      sourceNode.onended = null;
+      try {
+        sourceNode.stop();
+      } catch (error) {
+        // Already stopped.
+      }
+      sourceNode.disconnect();
+    }
+
+    function buildAudioBufferFromRecording(context) {
+      if (!recordedFrameCount || !recordingChannelCount) {
+        return null;
+      }
+
+      const audioBuffer = context.createBuffer(
+        1,
+        recordedFrameCount,
+        context.sampleRate
+      );
+      const channelData = audioBuffer.getChannelData(0);
+      let frameOffset = 0;
+
+      for (const chunk of recordingBufferChunks) {
+        channelData.set(chunk, frameOffset);
+        frameOffset += chunk.length;
+      }
+
+      return audioBuffer;
+    }
+
+    function encodeAudioBufferToWav(audioBuffer) {
+      const sampleRate = audioBuffer.sampleRate;
+      const frameCount = audioBuffer.length;
+      const channelCount = 1;
+      const bytesPerSample = 4;
+      const blockAlign = channelCount * bytesPerSample;
+      const byteRate = sampleRate * blockAlign;
+      const dataSize = frameCount * blockAlign;
+      const wavBuffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(wavBuffer);
+      const channelData = toMonoChannel(audioBuffer);
+      let offset = 0;
+
+      function writeAscii(text) {
+        for (let index = 0; index < text.length; index += 1) {
+          view.setUint8(offset, text.charCodeAt(index));
+          offset += 1;
+        }
+      }
+
+      writeAscii("RIFF");
+      view.setUint32(offset, 36 + dataSize, true);
+      offset += 4;
+      writeAscii("WAVE");
+      writeAscii("fmt ");
+      view.setUint32(offset, 16, true);
+      offset += 4;
+      view.setUint16(offset, 3, true);
+      offset += 2;
+      view.setUint16(offset, channelCount, true);
+      offset += 2;
+      view.setUint32(offset, sampleRate, true);
+      offset += 4;
+      view.setUint32(offset, byteRate, true);
+      offset += 4;
+      view.setUint16(offset, blockAlign, true);
+      offset += 2;
+      view.setUint16(offset, bytesPerSample * 8, true);
+      offset += 2;
+      writeAscii("data");
+      view.setUint32(offset, dataSize, true);
+      offset += 4;
+
+      for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+        view.setFloat32(offset, clampPcmSample(channelData[frameIndex]), true);
+        offset += bytesPerSample;
+      }
+
+      return new Blob([wavBuffer], { type: "audio/wav" });
+    }
+
+    function createHannWindow(size) {
+      const windowValues = new Float32Array(size);
+      for (let index = 0; index < size; index += 1) {
+        windowValues[index] = 0.5 * (1 - Math.cos((2 * Math.PI * index) / (size - 1)));
+      }
+      return windowValues;
+    }
+
+    const SPECTROGRAM_CONFIG = Object.freeze({
+      fftSize: 1024,
+      hopLength: 256,
+      maxColumns: 8192,
+      canvasHeight: 394,
+      minFrequency: 18000,
+      maxFrequency: 24000,
+      minDb: -90,
+      maxDb: -20,
+      margin: Object.freeze({ top: 71, right: 29, bottom: 60, left: 85 })
+    });
+
+    const SPECTROGRAM_COLOR_STOPS = Object.freeze([
+      Object.freeze([0, 0, 40]),
+      Object.freeze([24, 15, 61]),
+      Object.freeze([68, 15, 118]),
+      Object.freeze([106, 28, 129]),
+      Object.freeze([147, 38, 103]),
+      Object.freeze([188, 55, 84]),
+      Object.freeze([222, 81, 72]),
+      Object.freeze([248, 133, 92]),
+      Object.freeze([252, 209, 128])
+    ]);
+
+    function createFftWorkspace(size) {
+      return {
+        real: new Float64Array(size),
+        imaginary: new Float64Array(size),
+        magnitudes: new Float32Array(size / 2)
+      };
+    }
+
+    function computeFftMagnitudes(samples, start, windowValues, workspace) {
+      const size = windowValues.length;
+      const { real, imaginary, magnitudes } = workspace;
+
+      for (let index = 0; index < size; index += 1) {
+        real[index] = (samples[start + index] || 0) * windowValues[index];
+        imaginary[index] = 0;
+      }
+
+      for (let index = 1, reversed = 0; index < size; index += 1) {
+        let bit = size >> 1;
+        while (reversed & bit) {
+          reversed ^= bit;
+          bit >>= 1;
+        }
+        reversed ^= bit;
+
+        if (index < reversed) {
+          const realValue = real[index];
+          const imaginaryValue = imaginary[index];
+          real[index] = real[reversed];
+          imaginary[index] = imaginary[reversed];
+          real[reversed] = realValue;
+          imaginary[reversed] = imaginaryValue;
+        }
+      }
+
+      for (let blockSize = 2; blockSize <= size; blockSize <<= 1) {
+        const angle = (-2 * Math.PI) / blockSize;
+        const blockCosine = Math.cos(angle);
+        const blockSine = Math.sin(angle);
+        const halfBlockSize = blockSize >> 1;
+
+        for (let blockStart = 0; blockStart < size; blockStart += blockSize) {
+          let twiddleReal = 1;
+          let twiddleImaginary = 0;
+
+          for (let offset = 0; offset < halfBlockSize; offset += 1) {
+            const evenIndex = blockStart + offset;
+            const oddIndex = evenIndex + halfBlockSize;
+            const oddReal = real[oddIndex] * twiddleReal - imaginary[oddIndex] * twiddleImaginary;
+            const oddImaginary = real[oddIndex] * twiddleImaginary + imaginary[oddIndex] * twiddleReal;
+            const evenReal = real[evenIndex];
+            const evenImaginary = imaginary[evenIndex];
+
+            real[evenIndex] = evenReal + oddReal;
+            imaginary[evenIndex] = evenImaginary + oddImaginary;
+            real[oddIndex] = evenReal - oddReal;
+            imaginary[oddIndex] = evenImaginary - oddImaginary;
+
+            const nextTwiddleReal = twiddleReal * blockCosine - twiddleImaginary * blockSine;
+            twiddleImaginary = twiddleReal * blockSine + twiddleImaginary * blockCosine;
+            twiddleReal = nextTwiddleReal;
+          }
+        }
+      }
+
+      for (let bin = 0; bin < magnitudes.length; bin += 1) {
+        magnitudes[bin] = Math.hypot(real[bin], imaginary[bin]) / size;
+      }
+
+      return magnitudes;
+    }
+
+    function getSpectrogramColor(value) {
+      const clamped = Math.max(0, Math.min(1, value));
+      const scaledPosition = clamped * (SPECTROGRAM_COLOR_STOPS.length - 1);
+      const lowerIndex = Math.min(
+        SPECTROGRAM_COLOR_STOPS.length - 2,
+        Math.floor(scaledPosition)
+      );
+      const blend = scaledPosition - lowerIndex;
+      const lowerColor = SPECTROGRAM_COLOR_STOPS[lowerIndex];
+      const upperColor = SPECTROGRAM_COLOR_STOPS[lowerIndex + 1];
+      return lowerColor.map((channel, index) => (
+        Math.round(channel + blend * (upperColor[index] - channel))
+      ));
+    }
+
+    function getSpectrogramTimeTickStep(duration) {
+      if (duration <= 5) return 0.5;
+      if (duration <= 10) return 1;
+      if (duration <= 20) return 2;
+      if (duration <= 60) return 5;
+      if (duration <= 120) return 10;
+      return 20;
+    }
+
+    function drawSpectrogramAxes(ctx, plotArea, audioBuffer, renderingConfig) {
+      const duration = audioBuffer.duration;
+      const {
+        fftSize,
+        hopLength,
+        minFrequency,
+        maxFrequency,
+        minDb,
+        maxDb
+      } = renderingConfig;
+      const canvasCenter = ctx.canvas.width / 2;
+      const overlapPercent = Math.round((1 - hopLength / fftSize) * 100);
+      const minFrequencyKhz = minFrequency / 1000;
+      const maxFrequencyKhz = maxFrequency / 1000;
+      const frequencyStepKhz = 1;
+      const timeStep = getSpectrogramTimeTickStep(duration);
+
+      ctx.save();
+      ctx.strokeStyle = "#111827";
+      ctx.fillStyle = "#111827";
+      ctx.lineWidth = 1;
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = "600 13px 'Segoe UI', sans-serif";
+      ctx.fillText(
+        `Received audio spectrogram (${minFrequencyKhz.toFixed(0)}-${maxFrequencyKhz.toFixed(0)} kHz)`,
+        canvasCenter,
+        9
+      );
+      ctx.font = "10px 'Segoe UI', sans-serif";
+      ctx.fillText(
+        `FFT ${fftSize} | effective hop ${hopLength} samples | overlap ${overlapPercent}% | color ${minDb} to ${maxDb} dB`,
+        canvasCenter,
+        29
+      );
+
+      ctx.strokeRect(plotArea.left, plotArea.top, plotArea.width, plotArea.height);
+
+      ctx.font = "10px 'Segoe UI', sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (
+        let frequencyKhz = Math.ceil(minFrequencyKhz);
+        frequencyKhz <= maxFrequencyKhz + 1e-6;
+        frequencyKhz += frequencyStepKhz
+      ) {
+        const ratio = (frequencyKhz - minFrequencyKhz) /
+          Math.max(1e-9, maxFrequencyKhz - minFrequencyKhz);
+        const y = plotArea.bottom - ratio * plotArea.height;
+        ctx.beginPath();
+        ctx.moveTo(plotArea.left - 5, y);
+        ctx.lineTo(plotArea.left, y);
+        ctx.stroke();
+        ctx.fillText(frequencyKhz.toFixed(0), plotArea.left - 9, y);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let seconds = 0; seconds <= duration + 1e-6; seconds += timeStep) {
+        const x = plotArea.left + (seconds / Math.max(duration, 1e-9)) * plotArea.width;
+        ctx.beginPath();
+        ctx.moveTo(x, plotArea.bottom);
+        ctx.lineTo(x, plotArea.bottom + 5);
+        ctx.stroke();
+        ctx.fillText(
+          seconds.toFixed(timeStep < 1 ? 1 : 0),
+          x,
+          plotArea.bottom + 8
+        );
+      }
+
+      if (duration % timeStep > 1e-6) {
+        ctx.beginPath();
+        ctx.moveTo(plotArea.right, plotArea.bottom);
+        ctx.lineTo(plotArea.right, plotArea.bottom + 5);
+        ctx.stroke();
+        ctx.fillText(duration.toFixed(duration < 10 ? 1 : 0), plotArea.right, plotArea.bottom + 8);
+      }
+
+      ctx.font = "11px 'Segoe UI', sans-serif";
+      ctx.fillText("Time (s)", canvasCenter, ctx.canvas.height - 18);
+
+      ctx.save();
+      ctx.translate(18, plotArea.top + plotArea.height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("Frequency (kHz)", 0, 0);
+      ctx.restore();
+
+      ctx.restore();
+    }
+
+    async function renderSpectrogram(recordedBlob) {
+      showSpectrogramStatus("Generating spectrogram...");
+
+      try {
+        const arrayBuffer = await recordedBlob.arrayBuffer();
+        const decodingContext = getRecordingContext();
+        const audioBuffer = await decodingContext.decodeAudioData(arrayBuffer.slice(0));
+        const samples = toMonoChannel(audioBuffer);
+        if (samples.length < 8) {
+          throw new Error("Recording too short");
+        }
+        const margin = SPECTROGRAM_CONFIG.margin;
+        const fftSize = SPECTROGRAM_CONFIG.fftSize;
+        const requestedHopLength = SPECTROGRAM_CONFIG.hopLength;
+        const availableStartSamples = Math.max(0, samples.length - fftSize);
+        const requestedFrameCount = Math.max(1, Math.floor(availableStartSamples / requestedHopLength) + 1);
+        const plotWidth = Math.min(requestedFrameCount, SPECTROGRAM_CONFIG.maxColumns);
+        const hopLength = requestedFrameCount > SPECTROGRAM_CONFIG.maxColumns
+          ? Math.max(1, Math.ceil(availableStartSamples / Math.max(1, plotWidth - 1)))
+          : requestedHopLength;
+        const canvasWidth = margin.left + plotWidth + margin.right;
+        const canvasHeight = SPECTROGRAM_CONFIG.canvasHeight;
+        const plotHeight = canvasHeight - margin.top - margin.bottom;
+        spectrogramCanvas.width = canvasWidth;
+        spectrogramCanvas.height = canvasHeight;
+        const plotArea = {
+          left: margin.left,
+          top: margin.top,
+          right: margin.left + plotWidth,
+          bottom: margin.top + plotHeight,
+          width: plotWidth,
+          height: plotHeight
+        };
+        const nyquistBins = fftSize / 2;
+        const minFrequency = Math.min(
+          SPECTROGRAM_CONFIG.minFrequency,
+          audioBuffer.sampleRate / 2
+        );
+        const maxFrequency = Math.max(
+          minFrequency,
+          Math.min(SPECTROGRAM_CONFIG.maxFrequency, audioBuffer.sampleRate / 2)
+        );
+        const minFrequencyBin = Math.min(
+          nyquistBins - 1,
+          Math.floor((minFrequency * fftSize) / audioBuffer.sampleRate)
+        );
+        const maxFrequencyBin = Math.min(
+          nyquistBins - 1,
+          Math.ceil((maxFrequency * fftSize) / audioBuffer.sampleRate)
+        );
+        const windowValues = createHannWindow(fftSize);
+        const fftWorkspace = createFftWorkspace(fftSize);
+        const ctx = spectrogramCanvas.getContext("2d");
+        const imageData = ctx.createImageData(plotWidth, plotHeight);
+        const pixelBuffer = imageData.data;
+
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+        for (let x = 0; x < plotWidth; x += 1) {
+          const start = Math.max(0, Math.min(availableStartSamples, x * hopLength));
+          const magnitudes = computeFftMagnitudes(samples, start, windowValues, fftWorkspace);
+
+          for (let y = 0; y < plotHeight; y += 1) {
+            const normalizedY = y / Math.max(1, plotHeight - 1);
+            const frequencyBin = Math.min(
+              maxFrequencyBin,
+              Math.round(
+                minFrequencyBin + normalizedY * (maxFrequencyBin - minFrequencyBin)
+              )
+            );
+
+            const magnitude = magnitudes[frequencyBin];
+            const db = 20 * Math.log10(magnitude + 1e-6);
+            const normalizedMagnitude = Math.max(0, Math.min(
+              1,
+              (db - SPECTROGRAM_CONFIG.minDb) /
+                (SPECTROGRAM_CONFIG.maxDb - SPECTROGRAM_CONFIG.minDb)
+            ));
+            const [red, green, blue] = getSpectrogramColor(normalizedMagnitude);
+            const pixelIndex = ((plotHeight - 1 - y) * plotWidth + x) * 4;
+            pixelBuffer[pixelIndex] = red;
+            pixelBuffer[pixelIndex + 1] = green;
+            pixelBuffer[pixelIndex + 2] = blue;
+            pixelBuffer[pixelIndex + 3] = 255;
+          }
+
+          if (x > 0 && x % 256 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
+
+        ctx.putImageData(imageData, plotArea.left, plotArea.top);
+        drawSpectrogramAxes(ctx, plotArea, audioBuffer, {
+          fftSize,
+          hopLength,
+          minFrequency,
+          maxFrequency,
+          minDb: SPECTROGRAM_CONFIG.minDb,
+          maxDb: SPECTROGRAM_CONFIG.maxDb
+        });
+        showSpectrogramStatus(
+          `Spectrogram of the recorded audio (${(minFrequency / 1000).toFixed(0)}-${(maxFrequency / 1000).toFixed(0)} kHz). FFT ${fftSize}, hop ${hopLength} samples.`
+        );
+      } catch (error) {
+        showSpectrogramStatus("Could not generate a spectrogram for the recording.");
+      }
+    }
+
+    async function prepareRecordedAudio(recordedAudioBuffer, options = {}) {
+      const timestamp = options.timestamp || buildRecordingTimestamp();
+      const liveFigureFiles = buildLiveFigureArtifacts(timestamp);
+      const sessionFiles = [
+        ...((options.trackingArtifacts && options.trackingArtifacts.files) || []),
+        ...liveFigureFiles
+      ];
+      if (!recordedAudioBuffer) {
+        setPreparedSessionFiles(sessionFiles, timestamp);
+        fileStatus.textContent = sessionFiles.length
+          ? "Sensing stopped without microphone audio. Preparing automatic live-figure and tracking-file downloads."
+          : "Sensing stopped, but no microphone recording was captured.";
+        return sessionFiles;
+      }
+
+      try {
+        const chirpPeriodEstimate = estimateChirpPeriod(recordedAudioBuffer);
+        const diagnostics = buildAudioDiagnostics(recordedAudioBuffer, chirpPeriodEstimate);
+        const wavBlob = encodeAudioBufferToWav(recordedAudioBuffer);
+        await renderSpectrogram(wavBlob);
+        const fileName = `recording_${timestamp}.wav`;
+        const spectrogramUrl = spectrogramCanvas.toDataURL("image/png");
+        const spectrogramFileName = `recording_spectrogram_${timestamp}.png`;
+        const metadata = buildMetadataPayload(
+          recordedAudioBuffer,
+          diagnostics,
+          options.trackingArtifacts,
+          timestamp
+        );
+
+        sessionFiles.push(
+          { name: fileName, blob: wavBlob },
+          { name: spectrogramFileName, url: spectrogramUrl },
+          buildMetadataArtifact(recordedAudioBuffer, diagnostics, options.trackingArtifacts, timestamp, metadata)
+        );
+
+        fileStatus.textContent = "Sensing stopped. Calculating post-processed signal features...";
+        try {
+          const analysisResult = await requestFigureGeneration(
+            wavBlob,
+            diagnostics,
+            options.trackingArtifacts,
+            timestamp,
+            metadata
+          );
+          renderGeneratedFigures(analysisResult);
+          renderWindowPredictions(analysisResult);
+        } catch (error) {
+          // Live snapshots and raw session files remain downloadable.
+        }
+
+        setPreparedSessionFiles(sessionFiles, timestamp);
+        fileStatus.textContent =
+          `Sensing stopped. Prepared ${sessionFiles.length} session files, including ${liveFigureFiles.length} live sensing figures. Starting automatic download...`;
+      } catch (error) {
+        setPreparedSessionFiles(sessionFiles, timestamp);
+        fileStatus.textContent = sessionFiles.length
+          ? "Sensing stopped. The live figures and tracking files are ready, but the recording or spectrogram could not be prepared."
+          : "Sensing stopped, but failed to prepare the recording or spectrogram.";
+      } finally {
+        resetRecordingBuffers();
+      }
+
+      return sessionFiles;
+    }
+
+    function clearPendingFile() {
+      pendingFileUrl = "";
+      pendingFileName = "";
+      setSensingControls(false, false);
+    }
+
+    function cancelRecordingSession() {
+      stopRecordingNodes();
+      resetRecordingBuffers();
+    }
+
+    async function startSensing() {
+      if (!pendingFileUrl || activeCollectionSession || sensingSessionActive || sensingStopInProgress) {
+        setSensingControls(Boolean(pendingFileUrl), false);
+        return;
+      }
+      if (!snapshotCollectionSession()) {
+        setSensingControls(Boolean(pendingFileUrl), false);
+        return;
+      }
+
+      clearSensingDurationTimer();
+      sensingDurationLimitReached = false;
+      lastRecordingStartError = null;
+      recordingCompatibilityFallbackReason = "";
+      startSensingBtn.disabled = true;
+      stopSensingBtn.disabled = true;
+      setSensingControls(Boolean(pendingFileUrl), false);
+
+      try {
+        fileStatus.textContent = "Generating the dual-band ultrasound chirp...";
+        receivedAudio.loop = true;
+        receivedAudio.currentTime = 0;
+        loadGeneratedChirpPlaybackBuffer();
+
+        const recordingStarted = await prepareRecordingForPlayback();
+        if (!recordingStarted) {
+          throw lastRecordingStartError || new Error("Recording did not start");
+        }
+
+        startChirpPlayback();
+        sensingSessionActive = true;
+        void startRealtimeSession();
+        beginInteractionTrackingSession();
+        startCollectionPromptTimer();
+        startSensingDurationTimer();
+        setSensingControls(true, true);
+        const fallbackNotice = recordingCompatibilityFallbackReason
+          ? ` Compatibility capture is active because Ultrasound (strict) could not start: ${recordingCompatibilityFallbackReason}`
+          : "";
+        fileStatus.textContent = fallbackNotice.trim();
+      } catch (error) {
+        clearSensingDurationTimer();
+        stopCollectionPromptTimer();
+        sensingSessionActive = false;
+        setInteractionTrackingEnabled(false);
+        stopRealtimeSession();
+        stopChirpPlayback();
+        cancelRecordingSession();
+        stopMicrophoneStream();
+        releaseCollectionSession();
+        setSensingControls(Boolean(pendingFileUrl), false);
+        const detail = error && error.message ? ` ${error.message}` : "";
+        fileStatus.textContent = `Could not start sensing.${detail}`;
+        console.error("Could not start sensing", error);
+      }
+    }
+
+    async function stopSensing({ durationLimitReached = false } = {}) {
+      if (sensingStopInProgress) {
+        return;
+      }
+      clearSensingDurationTimer();
+      if (!sensingSessionActive && !recordingSessionActive && !recordedFrameCount) {
+        return;
+      }
+
+      sensingStopInProgress = true;
+      sensingDurationLimitReached = sensingDurationLimitReached || durationLimitReached;
+      try {
+        const timestamp = buildRecordingTimestamp();
+        sensingSessionActive = false;
+        stopCollectionPromptTimer({ complete: true });
+        const trackingArtifacts = prepareEventLog(timestamp, realtimeSessionStartEpoch);
+        setInteractionTrackingEnabled(false);
+        startSensingBtn.disabled = true;
+        stopSensingBtn.disabled = true;
+        stopChirpPlayback();
+        stopRealtimeSession();
+        receivedAudio.currentTime = 0;
+        fileStatus.textContent = durationLimitReached
+          ? `Maximum ${maximumSensingDurationSeconds}-second recording reached. Preparing session files...`
+          : "Sensing stopped. Preparing session files...";
+
+        const preparation = stopRecordingSession({ timestamp, trackingArtifacts });
+        stopMicrophoneStream();
+        micStatus.textContent = "Microphone is off.";
+        await preparation;
+        await downloadPreparedSessionFiles();
+        setSensingControls(Boolean(pendingFileUrl), false);
+      } finally {
+        clearSensingDurationTimer();
+        sensingStopInProgress = false;
+        releaseCollectionSession();
+        setSensingControls(Boolean(pendingFileUrl), false);
+      }
+    }
+
+    function prepareGeneratedChirp() {
+      fileStatus.textContent = "Preparing the generated ultrasound chirp...";
+      clearPendingFile();
+      clearSpectrogram();
+      clearFeatureVisualizations();
+
+      pendingFileUrl = "generated:dual-triangle-chirp";
+      pendingFileName = appConfig.chirpSignalName;
+      fileStatus.textContent = "Generated dual-band ultrasound chirp ready.";
+      setSensingControls(true, false);
+    }
+
+    async function requestMicrophone() {
+      const microphoneReady = await ensureMicrophoneReady();
+      if (!microphoneReady) {
+        fileStatus.textContent = "File request skipped.";
+        return;
+      }
+
+      prepareGeneratedChirp();
+    }
+
+    async function ensureMicrophoneReady() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        micStatus.textContent = "Microphone is not supported in this browser.";
+        return false;
+      }
+
+      if (hasActiveMicrophoneStream()) {
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+        micStatus.textContent = microphoneQualification && microphoneQualification.warnings.length
+          ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
+          : "";
+        return true;
+      }
+
+      try {
+        microphoneRequestDetails = recordingProfiles.createMicrophoneRequest(
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
+        micStream = await navigator.mediaDevices.getUserMedia(microphoneRequestDetails.constraints);
+        if (micStream) {
+          const track = getPrimaryAudioTrack();
+          recordingProfiles.applyMicrophoneTrackHints(track);
+          microphoneQualification = recordingProfiles.qualifyMicrophoneTrack(
+            track,
+            activeRecordingProfileId,
+            microphoneRequestDetails.supportedConstraints
+          );
+          if (!microphoneQualification.supported) {
+            const reason = microphoneQualification.errors.join(" ");
+            stopMicrophoneStream();
+            throw new Error(reason);
+          }
+          const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+          micStatus.textContent = microphoneQualification.warnings.length
+            ? `Microphone is on with ${profile.label}; ${microphoneQualification.warnings.join(" ")}`
+            : "";
+          return true;
+        }
+      } catch (error) {
+        microphoneQualification = null;
+        const detail = error && error.message ? ` ${error.message}` : "";
+        micStatus.textContent = `Could not qualify the microphone.${detail}`;
+        return false;
+      }
+
+      return false;
+    }
+
+    async function stopRecordingSession(options = {}) {
+      const shouldFinalizeRecording = recordingSessionActive || recordedFrameCount > 0;
+      const completedRecording = shouldFinalizeRecording
+        ? buildAudioBufferFromRecording(getRecordingContext())
+        : null;
+      completedCaptureDiagnostics = shouldFinalizeRecording ? getCaptureDiagnostics() : null;
+      stopRecordingNodes();
+      resetRecordingBuffers();
+      if (completedRecording) {
+        await prepareRecordedAudio(completedRecording, options);
+        return true;
+      } else {
+        await prepareRecordedAudio(null, options);
+        return false;
+      }
+    }
+
+    async function startRecordingSession({ allowCompatibilityFallback = false } = {}) {
+      if (!micStream) {
+        return false;
+      }
+      if (!window.AudioContext && !window.webkitAudioContext) {
+        fileStatus.textContent = "Sensing started, but raw microphone capture is not supported in this browser.";
+        return false;
+      }
+
+      try {
+        const recordingContext = getRecordingContext();
+        if (recordingContext.state === "suspended") {
+          await recordingContext.resume();
+        }
+        audioContextQualification = recordingProfiles.qualifyAudioContext(
+          recordingContext,
+          activeRecordingProfileId,
+          targetWavSampleRate
+        );
+        if (!audioContextQualification.supported) {
+          throw new Error(audioContextQualification.errors.join(" "));
+        }
+
+        const microphoneOnlyStream = buildMicrophoneOnlyStream(micStream);
+        const processorChannelCount = 1;
+        const profile = recordingProfiles.getProfile(activeRecordingProfileId);
+
+        stopRecordingNodes();
+        resetRecordingBuffers();
+        resetCaptureMetrics();
+        clearSpectrogram();
+        clearFeatureVisualizations();
+
+        recordingSourceNode = recordingContext.createMediaStreamSource(microphoneOnlyStream);
+        const workletAvailable = Boolean(recordingContext.audioWorklet && window.AudioWorkletNode);
+        let workletStarted = false;
+
+        if (workletAvailable) {
+          try {
+            if (!audioWorkletModuleReady) {
+              await recordingContext.audioWorklet.addModule(new URL("audio-frame-worklet.js", import.meta.url));
+              audioWorkletModuleReady = true;
+            }
+
+            recordingWorkletNode = new AudioWorkletNode(recordingContext, "audio-frame-processor", {
+              numberOfInputs: 1,
+              numberOfOutputs: 1,
+              outputChannelCount: [1],
+              processorOptions: {
+                frameSize: realtimeConfig.frameSize
+              }
+            });
+            recordingWorkletNode.port.onmessage = (event) => {
+              if (!event.data || event.data.type !== "audio-frame" || !event.data.samples) {
+                return;
+              }
+              handleRecordedAudioChunk(event.data.samples, {
+                sequence: event.data.sequence,
+                startFrame: event.data.startFrame
+              });
+            };
+            recordingMonitorNode = recordingContext.createGain();
+            recordingMonitorNode.gain.value = 0;
+            recordingSourceNode.connect(recordingWorkletNode);
+            recordingWorkletNode.connect(recordingMonitorNode);
+            recordingMonitorNode.connect(recordingContext.destination);
+            recordingCaptureMethod = "AudioWorklet + transferable Float32Array";
+            recordingCaptureFrameSize = realtimeConfig.frameSize;
+            workletStarted = true;
+          } catch (error) {
+            if (profile.requireAudioWorklet) {
+              throw new Error(`AudioWorklet capture is required but could not start. ${error.message || ""}`.trim());
+            }
+            recordingSourceNode.disconnect();
+            if (recordingWorkletNode) {
+              recordingWorkletNode.disconnect();
+              recordingWorkletNode = null;
+            }
+            if (recordingMonitorNode) {
+              recordingMonitorNode.disconnect();
+              recordingMonitorNode = null;
+            }
+          }
+        }
+
+        if (!workletStarted) {
+          if (profile.requireAudioWorklet) {
+            throw new Error("AudioWorklet capture is required by the Ultrasound profile but is unavailable.");
+          }
+          recordingProcessorNode = recordingContext.createScriptProcessor(4096, processorChannelCount, processorChannelCount);
+          recordingProcessorNode.onaudioprocess = (event) => {
+            handleRecordedAudioChunk(toMonoFloat32(event.inputBuffer));
+          };
+          recordingMonitorNode = recordingContext.createGain();
+          recordingMonitorNode.gain.value = 0;
+          recordingSourceNode.connect(recordingProcessorNode);
+          recordingProcessorNode.connect(recordingMonitorNode);
+          recordingMonitorNode.connect(recordingContext.destination);
+          recordingCaptureMethod = "ScriptProcessorNode compatibility fallback";
+          recordingCaptureFrameSize = 4096;
+        }
+        recordingSessionActive = true;
+
+        const contextWarning = audioContextQualification.warnings.join(" ");
+        fileStatus.textContent = `Starting sensing with ${profile.label} using ${recordingCaptureMethod}.${contextWarning ? ` ${contextWarning}` : ""}`;
+        lastRecordingStartError = null;
+        return true;
+      } catch (error) {
+        stopRecordingNodes();
+        resetRecordingBuffers();
+        const errorMessage = error && error.message ? error.message : "Unknown audio capture error.";
+
+        if (allowCompatibilityFallback && activeRecordingProfileId === "ultrasonic") {
+          recordingCompatibilityFallbackReason = errorMessage;
+          activeRecordingProfileId = "compatible";
+          updateRecordingProfileControl();
+
+          const track = getPrimaryAudioTrack();
+          microphoneQualification = recordingProfiles.qualifyMicrophoneTrack(
+            track,
+            activeRecordingProfileId,
+            microphoneRequestDetails ? microphoneRequestDetails.supportedConstraints : undefined
+          );
+          micStatus.textContent = "Ultrasound (strict) was unavailable. Trying Compatibility capture...";
+
+          const fallbackStarted = await startRecordingSession({ allowCompatibilityFallback: false });
+          if (fallbackStarted) {
+            const compatibilityWarnings = microphoneQualification.warnings.join(" ");
+            micStatus.textContent = compatibilityWarnings
+              ? `Microphone is on with Compatibility fallback; ${compatibilityWarnings}`
+              : "Microphone is on with Compatibility fallback.";
+            return true;
+          }
+
+          const fallbackMessage = lastRecordingStartError && lastRecordingStartError.message
+            ? lastRecordingStartError.message
+            : "Unknown compatibility capture error.";
+          lastRecordingStartError = new Error(
+            `Ultrasound (strict) failed: ${errorMessage} Compatibility fallback also failed: ${fallbackMessage}`
+          );
+        } else {
+          lastRecordingStartError = new Error(errorMessage);
+        }
+
+        fileStatus.textContent = `Sensing could not start because raw microphone capture could not start. ${lastRecordingStartError.message}`;
+        return false;
+      }
+    }
+
+    async function prepareRecordingForPlayback() {
+      if (recordingSessionActive || playbackStartInProgress) {
+        return recordingSessionActive;
+      }
+
+      playbackStartInProgress = true;
+      try {
+        const microphoneReady = await ensureMicrophoneReady();
+        if (!microphoneReady) {
+          fileStatus.textContent = "Sensing could not start because microphone recording could not start.";
+          return false;
+        }
+
+        return await startRecordingSession();
+      } finally {
+        playbackStartInProgress = false;
+      }
+    }
+
+    startSensingBtn.addEventListener("click", async () => {
+      if (sensingSessionActive || recordingSessionActive) {
+        await stopSensing();
+      } else {
+        await startSensing();
+      }
+    });
+
+    stopSensingBtn.addEventListener("click", async () => {
+      await stopSensing();
+    });
+
+    receivedAudio.addEventListener("ended", () => {
+      void stopSensing();
+    });
+
+    receivedAudio.addEventListener("error", () => {
+      clearSensingDurationTimer();
+      stopCollectionPromptTimer();
+      sensingSessionActive = false;
+      setInteractionTrackingEnabled(false);
+      setSensingControls(Boolean(pendingFileUrl), false);
+      stopChirpPlayback();
+      stopRealtimeSession();
+      releaseCollectionSession();
+      void stopRecordingSession();
+    });
+
+    window.addEventListener("pagehide", () => {
+      clearSensingDurationTimer();
+      stopCollectionPromptTimer();
+      setInteractionTrackingEnabled(false);
+      stopChirpPlayback();
+      stopRealtimeSession();
+      stopRecordingNodes();
+      resetRecordingBuffers();
+      stopMicrophoneStream();
+      releaseCollectionSession({ showReady: false });
+    });
+
+    window.addEventListener("beforeunload", (event) => {
+      if (sensingSessionActive || sensingStopInProgress || activeCollectionSession) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    });
+    document.getElementById("downloadSensingSession").addEventListener("click", () => void downloadPreparedSessionFiles());
+    setupInteractionTracking();
+    // The router's first honey:routechange can fire before this module has
+    // registered its listener, so settle the initial visibility directly.
+    updateSensingPanelVisibility();
+    initializeRecordingProfileControl();
+    drawRealtimeChart();
+    prepareGeneratedChirp();

@@ -1,0 +1,4 @@
+# Interaction data is collected under experiment control, so crawler traffic
+# would pollute the request log. Nothing here is meant to be indexed.
+User-agent: *
+Disallow: /
