@@ -84,6 +84,9 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
     let recordingCompatibilityFallbackReason = "";
     let chirpScheduledStartTime = null;
     let chirpScheduledStartFrame = null;
+    let chirpPlaybackStartOffsetSamples = null;
+    let chirpPlaybackStartOffsetSeconds = null;
+    let chirpPlaybackStartOffsetSelection = null;
 
     function getLocalStorageItem(key) {
       try {
@@ -216,6 +219,47 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
         samples[index] = amplitude * Math.sin(phase);
       }
       return samples;
+    }
+
+    function randomIntegerBelow(upperExclusive) {
+      if (!Number.isSafeInteger(upperExclusive) || upperExclusive <= 0) {
+        throw new Error("Random chirp offset range must be a positive integer");
+      }
+
+      if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+        const values = new Uint32Array(1);
+        const unbiasedLimit = Math.floor(0x100000000 / upperExclusive) * upperExclusive;
+        do {
+          window.crypto.getRandomValues(values);
+        } while (values[0] >= unbiasedLimit);
+        return values[0] % upperExclusive;
+      }
+
+      return Math.floor(Math.random() * upperExclusive);
+    }
+
+    function selectChirpPlaybackStartOffset() {
+      const configuredValue = getLocalStorageItem("webagentChirpStartOffsetSamples").trim();
+      if (configuredValue) {
+        const parsedValue = Number(configuredValue);
+        if (
+          Number.isInteger(parsedValue)
+          && parsedValue >= 0
+          && parsedValue < chirpConfig.samplesPerPeriod
+        ) {
+          return {
+            samples: parsedValue,
+            method: "local_storage_fixed"
+          };
+        }
+      }
+
+      return {
+        samples: randomIntegerBelow(chirpConfig.samplesPerPeriod),
+        method: window.crypto && typeof window.crypto.getRandomValues === "function"
+          ? "crypto_uniform_per_playback"
+          : "math_random_uniform_per_playback"
+      };
     }
 
     function buildTransmitStereoPeriod() {
@@ -791,7 +835,10 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
         channelCount: chirpPlaybackBuffer.numberOfChannels,
         frameCount: chirpPlaybackBuffer.length,
         sampleRate: chirpPlaybackBuffer.sampleRate,
-        durationSeconds: chirpPlaybackBuffer.duration
+        durationSeconds: chirpPlaybackBuffer.duration,
+        startOffsetSamples: chirpPlaybackStartOffsetSamples,
+        startOffsetSeconds: chirpPlaybackStartOffsetSeconds,
+        startOffsetSelection: chirpPlaybackStartOffsetSelection
       }) : null,
       getChirpGenerationParameters: () => ({
         sampleRate: chirpConfig.sampleRate,
@@ -984,6 +1031,9 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
           chirpBufferDuration: chirpPlaybackBuffer ? chirpPlaybackBuffer.duration : null,
           scheduledStartTime: chirpScheduledStartTime,
           scheduledStartFrame: chirpScheduledStartFrame,
+          startOffsetSamples: chirpPlaybackStartOffsetSamples,
+          startOffsetSeconds: chirpPlaybackStartOffsetSeconds,
+          startOffsetSelection: chirpPlaybackStartOffsetSelection,
           loop: true
         },
         recordingExport: {
@@ -1041,6 +1091,9 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
         left_band_hz: [chirpConfig.left.startHz, chirpConfig.left.endHz],
         right_band_hz: [chirpConfig.right.startHz, chirpConfig.right.endHz],
         tx_amplitude: chirpConfig.amplitude,
+        chirp_start_offset_samples: chirpPlaybackStartOffsetSamples,
+        chirp_start_offset_seconds: chirpPlaybackStartOffsetSeconds,
+        chirp_start_offset_selection: chirpPlaybackStartOffsetSelection,
         duration_sec: recordedAudioBuffer.duration,
         recording_name: `recording_${timestamp}`,
         capture: diagnostics && diagnostics.recordingCapture
@@ -2447,7 +2500,11 @@ document.querySelector("nav").after(sensingPanel.firstElementChild);
       };
       chirpScheduledStartTime = recordingContext.currentTime + 0.05;
       chirpScheduledStartFrame = Math.round(chirpScheduledStartTime * recordingContext.sampleRate);
-      chirpSourceNode.start(chirpScheduledStartTime);
+      const startOffset = selectChirpPlaybackStartOffset();
+      chirpPlaybackStartOffsetSamples = startOffset.samples;
+      chirpPlaybackStartOffsetSeconds = startOffset.samples / chirpConfig.sampleRate;
+      chirpPlaybackStartOffsetSelection = startOffset.method;
+      chirpSourceNode.start(chirpScheduledStartTime, chirpPlaybackStartOffsetSeconds);
       receivedAudio.loop = true;
     }
 

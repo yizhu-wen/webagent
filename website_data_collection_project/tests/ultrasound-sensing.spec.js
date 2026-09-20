@@ -202,6 +202,9 @@ test("records, stops at the duration limit, and exports a session archive", asyn
 
   await page.goto(TASK_PAGE);
   await waitForSensingApi(page);
+  await page.evaluate(() => {
+    localStorage.setItem("webagentChirpStartOffsetSamples", "173");
+  });
 
   const startButton = page.locator("#startSensingBtn");
   await expect(startButton).toHaveText("Start sensing");
@@ -215,6 +218,12 @@ test("records, stops at the duration limit, and exports a session archive", asyn
     .toBe(true);
   await expect.poll(() => page.evaluate(() => window.webAgentSensing.isPlaybackActive()))
     .toBe(true);
+  expect(await page.evaluate(() => window.webAgentSensing.getChirpPlaybackInfo()))
+    .toMatchObject({
+      frameCount: 576,
+      startOffsetSamples: 173,
+      startOffsetSelection: "local_storage_fixed"
+    });
   expect(await page.evaluate(() => window.webAgentSensing.getMaximumSensingDurationSeconds()))
     .toBe(40);
   expect(await page.evaluate(() => window.webAgentSensing.isDurationLimitTimerActive()))
@@ -292,8 +301,11 @@ test("records, stops at the duration limit, and exports a session archive", asyn
   expect(metadata).toMatchObject({
     website_version: "LOCALDEV01",
     maximum_duration_sec: 40,
-    recording_profile: "ultrasonic"
+    recording_profile: "ultrasonic",
+    chirp_start_offset_samples: 173,
+    chirp_start_offset_selection: "local_storage_fixed"
   });
+  expect(metadata.chirp_start_offset_seconds).toBeCloseTo(173 / 48000, 12);
   expect(metadata.sensing_session_id).toBe(session.sessionId);
 
   // The retry control must be usable if the automatic download was blocked.

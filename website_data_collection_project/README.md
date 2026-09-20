@@ -12,6 +12,11 @@ analysis are intentionally outside this project.
 - `ultrasound/`: the ultrasound backend — the transmitted chirp, the HTTP and
   WebSocket request handlers the website mixes in, realtime IQ processing, and
   offline analysis and training scripts.
+- `static_simulation_pipeline/`: a standalone offline demo that simulates a
+  received echo scene from the dual-band transmit signal and renders amplitude,
+  phase, and Micro-Doppler features with the canonical post-recording code. Its
+  configuration-driven respiration mode controls both chirp bands, respiratory
+  motion, multipath, noise, and processing parameters deterministically.
 - `data_collection/`: experiment runners, prompts, example configuration, and
   desktop/browser automation.
 - `tests/`: Playwright tests covering the sensing integration.
@@ -57,14 +62,16 @@ handler via `SensingRequestMixin` from `ultrasound/http_sensing.py`. Both the
 production and local servers therefore serve the website and the sensing
 endpoints on a single port.
 
-Press **Start sensing** to grant microphone access, loop the generated
-dual-band chirp, and record. A session stops automatically after 40 seconds, or
-when the button is pressed again. On stop the browser prepares a ZIP archive
+Press **Start sensing** to grant microphone access, choose a new uniform random
+sample inside the generated 12 ms pattern, loop the dual-band chirp from that
+shared left/right offset, and record. A session stops automatically after 40
+seconds, or when the button is pressed again. On stop the browser prepares a
+ZIP archive
 named `ultrasound_<version>_<timestamp>.zip` and downloads it. The archive
 contains the recorded WAV, a rendered spectrogram, the captured live IQ and
 left/right micro-Doppler figures, the keyboard and cursor event logs, and a
-`metadata.json` that records the chirp and band configuration and ties the
-audio to the interaction timeline through
+`metadata.json` that records the chirp and band configuration, including the
+chosen start offset, and ties the audio to the interaction timeline through
 `sensing_session_id`, the audio and event start epochs, and the task pages
 visited during the session.
 
@@ -83,6 +90,15 @@ suppression, and automatic gain control off, because that processing destroys
 the 19-24 kHz band. **`compatible`** only prefers them off, so a microphone can
 still be opened on browsers that reject the exact constraints; sensing also
 falls back to it by itself when the strict profile cannot start.
+
+For a reproducible browser check, a developer can fix the circular chirp start
+to any sample from 0 through 575 before pressing **Start sensing**:
+
+```js
+localStorage.setItem("webagentChirpStartOffsetSamples", "173");
+```
+
+Removing that key restores a fresh random start for every playback.
 
 The status lines are still in the page, positioned off-screen. They remain
 `role="status"` live regions, so a screen reader announces microphone and export

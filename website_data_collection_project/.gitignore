@@ -19,3 +19,7 @@ test-results/
 
 # Collected ultrasound recordings and locally generated artifacts
 ultrasound/uploads/
+static_simulation_pipeline/respiration_runs/
+static_simulation_pipeline/feature_comparison_runs/
+static_simulation_pipeline/example_output/
+static_simulation_pipeline/basic_feature_output/
